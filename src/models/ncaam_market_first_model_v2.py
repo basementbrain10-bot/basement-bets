@@ -230,6 +230,91 @@ class NCAAMMarketFirstModelV2(BaseModel):
             
         return mu_total
 
+    def _calculate_fatigue_penalty(self, team_name: str, current_game_date) -> float:
+        """
+        Checks the schedule for 'Short Rest' spots.
+        -2.5 pts for '3rd game in 6 days' (The 'Tired Legs' Spot)
+        -1.5 pts for 'Back-to-back'
+        """
+        from src.database import get_db_connection, _exec
+        from datetime import datetime, timedelta
+        
+        if current_game_date is None:
+            return 0.0
+        if isinstance(current_game_date, str):
+            try:
+                current_game_date = datetime.fromisoformat(current_game_date.replace('Z', '+00:00'))
+            except:
+                return 0.0
+        
+        try:
+            query = """
+            SELECT start_time FROM events 
+            WHERE (LOWER(home_team) LIKE LOWER(%s) OR LOWER(away_team) LIKE LOWER(%s))
+            AND start_time < %s 
+            ORDER BY start_time DESC LIMIT 2
+            """
+            with get_db_connection() as conn:
+                rows = _exec(conn, query, (f"%{team_name}%", f"%{team_name}%", current_game_date)).fetchall()
+                
+            if not rows: 
+                return 0.0
+            
+            last_game_date = rows[0]['start_time']
+            if isinstance(last_game_date, str):
+                last_game_date = datetime.fromisoformat(last_game_date)
+            
+            days_rest = (current_game_date - last_game_date).days
+            
+            if days_rest <= 1: 
+                print(f"[FATIGUE] {team_name}: Back-to-back (-1.5)")
+                return -1.5  # Back-to-back
+            
+            if len(rows) > 1:
+                two_games_ago = rows[1]['start_time']
+                if isinstance(two_games_ago, str):
+                    two_games_ago = datetime.fromisoformat(two_games_ago)
+                if (current_game_date - two_games_ago).days <= 6:
+                    print(f"[FATIGUE] {team_name}: 3rd game in 6 days (-2.5)")
+                    return -2.5  # 3rd game in 6 days
+                    
+        except Exception as e:
+            print(f"[MODEL] Fatigue calc error for {team_name}: {e}")
+            
+        return 0.0
+
+    def _generate_bell_curve(self, mu: float, sigma: float, line: float) -> Dict:
+        """
+        Generates 50 points representing the Normal Distribution curve.
+        Used by Frontend (Chart.js) to render the 'Cover Zone'.
+        """
+        import math
+        
+        points = []
+        # Generate points from -3 sigma to +3 sigma
+        start = mu - (3 * sigma)
+        end = mu + (3 * sigma)
+        step = (end - start) / 50
+        
+        for i in range(51):
+            x = start + (i * step)
+            # Standard Normal PDF Formula
+            y = (1 / (sigma * math.sqrt(2 * math.pi))) * math.exp(-0.5 * ((x - mu) / sigma)**2)
+            points.append({"x": round(x, 2), "y": round(y, 6)})
+        
+        # Calculate probability of covering (CDF at line)
+        z = (line - mu) / sigma
+        cover_prob = 0.5 * (1 + math.erf(z / math.sqrt(2)))
+        
+        return {
+            "points": points,
+            "mu": round(mu, 2),
+            "sigma": round(sigma, 2),
+            "line": round(line, 2),
+            "cover_prob": round(cover_prob, 4),
+            "is_under_line": mu < line  # Tells UI which side is favorable
+        }
+
     def predict(self, game_id: str, home_team: str, away_team: str, market_total: float = 0) -> Dict[str, Any]:
         """
         Satisfy BaseModel interface by wrapping analyze().
@@ -481,8 +566,19 @@ class NCAAMMarketFirstModelV2(BaseModel):
         spot_adj = spot_adj_home - spot_adj_away
         mu_spread_final += spot_adj
         
+        # -- Fatigue / Short Rest Signal --
+        game_date = event.get('start_time')
+        h_fatigue = self._calculate_fatigue_penalty(event['home_team'], game_date)
+        a_fatigue = self._calculate_fatigue_penalty(event['away_team'], game_date)
+        fatigue_adj = h_fatigue - a_fatigue  # Penalize appropriately
+        mu_spread_final += fatigue_adj
+        
         # -- Referee Signal (Totals) --
         mu_total_final = self._apply_referee_signal(event['id'], mu_total_final)
+        
+        # 6.6 Generate Bell Curve Data for UI Visualization
+        bell_curve_spread = self._generate_bell_curve(mu_spread_final, sigma_spread, mu_market_spread)
+        bell_curve_total = self._generate_bell_curve(mu_total_final, sigma_total, mu_market_total)
             
         # 7. Recommendations & EV
         recs = self._generate_recommendations(mu_spread_final, sigma_spread, mu_total_final, sigma_total, market_snapshot, event)
@@ -496,8 +592,11 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "is_neutral": is_neutral,
             "basement_line": raw_basement_line,
             "w_base": self.W_BASE,
-            "shooting_adj": shooting_adj,  # 3PT regression
-            "spot_adj": spot_adj,          # Letdown/Lookahead
+            "shooting_adj": shooting_adj,
+            "spot_adj": spot_adj,
+            "fatigue_adj": fatigue_adj,
+            "bell_curve_spread": bell_curve_spread,
+            "bell_curve_total": bell_curve_total,
         }
         
         # 8. Narrative (UI MATCH)
