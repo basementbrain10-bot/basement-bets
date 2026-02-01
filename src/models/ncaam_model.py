@@ -736,9 +736,11 @@ class NCAAMModel(BaseModel):
                 ev_pct_total = (model_prob * (dec_t - 1)) - ((1 - model_prob) * 1)
                 
             # Always show total edge
-            # Disable Totals (37.5% win rate - drag on ROI)
-            # status_total = allowlist.get(("basketball_ncaab", "Total"), "SHADOW")
-            is_live_total = False # Force disabled for now
+            # Re-enabled Totals (User request 2026-02-01)
+            # Apply strict filtering to improve on historical 37.5% win rate
+            status_total = allowlist.get(("basketball_ncaab", "Total"), "SHADOW")
+            edge_val = abs(snapshot.prediction.mu_final_total - best_total_line['point'])
+            is_live_total = (status_total == "ENABLED" and edge_val >= 3.0)
             
             edges.append({
                 "game_id": game_id,
