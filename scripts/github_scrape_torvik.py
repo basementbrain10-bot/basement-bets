@@ -200,9 +200,26 @@ def main():
     print(f"Time: {datetime.now().isoformat()}")
     print("=" * 50)
     
-    if not DATABASE_URL:
-        print("[ERROR] DATABASE_URL not set")
+    # Debug: Print environment info
+    print(f"[DEBUG] DATABASE_URL exists: {bool(os.environ.get('DATABASE_URL'))}")
+    print(f"[DEBUG] DATABASE_URL length: {len(os.environ.get('DATABASE_URL', ''))}")
+    
+    # Check for common variations
+    db_url = (
+        os.environ.get('DATABASE_URL') or 
+        os.environ.get('POSTGRES_URL') or 
+        os.environ.get('DB_URL')
+    )
+    
+    if not db_url:
+        print("[ERROR] No database URL found!")
+        print("[DEBUG] Available env vars:", [k for k in os.environ.keys() if 'DB' in k.upper() or 'POSTGRES' in k.upper() or 'URL' in k.upper()])
         sys.exit(1)
+    
+    # Override global
+    global DATABASE_URL
+    DATABASE_URL = db_url
+    print(f"[DEBUG] Using database: {db_url[:50]}...")
     
     # Try Selenium first, then fallback
     teams = None
