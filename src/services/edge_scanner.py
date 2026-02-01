@@ -21,6 +21,32 @@ class EdgeScanner:
         """
         print(f"[EdgeScanner] Scanning next {days_ahead} days...")
         
+        # 0. Ingest latest data for situational signals
+        try:
+            from src.scrapers.torvik_game_logs import TorvikGameLogsScraper
+            from src.scrapers.officiating import OfficiatingScraper
+            
+            print("[EdgeScanner] Ingesting game logs for shooting regression...")
+            game_log_scraper = TorvikGameLogsScraper()
+            # Only fetch for teams playing soon (performance optimization)
+            with get_db_connection() as conn:
+                teams_query = """
+                SELECT DISTINCT home_team FROM events WHERE league = 'NCAAM' AND start_time BETWEEN NOW() AND NOW() + INTERVAL '%s days'
+                UNION
+                SELECT DISTINCT away_team FROM events WHERE league = 'NCAAM' AND start_time BETWEEN NOW() AND NOW() + INTERVAL '%s days'
+                """
+                teams = [r[0] for r in _exec(conn, teams_query, (days_ahead, days_ahead)).fetchall()]
+            
+            if teams:
+                game_log_scraper.run(teams)
+            
+            print("[EdgeScanner] Assigning referees for upcoming games...")
+            ref_scraper = OfficiatingScraper()
+            ref_scraper.bulk_assign_by_pattern()
+            
+        except Exception as e:
+            print(f"[EdgeScanner] Warning: Failed to ingest signal data: {e}")
+        
         # 1. Fetch upcoming events
         query = """
         SELECT e.id, e.home_team, e.away_team, e.start_time, e.league
