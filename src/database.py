@@ -1408,3 +1408,119 @@ def get_team_efficiency_by_name(team_name: str) -> dict:
         print(f"[DB] get_team_efficiency_by_name error: {e}")
     
     return {}
+
+
+# --- Advanced Situational Signals Tables ---
+
+def init_team_game_logs_table():
+    """Create team_game_logs table for shooting regression analysis."""
+    schema = """
+    CREATE TABLE IF NOT EXISTS team_game_logs (
+        id SERIAL PRIMARY KEY,
+        team_text TEXT NOT NULL,
+        game_date DATE NOT NULL,
+        opponent TEXT,
+        points INTEGER,
+        three_p_made INTEGER,
+        three_p_attempted INTEGER,
+        three_p_pct REAL,
+        fouls INTEGER,
+        opponent_rank INTEGER,
+        is_home BOOLEAN,
+        margin INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(team_text, game_date, opponent)
+    );
+    CREATE INDEX IF NOT EXISTS idx_team_game_logs_team ON team_game_logs(team_text);
+    CREATE INDEX IF NOT EXISTS idx_team_game_logs_date ON team_game_logs(game_date DESC);
+    """
+    with get_admin_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(schema)
+        conn.commit()
+    print("team_game_logs table initialized.")
+
+
+def init_referee_assignments_table():
+    """Create referee_assignments table for officiating signal."""
+    schema = """
+    CREATE TABLE IF NOT EXISTS referee_assignments (
+        id SERIAL PRIMARY KEY,
+        event_id TEXT NOT NULL,
+        referee_1 TEXT,
+        referee_2 TEXT,
+        referee_3 TEXT,
+        crew_avg_fouls REAL,
+        source TEXT,
+        fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(event_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ref_event ON referee_assignments(event_id);
+    """
+    with get_admin_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(schema)
+        conn.commit()
+    print("referee_assignments table initialized.")
+
+
+def get_team_recent_shooting(team_name: str, num_games: int = 3) -> dict:
+    """
+    Get a team's recent 3PT shooting vs their season average.
+    Returns: {recent_3p_pct, season_3p_pct, delta}
+    """
+    query = """
+    WITH recent AS (
+        SELECT AVG(three_p_pct) as recent_avg
+        FROM (
+            SELECT three_p_pct FROM team_game_logs 
+            WHERE team_text ILIKE %s
+            ORDER BY game_date DESC LIMIT %s
+        ) sub
+    ),
+    season AS (
+        SELECT AVG(three_p_pct) as season_avg
+        FROM team_game_logs
+        WHERE team_text ILIKE %s
+    )
+    SELECT recent.recent_avg, season.season_avg
+    FROM recent, season
+    """
+    with get_db_connection() as conn:
+        result = _exec(conn, query, (f"%{team_name}%", num_games, f"%{team_name}%")).fetchone()
+        if result and result[0] and result[1]:
+            return {
+                "recent_3p_pct": float(result[0]),
+                "season_3p_pct": float(result[1]),
+                "delta": float(result[0]) - float(result[1])
+            }
+    return {"recent_3p_pct": None, "season_3p_pct": None, "delta": 0.0}
+
+
+def get_team_last_game(team_name: str) -> dict:
+    """Get result of team's most recent game for letdown/momentum analysis."""
+    query = """
+    SELECT game_date, opponent, margin, is_home, opponent_rank
+    FROM team_game_logs 
+    WHERE team_text ILIKE %s
+    ORDER BY game_date DESC LIMIT 1
+    """
+    with get_db_connection() as conn:
+        result = _exec(conn, query, (f"%{team_name}%",)).fetchone()
+        if result:
+            return dict(result)
+    return {}
+
+
+def get_referee_assignment(event_id: str) -> dict:
+    """Get referee crew and their foul rate for an event."""
+    query = """
+    SELECT referee_1, referee_2, referee_3, crew_avg_fouls
+    FROM referee_assignments
+    WHERE event_id = %s
+    """
+    with get_db_connection() as conn:
+        result = _exec(conn, query, (event_id,)).fetchone()
+        if result:
+            return dict(result)
+    return {}

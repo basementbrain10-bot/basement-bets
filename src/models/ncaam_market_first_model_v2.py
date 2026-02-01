@@ -114,6 +114,122 @@ class NCAAMMarketFirstModelV2(BaseModel):
         # April+ (Rare, post-tournament)
         return 0.25  # Default
 
+    def _calculate_shooting_regression(self, team_name: str) -> float:
+        """
+        3-Point Variance Signal: Fade teams shooting hot from 3.
+        If a team is shooting >8% above their season average over last 3 games,
+        apply a negative regression penalty.
+        """
+        from src.database import get_team_recent_shooting
+        
+        try:
+            stats = get_team_recent_shooting(team_name, num_games=3)
+            delta = stats.get('delta', 0.0)
+            
+            if delta is None:
+                return 0.0
+                
+            # For every 2% above season average, subtract 0.5 points
+            # Only apply if shooting significantly hot (>4% above avg)
+            if delta > 0.04:  # 4% threshold
+                penalty = (delta * 100) / 2 * 0.5  # Convert to points
+                return -min(penalty, 2.0)  # Cap at -2 points
+            elif delta < -0.04:  # Shooting cold, bonus (regression to mean UP)
+                bonus = abs(delta * 100) / 2 * 0.25  # Smaller bonus
+                return min(bonus, 1.0)  # Cap at +1 point
+                
+        except Exception as e:
+            print(f"[MODEL] Shooting regression error for {team_name}: {e}")
+            
+        return 0.0
+
+    def _calculate_situational_spots(self, team_name: str, event: dict) -> float:
+        """
+        Spot Modeling: Lookahead and Letdown situations.
+        - Lookahead: Team plays weak opponent before a big game → flat performance
+        - Letdown: Team just upset a ranked opponent → hangover
+        """
+        from src.database import get_team_last_game, get_db_connection, _exec
+        from datetime import datetime, timedelta
+        
+        adj = 0.0
+        current_date = event.get('start_time', datetime.now())
+        if isinstance(current_date, str):
+            try:
+                current_date = datetime.fromisoformat(current_date.replace('Z', '+00:00'))
+            except:
+                current_date = datetime.now()
+        
+        try:
+            # 1. LETDOWN SPOT: Check if last game was an upset win
+            last_game = get_team_last_game(team_name)
+            if last_game:
+                margin = last_game.get('margin', 0) or 0
+                opponent_rank = last_game.get('opponent_rank', 0) or 0
+                
+                # Upset win = Won (margin > 0) against ranked team (#1-25)
+                if margin > 0 and 1 <= opponent_rank <= 25:
+                    # Big upset against Top 10 = bigger letdown
+                    if opponent_rank <= 10:
+                        adj -= 1.5  # Major letdown risk
+                        print(f"[SPOT] {team_name} LETDOWN: Just beat Top 10 team (#{opponent_rank})")
+                    else:
+                        adj -= 1.0  # Standard letdown
+                        print(f"[SPOT] {team_name} LETDOWN: Just beat ranked team (#{opponent_rank})")
+            
+            # 2. LOOKAHEAD SPOT: Check if NEXT game is against a Top 25/rival
+            with get_db_connection() as conn:
+                query = """
+                SELECT e.home_team, e.away_team, 
+                       COALESCE(m1.adj_o, 0) + COALESCE(m1.adj_d, 0) as home_rank,
+                       COALESCE(m2.adj_o, 0) + COALESCE(m2.adj_d, 0) as away_rank
+                FROM events e
+                LEFT JOIN bt_team_metrics_daily m1 ON LOWER(m1.team_text) LIKE LOWER(CONCAT('%', e.home_team, '%'))
+                LEFT JOIN bt_team_metrics_daily m2 ON LOWER(m2.team_text) LIKE LOWER(CONCAT('%', e.away_team, '%'))
+                WHERE (LOWER(e.home_team) LIKE LOWER(%s) OR LOWER(e.away_team) LIKE LOWER(%s))
+                  AND e.start_time > %s
+                ORDER BY e.start_time ASC LIMIT 1
+                """
+                result = _exec(conn, query, (f"%{team_name}%", f"%{team_name}%", current_date)).fetchone()
+                
+                # This is complex - for MVP, just apply a small lookahead penalty
+                # if next opponent is highly ranked. Full implementation needs rivalry DB.
+                # Skipping for now, will log when data available.
+                
+        except Exception as e:
+            print(f"[MODEL] Situational spot error for {team_name}: {e}")
+            
+        return adj
+
+    def _apply_referee_signal(self, event_id: str, mu_total: float) -> float:
+        """
+        Referee Signal: Adjust total based on officiating crew tendencies.
+        Crews that call more fouls = more free throws = higher totals.
+        """
+        from src.database import get_referee_assignment
+        
+        NCAA_AVG_FOULS = 36.0  # National average fouls per game
+        
+        try:
+            ref_data = get_referee_assignment(event_id)
+            if ref_data and ref_data.get('crew_avg_fouls'):
+                crew_fouls = float(ref_data['crew_avg_fouls'])
+                
+                # Every 1 foul above average adds ~0.8 points to total
+                if crew_fouls > NCAA_AVG_FOULS:
+                    over_adj = (crew_fouls - NCAA_AVG_FOULS) * 0.8
+                    mu_total += min(over_adj, 4.0)  # Cap at +4 points
+                    print(f"[REF] Crew avg {crew_fouls:.1f} fouls → Total +{over_adj:.1f}")
+                elif crew_fouls < NCAA_AVG_FOULS - 2:
+                    under_adj = (NCAA_AVG_FOULS - crew_fouls) * 0.5
+                    mu_total -= min(under_adj, 2.0)  # Cap at -2 points
+                    print(f"[REF] Tight crew {crew_fouls:.1f} fouls → Total -{under_adj:.1f}")
+                    
+        except Exception as e:
+            print(f"[MODEL] Referee signal error: {e}")
+            
+        return mu_total
+
     def predict(self, game_id: str, home_team: str, away_team: str, market_total: float = 0) -> Dict[str, Any]:
         """
         Satisfy BaseModel interface by wrapping analyze().
@@ -347,6 +463,26 @@ class NCAAMMarketFirstModelV2(BaseModel):
         if self.manual_adjustments:
             raw_basement_line += self.manual_adjustments.get('home_injury', 0.0)
             raw_basement_line -= self.manual_adjustments.get('away_injury', 0.0)
+        
+        # 6.5 Advanced Situational Signals
+        # -- Shooting Regression (3PT Variance) --
+        shooting_regr_home = self._calculate_shooting_regression(event['home_team'])
+        shooting_regr_away = self._calculate_shooting_regression(event['away_team'])
+        # If home is shooting hot, fade them (add to spread, making it less favorable)
+        # If away is shooting hot, fade them (subtract from spread)
+        shooting_adj = shooting_regr_home - shooting_regr_away
+        mu_spread_final += shooting_adj
+        
+        # -- Situational Spots (Letdown/Lookahead) --
+        spot_adj_home = self._calculate_situational_spots(event['home_team'], event)
+        spot_adj_away = self._calculate_situational_spots(event['away_team'], event)
+        # Letdown penalty on home = add to spread (less favorable)
+        # Letdown penalty on away = subtract from spread (more favorable to home)
+        spot_adj = spot_adj_home - spot_adj_away
+        mu_spread_final += spot_adj
+        
+        # -- Referee Signal (Totals) --
+        mu_total_final = self._apply_referee_signal(event['id'], mu_total_final)
             
         # 7. Recommendations & EV
         recs = self._generate_recommendations(mu_spread_final, sigma_spread, mu_total_final, sigma_total, market_snapshot, event)
@@ -358,8 +494,10 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "luck_adj": luck_adjustment,
             "geo_adj": altitude_adj if 'altitude_adj' in locals() else 0.0,
             "is_neutral": is_neutral,
-            "basement_line": raw_basement_line,  # Pure Power Rating Line
-            "w_base": self.W_BASE  # Dynamic weight used for this game
+            "basement_line": raw_basement_line,
+            "w_base": self.W_BASE,
+            "shooting_adj": shooting_adj,  # 3PT regression
+            "spot_adj": spot_adj,          # Letdown/Lookahead
         }
         
         # 8. Narrative (UI MATCH)
