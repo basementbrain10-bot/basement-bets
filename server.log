@@ -155,3 +155,611 @@ INFO:     Finished server process [95656]
 INFO:     Started server process [7061]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7061]
+INFO:     Started server process [7565]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'verify_db.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7565]
+INFO:     Started server process [34508]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'scripts/process_scraped_torvik.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [34508]
+INFO:     Started server process [34954]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'pull_ncaam_odds_only.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [34954]
+INFO:     Started server process [35536]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'pull_ncaam_odds_only.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [35536]
+INFO:     Started server process [35628]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'scripts/verify_model_batch.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [35628]
+INFO:     Started server process [35930]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'debug_consensus.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [35930]
+INFO:     Started server process [36471]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'debug_consensus.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [36471]
+INFO:     Started server process [36623]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'debug_board.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [36623]
+INFO:     Started server process [42481]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [42481]
+INFO:     Started server process [43511]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [43511]
+INFO:     Started server process [43603]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [43603]
+INFO:     Started server process [43657]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [43657]
+INFO:     Started server process [44030]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [44030]
+INFO:     Started server process [44122]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [44122]
+INFO:     Started server process [44297]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [44297]
+INFO:     Started server process [44450]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [44450]
+INFO:     Started server process [44504]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [44504]
+INFO:     Started server process [44738]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'debug_missing_game.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [44738]
+INFO:     Started server process [46106]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'temp_check_espn.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [46106]
+INFO:     Started server process [46644]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'restore_from_action.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [46644]
+INFO:     Started server process [47320]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'restore_from_action.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [47320]
+INFO:     Started server process [47647]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'restore_from_action.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [47647]
+INFO:     Started server process [47742]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'restore_from_action.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [47742]
+INFO:     Started server process [47919]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'restore_from_action.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [47919]
+INFO:     Started server process [48088]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'audit_model_bias.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [48088]
+INFO:     Started server process [51927]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'audit_model_bias.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [51927]
+INFO:     Started server process [52394]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'audit_model_bias.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [52394]
+INFO:     Started server process [52575]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/models/ncaam_market_first_model_v2.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [52575]
+INFO:     Started server process [53102]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'verify_fix_single_game.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [53102]
+INFO:     Started server process [53284]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'restore_from_action.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [53284]
+INFO:     Started server process [25533]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/models/ncaam_market_first_model_v2.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [25533]
+INFO:     Started server process [25739]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'sync_game_results.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [25739]
+INFO:     Started server process [29547]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'sync_game_results.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [29547]
+INFO:     Started server process [29648]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'fetch_espn_scores.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [29648]
+INFO:     Started server process [29939]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58197 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58198 - "GET /api/bets HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58199 - "GET /api/breakdown/sport HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58200 - "GET /api/breakdown/player HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58201 - "GET /api/breakdown/monthly HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58202 - "GET /api/breakdown/bet_type HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58209 - "GET /api/balances/snapshots/latest HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58210 - "GET /api/financials HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58211 - "GET /api/analytics/series HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58212 - "GET /api/analytics/drawdown HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58215 - "GET /api/breakdown/edge HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58217 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58219 - "GET /api/breakdown/player HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58220 - "GET /api/bets HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58222 - "GET /api/breakdown/sport HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58223 - "GET /api/breakdown/monthly HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58224 - "GET /api/breakdown/bet_type HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58231 - "GET /api/balances/snapshots/latest HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58232 - "GET /api/financials HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58233 - "GET /api/analytics/series HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58235 - "GET /api/analytics/drawdown HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleeps' | Expected: 'Xavier'
+INFO:     127.0.0.1:58236 - "GET /api/breakdown/edge HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58239 - "GET /api/stats/period?days=7 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58240 - "GET /api/stats/period?days=30 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58241 - "GET /api/stats/period?year=2026 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58242 - "GET /api/stats/period HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58245 - "GET /api/stats/period?days=7 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58247 - "GET /api/stats/period?days=30 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58249 - "GET /api/stats/period?year=2026 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58250 - "GET /api/stats/period HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58266 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58269 - "GET /api/bets HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58270 - "GET /api/breakdown/sport HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58271 - "GET /api/breakdown/player HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58272 - "GET /api/breakdown/monthly HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58273 - "GET /api/breakdown/bet_type HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58277 - "GET /api/balances/snapshots/latest HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58280 - "GET /api/financials HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58283 - "GET /api/analytics/series HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58284 - "GET /api/analytics/drawdown HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58285 - "GET /api/breakdown/edge HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58287 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58288 - "GET /api/bets HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58289 - "GET /api/breakdown/sport HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58296 - "GET /api/breakdown/player HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58297 - "GET /api/breakdown/monthly HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58298 - "GET /api/breakdown/bet_type HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58299 - "GET /api/balances/snapshots/latest HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58300 - "GET /api/financials HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58302 - "GET /api/analytics/series HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58305 - "GET /api/analytics/drawdown HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58307 - "GET /api/breakdown/edge HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58309 - "GET /api/stats/period?days=7 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58311 - "GET /api/stats/period?days=30 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58312 - "GET /api/stats/period?year=2026 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58313 - "GET /api/stats/period HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58317 - "GET /api/stats/period?days=7 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58319 - "GET /api/stats/period?days=30 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58320 - "GET /api/stats/period?year=2026 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58321 - "GET /api/stats/period HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58335 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58336 - "GET /api/bets HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58337 - "GET /api/breakdown/sport HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58338 - "GET /api/breakdown/player HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58339 - "GET /api/breakdown/monthly HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58340 - "GET /api/breakdown/bet_type HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58346 - "GET /api/balances/snapshots/latest HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58348 - "GET /api/financials HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58349 - "GET /api/analytics/series HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58350 - "GET /api/analytics/drawdown HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58352 - "GET /api/breakdown/edge HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58355 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58357 - "GET /api/bets HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58359 - "GET /api/breakdown/sport HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58361 - "GET /api/breakdown/player HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58363 - "GET /api/breakdown/monthly HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58364 - "GET /api/breakdown/bet_type HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58366 - "GET /api/balances/snapshots/latest HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58369 - "GET /api/financials HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58371 - "GET /api/analytics/series HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58372 - "GET /api/analytics/drawdown HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58374 - "GET /api/breakdown/edge HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58377 - "GET /api/stats/period?days=7 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58378 - "GET /api/stats/period?days=30 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58379 - "GET /api/stats/period?year=2026 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58381 - "GET /api/stats/period HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58383 - "GET /api/stats/period?days=7 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58386 - "GET /api/stats/period?days=30 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58387 - "GET /api/stats/period?year=2026 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58388 - "GET /api/stats/period HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58396 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement2026' | Expected: 'Xavier'
+INFO:     127.0.0.1:58398 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: '' | Expected: 'Xavier'
+INFO:     127.0.0.1:58400 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58415 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58419 - "GET /api/bets HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58420 - "GET /api/breakdown/sport HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58421 - "GET /api/breakdown/player HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58422 - "GET /api/breakdown/monthly HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58425 - "GET /api/breakdown/bet_type HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58427 - "GET /api/balances/snapshots/latest HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58429 - "GET /api/financials HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58430 - "GET /api/analytics/series HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58433 - "GET /api/analytics/drawdown HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58435 - "GET /api/breakdown/edge HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58436 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58439 - "GET /api/bets HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58440 - "GET /api/breakdown/sport HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58441 - "GET /api/breakdown/player HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58444 - "GET /api/breakdown/monthly HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58447 - "GET /api/breakdown/bet_type HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58448 - "GET /api/balances/snapshots/latest HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58451 - "GET /api/financials HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58452 - "GET /api/analytics/series HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58454 - "GET /api/analytics/drawdown HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'moneyneversleepsbasement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58457 - "GET /api/breakdown/edge HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58458 - "GET /api/stats/period?days=7 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58460 - "GET /api/stats/period?days=30 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58461 - "GET /api/stats/period?year=2026 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58462 - "GET /api/stats/period HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58467 - "GET /api/stats/period?days=7 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58468 - "GET /api/stats/period?days=30 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58469 - "GET /api/stats/period?year=2026 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58470 - "GET /api/stats/period HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'None' | Expected: 'Xavier'
+INFO:     127.0.0.1:58477 - "GET /api/board?league=NCAAM&date=2026-01-30&days=2 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement' | Expected: 'Xavier'
+INFO:     127.0.0.1:58479 - "GET /api/board?league=NCAAM&date=2026-01-30&days=2 HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'jordan' | Expected: 'Xavier'
+INFO:     127.0.0.1:58482 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basement-bets' | Expected: 'Xavier'
+INFO:     127.0.0.1:58484 - "GET /api/stats HTTP/1.1" 403 Forbidden
+[AUTH FAIL] Received: 'basementbets' | Expected: 'Xavier'
+INFO:     127.0.0.1:58486 - "GET /api/stats HTTP/1.1" 403 Forbidden
+WARNING:  WatchFiles detected changes in 'populate_action_scores.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [29939]
+INFO:     Started server process [34683]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [34683]
+INFO:     Started server process [38680]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [38680]
+INFO:     Started server process [38809]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'cleanup_duplicates.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [38809]
+INFO:     Started server process [38937]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'grade_predictions.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [38937]
+INFO:     Started server process [42759]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/database.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [42759]
+INFO:     Started server process [45703]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/database.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [45703]
+INFO:     Started server process [45783]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/models/ncaam_model.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [45783]
+INFO:     Started server process [50866]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'src/models/ncaam_model.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [50866]
+INFO:     Started server process [76226]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.

@@ -97,35 +97,67 @@ def parse_line(line_text, home_team, away_team):
         print(f"Parse Error '{line_text}': {e}")
         return 0.0, 0.0, 0, 0
 
+def parse_row(row_str):
+    # Example: "01:00 PM | 28 Texas A&M at 34 Georgia SEC Network | Georgia -2.7 90-87 (59%) | 91 |"
+    parts = [p.strip() for p in row_str.split('|')]
+    if len(parts) < 3:
+        return None, None, None
+        
+    matchup_text = parts[1] # "28 Texas A&M at 34 Georgia SEC Network"
+    line_text = parts[2]    # "Georgia -2.7 90-87 (59%)"
+    
+    # Parse Home/Away
+    # Split by " at "
+    if " at " in matchup_text:
+        away_part, home_part = matchup_text.split(" at ", 1)
+    else:
+        return None, None, None
+        
+    # Clean Team Names (Remove leading ranks like "28 ")
+    # Regex: Remove leading digits and space
+    away = re.sub(r'^\d+\s+', '', away_part).strip()
+    
+    # Home part has rank AND network often: "34 Georgia SEC Network"
+    # Logic: Remove leading rank first.
+    home = re.sub(r'^\d+\s+', '', home_part).strip()
+    
+    # Network cleanup is hard because networks vary wildly.
+    # But parse_line logic fuzzy matches "Favored Team" inside "Home Team".
+    # Favored: "Georgia"
+    # Home: "Georgia SEC Network"
+    # "Georgia" in "Georgia SEC Network" -> True.
+    # So we can leave the network junk in 'home' for now, usually safe.
+    
+    return away, home, line_text
+
 def main():
-    date_str = "20260130"
+    date_str = "20260131"
     file_path = "torvik_scraped.json"
     
     print(f"Reading {file_path}...")
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return
+
     with open(file_path, 'r') as f:
         scraped = json.load(f)
         
     payload = []
     
     for item in scraped:
-        # Transform to schema expected by TorvikProjectionService
-        # {
-        #   "away": "Team A", "home": "Team B", 
-        #   "home_spread": -5.5,
-        #   "total": 145.0,
-        #   "away_score": 70, "home_score": 75 ...
-        # }
-        
-        home = item['home']
-        away = item['away']
-        line = item['line']
-        
+        # Handle string input
+        if isinstance(item, str):
+            away, home, line = parse_row(item)
+            if not away: continue
+        else:
+            # Fallback for dict (old format)
+            away = item.get('away')
+            home = item.get('home')
+            line = item.get('line')
+            
         h_spread, total, s_fav, s_dog = parse_line(line, home, away)
         
-        # Calculate implied scores? Or just use what we parsed?
-        # We parsed score_fav and score_dog.
-        # Assign to home/away
-        # If h_spread < 0, Home is Favored -> Home=s_fav
+        # Calculate implied scores
         if h_spread < 0:
             h_score = s_fav
             a_score = s_dog
@@ -141,7 +173,7 @@ def main():
             "total": total,
             "home_score": h_score,
             "away_score": a_score,
-            "line_text": line # Debug/Raw
+            "line_text": line
         })
         
     print(f"Transformed {len(payload)} items.")

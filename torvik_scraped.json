@@ -1,58 +1,33 @@
 [
-    {
-        "time": "08:00 PM",
-        "away": "Michigan",
-        "home": "Michigan St.",
-        "line": "Michigan -1.9 73-71 (58%)",
-        "ttq": "102"
-    },
-    {
-        "time": "09:00 PM",
-        "away": "Boise St.",
-        "home": "Grand Canyon",
-        "line": "Grand Canyon -3.9 69-65 (66%)",
-        "ttq": "67"
-    },
-    {
-        "time": "07:00 PM",
-        "away": "Providence",
-        "home": "Villanova",
-        "line": "Villanova -10.7 85-74 (82%)",
-        "ttq": "61"
-    },
-    {
-        "time": "08:00 PM",
-        "away": "Dayton",
-        "home": "Saint Louis",
-        "line": "Saint Louis -13.8 82-68 (89%)",
-        "ttq": "60"
-    },
-    {
-        "time": "07:00 PM",
-        "away": "Northern Kentucky",
-        "home": "Detroit Mercy",
-        "line": "Northern Kentucky -0.3 81-80 (51%)",
-        "ttq": "58"
-    },
-    {
-        "time": "06:00 PM",
-        "away": "Kent St.",
-        "home": "Akron",
-        "line": "Akron -13.6 94-81 (85%)",
-        "ttq": "54"
-    },
-    {
-        "time": "10:00 PM",
-        "away": "UNLV",
-        "home": "Nevada",
-        "line": "Nevada -11.0 81-70 (84%)",
-        "ttq": "51"
-    },
-    {
-        "time": "07:00 PM",
-        "away": "Penn",
-        "home": "Columbia",
-        "line": "Columbia -4.5 78-74 (66%)",
-        "ttq": "50"
-    }
+    "01:00 PM | 28 Texas A&M at 34 Georgia SEC Network | Georgia -2.7 90-87 (59%) | 91 |",
+    "05:00 PM | 24 Indiana at 40 UCLA Peacock | UCLA -0.2 73-72 (51%) | 87 |",
+    "12:00 PM | 19 Texas Tech at 45 UCF ESPN2 | Texas Tech -4.7 81-77 (66%) | 83 | UCF, 88-80",
+    "04:30 PM | 23 BYU at 14 Kansas ESPN | Kansas -6.7 79-73 (73%) | 81 |",
+    "02:00 PM | 37 Texas at 71 Oklahoma ESPNEWS | Texas -1.3 81-79 (54%) | 78 |",
+    "02:00 PM | 39 Ohio St. at 36 Wisconsin FOX | Wisconsin -4.6 81-77 (66%) | 77 |",
+    "02:00 PM | 33 SMU at 17 Louisville ESPN | Louisville -9.3 87-78 (78%) | 76 |",
+    "12:00 PM | 27 N.C. State at 74 Wake Forest ACC Extra | N.C. State -3.2 79-76 (62%) | 75 | N.C. State, 96-78",
+    "08:30 PM | 29 Auburn at 18 Tennessee ESPN | Tennessee -7.0 78-71 (75%) | 75 |",
+    "01:00 PM | 41 San Diego St. at 30 Utah St. CBS | Utah St. -5.6 76-71 (71%) | 74 |",
+    "08:00 PM | 46 Washington at 57 Northwestern BTN | Northwestern -2.2 74-71 (59%) | 73 |",
+    "06:00 PM | 77 Oklahoma St. at 97 Utah ESPN2 | Utah -2.1 87-85 (57%) | 73 |",
+    "06:00 PM | 72 Stanford at 102 Florida St. ACC Network | Florida St. -1.3 78-77 (55%) | 73 |",
+    "01:00 PM | 58 LSU at 95 South Carolina SECN+ | South Carolina -0.6 73-72 (52%) | 72 |",
+    "06:30 PM | 44 Kentucky at 26 Arkansas ESPN | Arkansas -9.4 86-77 (79%) | 72 |",
+    "12:00 PM | 4 Duke at 59 Virginia Tech ESPN | Duke -8.3 77-69 (79%) | 70 | Duke, 72-58",
+    "02:00 PM | 2 Arizona at 79 Arizona St. TNT | Arizona -14.7 89-74 (89%) | 70 |",
+    "10:30 PM | 42 Saint Mary's at 13 Gonzaga ESPN | Gonzaga -10.4 79-68 (84%) | 69 |",
+    "08:00 PM | 9 Connecticut at 65 Creighton FOX | Connecticut -7.7 72-65 (79%) | 67 |",
+    "08:00 PM | 121 UC San Diego at 179 Cal St. Northridge ESPN+ | UC San Diego -0.1 80-79 (50%) | 67 |",
+    "04:00 PM | 61 California at 43 Miami FL ACC Network | Miami FL -6.8 76-69 (75%) | 65 |",
+    "08:00 PM | 99 Murray St. at 73 Belmont CBSSN | Belmont -7.2 90-83 (72%) | 63 |",
+    "03:30 PM | 82 Mississippi St. at 66 Missouri SEC Network | Missouri -5.0 75-70 (69%) | 63 |",
+    "04:00 PM | 68 Baylor at 53 West Virginia ESPN2 | West Virginia -4.9 72-67 (69%) | 62 |",
+    "12:00 PM | 50 Cincinnati at 3 Houston FOX | Houston -13.8 71-57 (92%) | 62 | Houston, 76-54",
+    "08:00 PM | 88 Minnesota at 69 Iowa BTN | Iowa -5.1 80-75 (69%) | 59 |",
+    "06:00 PM | 70 Kansas St. at 103 TCU ESPN | TCU -1.7 74-72 (56%) | 59 |",
+    "08:30 PM | 100 Georgia Tech at 60 Clemson ACC Network | Clemson -6.3 76-70 (73%) | 58 |",
+    "02:00 PM | 51 Pittsburgh at 108 Boston College CW Network | Pittsburgh -4.7 75-70 (68%) | 57 |",
+    "05:00 PM | 52 Syracuse at 141 Notre Dame CW Network | Syracuse -0.6 74-73 (52%) | 53 |",
+    "04:00 PM | 75 Colorado at 130 Colorado St. CBSSN | Colorado St. -1.0 74-73 (54%) | 50 |"
 ]
