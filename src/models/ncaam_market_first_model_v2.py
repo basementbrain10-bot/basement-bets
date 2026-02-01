@@ -426,7 +426,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "kelly": best_rec['kelly'] if best_rec else 0.0,
             "confidence_0_100": int(best_rec['ev'] * 100 * 5) if best_rec else 0, # Crude scale
             "inputs_json": json.dumps({"market": market_snapshot, "torvik": torvik_view, "kenpom": kenpom_adj, "news": news_context}, default=str),
-            "outputs_json": json.dumps({"mu_spread": mu_spread_final, "mu_total": mu_total_final, "recommendations": recs}, default=str),
+            "outputs_json": json.dumps({"mu_spread": mu_spread_final, "mu_total": mu_total_final, "recommendations": recs, "debug": debug_info}, default=str),
             "narrative": narrative, 
             "narrative_json": json.dumps(narrative, default=str),
             "recommendations": ui_recs,

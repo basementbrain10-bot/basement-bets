@@ -35,15 +35,15 @@ def audit_database():
 def audit_models():
     print("\n--- 2. MODEL HEALTH CHECK ---")
     
-    # NCAAM
+    # NCAAM (V2 via EdgeScanner)
     try:
-        from src.models.ncaam_model import NCAAMModel
-        ncaam = NCAAMModel()
-        print("Running NCAAM find_edges()...")
-        edges = ncaam.find_edges()
+        from src.services.edge_scanner import EdgeScanner
+        scanner = EdgeScanner()
+        print("Running NCAAM EdgeScanner.find_edges()...")
+        edges = scanner.find_edges(days_ahead=3)
         print(f"NCAAM Edges Found: {len(edges)}")
         if edges:
-            print(f"Sample: {edges[0]['away_team']} @ {edges[0]['home_team']} (Edge: {edges[0]['edge']})")
+            print(f"Sample: {edges[0].get('away_team','')} @ {edges[0].get('home_team','')} (Edge: {edges[0].get('edge','')})")
     except Exception as e:
         print(f"NCAAM FAILED: {e}")
 

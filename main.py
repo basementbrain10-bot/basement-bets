@@ -166,17 +166,16 @@ def main():
         except Exception as e:
             print(f"  Error running NFL model: {e}")
 
-        # 2. NCAAM
-        from src.models.ncaam_model import NCAAMModel
-        print("\n[NCAAM] Running Efficiency Model...")
+        # 2. NCAAM (V2 Market-First via EdgeScanner)
+        from src.services.edge_scanner import EdgeScanner
+        print("\n[NCAAM] Running Market-First V2 Model...")
         try:
-            cbb = NCAAMModel()
-            edges = cbb.find_edges()
+            scanner = EdgeScanner()
+            edges = scanner.find_edges(days_ahead=3)
             if not edges:
                 print("  No edges found.")
             for e in edges:
-                 if e['is_actionable']:
-                     print(f"  ★ DETECTED: {e['game']} {e['bet_on']} {e['market_line']} (Fair: {e['fair_line']}) | Edge: {e['edge']}")
+                print(f"  ★ DETECTED: {e['game']} {e['bet_on']} {e.get('market_line','')} (Fair: {e.get('fair_line','')}) | Edge: {e.get('edge','')}pts")
         except Exception as e:
              print(f"  Error running NCAAM model: {e}")
 

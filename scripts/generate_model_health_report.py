@@ -7,7 +7,7 @@ import datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.database import get_db_connection, _exec
-from src.models.ncaam_model import NCAAMModel
+from src.services.edge_scanner import EdgeScanner
 
 def generate_report():
     print("# NCAAM Model Health Dashboard")
@@ -28,19 +28,19 @@ def generate_report():
     
     print("\n## 3. Top Opportunities (Live)")
     try:
-        model = NCAAMModel()
-        edges = model.find_edges() # reusing our live scan
+        scanner = EdgeScanner()
+        edges = scanner.find_edges(days_ahead=3)
         
-        # Sort by EV/Edge desc
-        edges = sorted(edges, key=lambda x: abs(x['edge']), reverse=True)[:10]
+        # Sort by Edge desc
+        edges = sorted(edges, key=lambda x: abs(x.get('edge', 0)), reverse=True)[:10]
         
         if not edges:
             print("_No edges found currently._")
         else:
-            print("| Matchup | Market | Bet | Line | Model | Edge | EV | Book |")
+            print("| Matchup | Market | Bet | Line | Fair | Edge | Conf | Book |")
             print("|---|---|---|---|---|---|---|---|")
             for e in edges:
-                print(f"| {e['matchup']} | {e['market']} | {e['bet_on']} | {e['line']} | {e['model_line']} | {e['edge']} | {e['ev']} | {e['book']} |")
+                print(f"| {e.get('matchup','')} | {e.get('market_type','')} | {e.get('bet_on','')} | {e.get('market_line','')} | {e.get('fair_line','')} | {e.get('edge','')} | {e.get('confidence','')} | Consensus |")
                 
     except Exception as e:
         print(f"\n_Error fetching live odds: {e}_")
