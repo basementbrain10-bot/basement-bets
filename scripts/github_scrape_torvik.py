@@ -3,48 +3,26 @@
 GitHub Actions Torvik Scraper
 
 Standalone script for GitHub Actions to scrape BartTorvik data.
-Uses Selenium (available in GitHub Actions Linux environment).
 Writes directly to Postgres bt_team_metrics_daily table.
-
-Usage:
-  python scripts/github_scrape_torvik.py
-  
-Environment:
-  DATABASE_URL - Postgres connection string (set in GitHub Secrets)
 """
 import os
 import sys
 import json
 import psycopg2
 import psycopg2.extras
-from datetime import datetime
+from datetime import datetime, timedelta
 from contextlib import contextmanager
-
-# Attempt Selenium import (available in GitHub Actions)
-try:
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from webdriver_manager.chrome import ChromeDriverManager
-    HAS_SELENIUM = True
-except ImportError:
-    HAS_SELENIUM = False
-    print("[WARNING] Selenium not available, using requests fallback")
-
 import requests
+import time
 
-DATABASE_URL = os.environ.get('DATABASE_URL')
-TORVIK_URL = "https://barttorvik.com/trank.php"
+DATABASE_URL = None
+TORVIK_SCHEDULE_URL = "https://barttorvik.com/schedule.php"
 
 @contextmanager
 def get_db_connection():
     """Get database connection."""
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL not set")
-    
     conn = None
     try:
         conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.DictCursor)
@@ -54,66 +32,96 @@ def get_db_connection():
             conn.close()
 
 
-def fetch_with_selenium():
-    """Fetch Torvik data using Selenium (full browser)."""
-    print("[SELENIUM] Starting Chrome...")
-    
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-    
-    try:
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-        
-        # Fetch team rankings page
-        year = datetime.now().year if datetime.now().month >= 11 else datetime.now().year
-        url = f"{TORVIK_URL}?year={year}&json=1"
-        
-        print(f"[SELENIUM] Fetching {url}")
-        driver.get(url)
-        
-        # Wait for content
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.TAG_NAME, "pre"))
-        )
-        
-        # Get JSON content
-        pre = driver.find_element(By.TAG_NAME, "pre")
-        content = pre.text
-        
-        driver.quit()
-        
-        return json.loads(content)
-        
-    except Exception as e:
-        print(f"[SELENIUM] Error: {e}")
-        if 'driver' in locals():
-            driver.quit()
-        return None
-
-
-def fetch_with_requests():
-    """Fallback: try simple requests (may be blocked)."""
-    print("[REQUESTS] Fetching Torvik data...")
-    
-    year = datetime.now().year if datetime.now().month >= 11 else datetime.now().year
-    url = f"https://barttorvik.com/trank.php?year={year}&json=1"
-    
+def fetch_schedule_data():
+    """
+    Fetch team data from BartTorvik schedule.php endpoint.
+    This endpoint works better than trank.php for scraping.
+    """
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://barttorvik.com/',
     }
     
-    try:
-        resp = requests.get(url, headers=headers, timeout=30)
-        if resp.status_code == 200 and resp.text.strip().startswith('['):
-            return resp.json()
-    except Exception as e:
-        print(f"[REQUESTS] Error: {e}")
+    all_teams = {}
+    
+    # Fetch multiple days to get team stats
+    for days_offset in range(0, 7):
+        target_date = datetime.now() + timedelta(days=days_offset)
+        date_str = target_date.strftime('%Y%m%d')
+        url = f"{TORVIK_SCHEDULE_URL}?date={date_str}&json=1"
+        
+        print(f"[FETCH] Trying {url}")
+        
+        try:
+            resp = requests.get(url, headers=headers, timeout=30)
+            
+            if resp.status_code == 200:
+                content = resp.text.strip()
+                
+                # Check if it's JSON
+                if content.startswith('[') or content.startswith('{'):
+                    data = json.loads(content)
+                    
+                    for game in data:
+                        # Extract team stats from game projections
+                        if isinstance(game, dict):
+                            # Home team
+                            home = game.get('home', '')
+                            if home and home not in all_teams:
+                                all_teams[home] = {
+                                    'team': home,
+                                    'adj_o': game.get('home_adjoe'),
+                                    'adj_d': game.get('home_adjde'),
+                                    'adj_t': game.get('home_tempo'),
+                                }
+                            
+                            # Away team
+                            away = game.get('away', '')
+                            if away and away not in all_teams:
+                                all_teams[away] = {
+                                    'team': away,
+                                    'adj_o': game.get('away_adjoe'),
+                                    'adj_d': game.get('away_adjde'),
+                                    'adj_t': game.get('away_tempo'),
+                                }
+                    
+                    print(f"[FETCH] Found {len(data)} games, {len(all_teams)} unique teams so far")
+                else:
+                    print(f"[FETCH] Non-JSON response for {date_str}")
+                    
+        except Exception as e:
+            print(f"[FETCH] Error for {date_str}: {e}")
+        
+        time.sleep(0.5)  # Be polite
+    
+    return list(all_teams.values())
+
+
+def fetch_trank_data():
+    """Fallback: Try trank.php with various user agents."""
+    headers_list = [
+        {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/json',
+        },
+        {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/537.36',
+            'Accept': '*/*',
+        },
+    ]
+    
+    year = datetime.now().year
+    url = f"https://barttorvik.com/trank.php?year={year}&json=1"
+    
+    for headers in headers_list:
+        try:
+            resp = requests.get(url, headers=headers, timeout=30)
+            if resp.status_code == 200 and resp.text.strip().startswith('['):
+                return resp.json()
+        except:
+            continue
     
     return None
 
@@ -126,21 +134,15 @@ def save_to_database(teams: list):
     
     today = datetime.now().strftime('%Y%m%d')
     
-    # Map Torvik fields to our table
-    # Torvik JSON format: [rank, team, conf, record, adj_oe, adj_de, ...]
-    # Actual format varies - inspect and adapt
-    
     query = """
     INSERT INTO bt_team_metrics_daily 
-        (team_text, date, adj_o, adj_d, adj_t, luck, sos, created_at)
+        (team_text, date, adj_o, adj_d, adj_t, created_at)
     VALUES 
-        (%s, %s, %s, %s, %s, %s, %s, %s)
+        (%s, %s, %s, %s, %s, %s)
     ON CONFLICT (team_text, date) DO UPDATE SET
         adj_o = EXCLUDED.adj_o,
         adj_d = EXCLUDED.adj_d,
-        adj_t = EXCLUDED.adj_t,
-        luck = EXCLUDED.luck,
-        sos = EXCLUDED.sos
+        adj_t = EXCLUDED.adj_t
     """
     
     count = 0
@@ -149,24 +151,11 @@ def save_to_database(teams: list):
         
         for team in teams:
             try:
-                # Adapt based on actual Torvik JSON structure
-                # This is a common format from trank.php
-                if isinstance(team, list):
-                    # Array format: [rank, name, conf, record, adjO, adjD, adjT, luck, sos, ...]
-                    team_name = team[1] if len(team) > 1 else None
-                    adj_o = team[4] if len(team) > 4 else None
-                    adj_d = team[5] if len(team) > 5 else None
-                    adj_t = team[6] if len(team) > 6 else None
-                    luck = team[7] if len(team) > 7 else None
-                    sos = team[8] if len(team) > 8 else None
-                elif isinstance(team, dict):
-                    # Object format
+                if isinstance(team, dict):
                     team_name = team.get('team')
-                    adj_o = team.get('adj_o') or team.get('adjoe')
-                    adj_d = team.get('adj_d') or team.get('adjde')
-                    adj_t = team.get('adj_t') or team.get('tempo')
-                    luck = team.get('luck')
-                    sos = team.get('sos')
+                    adj_o = team.get('adj_o')
+                    adj_d = team.get('adj_d')
+                    adj_t = team.get('adj_t')
                 else:
                     continue
                 
@@ -179,8 +168,6 @@ def save_to_database(teams: list):
                     float(adj_o) if adj_o else None,
                     float(adj_d) if adj_d else None,
                     float(adj_t) if adj_t else None,
-                    float(luck) if luck else None,
-                    float(sos) if sos else None,
                     datetime.now()
                 ))
                 count += 1
@@ -195,53 +182,58 @@ def save_to_database(teams: list):
 
 
 def main():
+    global DATABASE_URL
+    
     print("=" * 50)
     print("GitHub Actions Torvik Scraper")
     print(f"Time: {datetime.now().isoformat()}")
     print("=" * 50)
     
-    # Debug: Print environment info
-    print(f"[DEBUG] DATABASE_URL exists: {bool(os.environ.get('DATABASE_URL'))}")
-    print(f"[DEBUG] DATABASE_URL length: {len(os.environ.get('DATABASE_URL', ''))}")
-    
-    # Check for common variations
-    db_url = (
+    # Get DATABASE_URL
+    DATABASE_URL = (
         os.environ.get('DATABASE_URL') or 
         os.environ.get('POSTGRES_URL') or 
         os.environ.get('DB_URL')
     )
     
-    if not db_url:
+    if not DATABASE_URL:
         print("[ERROR] No database URL found!")
-        print("[DEBUG] Available env vars:", [k for k in os.environ.keys() if 'DB' in k.upper() or 'POSTGRES' in k.upper() or 'URL' in k.upper()])
         sys.exit(1)
     
-    # Override global
-    global DATABASE_URL
-    DATABASE_URL = db_url
-    print(f"[DEBUG] Using database: {db_url[:50]}...")
+    print(f"[OK] Database URL configured")
     
-    # Try Selenium first, then fallback
-    teams = None
+    # Try schedule.php first (more reliable)
+    print("\n[STEP 1] Fetching from schedule.php...")
+    teams = fetch_schedule_data()
     
-    if HAS_SELENIUM:
-        teams = fetch_with_selenium()
+    # Fallback to trank.php
+    if not teams or len(teams) < 50:
+        print("\n[STEP 2] Trying trank.php fallback...")
+        trank_teams = fetch_trank_data()
+        if trank_teams:
+            # Parse trank format
+            for t in trank_teams:
+                if isinstance(t, list) and len(t) > 6:
+                    teams.append({
+                        'team': t[1],
+                        'adj_o': t[4],
+                        'adj_d': t[5],
+                        'adj_t': t[6]
+                    })
     
     if not teams:
-        teams = fetch_with_requests()
-    
-    if not teams:
-        print("[ERROR] Failed to fetch data from Torvik")
+        print("[ERROR] Failed to fetch any team data")
         sys.exit(1)
     
-    print(f"[DATA] Fetched {len(teams)} teams")
+    print(f"\n[DATA] Collected {len(teams)} teams")
     
     # Save to database
     saved = save_to_database(teams)
     print(f"[DB] Saved {saved} team records")
     
-    print("=" * 50)
+    print("\n" + "=" * 50)
     print("✅ Complete!")
+    sys.exit(0)
 
 
 if __name__ == "__main__":
