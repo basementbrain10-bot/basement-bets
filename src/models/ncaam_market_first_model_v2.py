@@ -11,7 +11,10 @@ from src.services.news_service import NewsService
 from src.services.geo_service import GeoService
 from src.database import get_db_connection, _exec, insert_model_prediction
 
-class NCAAMMarketFirstModelV2:
+from src.models.base_model import BaseModel
+from src.utils.naming import standardize_team_name
+
+class NCAAMMarketFirstModelV2(BaseModel):
     """
     NCAAM Market-First Model v2.
     - Market base with corrective signals.
@@ -19,12 +22,19 @@ class NCAAMMarketFirstModelV2:
     - Structured narratives.
     """
     
-    VERSION = "2.1.0-accuracy"
+    VERSION = "2.1.1-sniper"
     
-    # Default Model Weights
-    DEFAULT_W_BASE = 0.20  # Market-first blend
-    DEFAULT_W_SCHED = 0.05 # Torvik schedule-lean weight
-    DEFAULT_W_KENPOM = 0.05 # KenPom efficiency weight
+    # Optimized Model Weights (2026-02-01 Sniper Plan)
+    # Target: 75% Market / 25% Torvik+KenPom
+    # Formula: mu = market + base*(torvik-market) + kenpom*(kenpom-market)
+    # Weights apply to the DIFF. 0.25 on diff means 25% projection / 75% market anchor.
+    DEFAULT_W_BASE = 0.25  # Torvik Weight (Increased from 0.20)
+    DEFAULT_W_SCHED = 0.00 # Disabled (Season Stats removal)
+    DEFAULT_W_KENPOM = 0.00 # KenPom Weight (Integrated into base/torvik or handled separately? V1 plan said 25% total. Let's stick effectively to Torvik dominance for simplicity)
+    # Wait, implementation uses multiple diffs. Let's set Base 0.25 and KenPom 0.0 for now to match V1 exactly.
+    # Actually V2 has separate KenPom logic. Keep KenPom small or 0 if V1 disabled it? V1 ENABLED KenPom at 10% in plan.
+    # Re-reading plan: "Shift from 20% to 25% (Torvik)". "Increase KenPom Weight: 10%".
+    DEFAULT_W_KENPOM = 0.10
     
     # Default Caps
     DEFAULT_CAP_SPREAD = 2.0
@@ -37,13 +47,8 @@ class NCAAMMarketFirstModelV2:
     def __init__(self, aggressive: bool = False, cap_spread: float = None, cap_total: float = None, manual_adjustments: dict = None):
         """
         Initialize model with configurable parameters.
-        
-        Args:
-            aggressive: If True, use higher caps (4.0/5.0) to catch larger edges.
-            cap_spread: Override spread cap (takes precedence over aggressive).
-            cap_total: Override total cap (takes precedence over aggressive).
-            manual_adjustments: Dict of manual overrides (e.g. {'home_injury': 1.5})
         """
+        super().__init__(sport_key="ncaam") # BaseModel init
         self.torvik_service = TorvikProjectionService()
         self.odds_selector = OddsSelectionService()
         self.kenpom_client = KenPomClient()
@@ -52,7 +57,7 @@ class NCAAMMarketFirstModelV2:
         
         self.manual_adjustments = manual_adjustments or {}
         
-        # Set weights
+        # Set weights (Sniper Config)
         self.W_BASE = self.DEFAULT_W_BASE
         self.W_SCHED = self.DEFAULT_W_SCHED
         self.W_KENPOM = self.DEFAULT_W_KENPOM
@@ -71,6 +76,35 @@ class NCAAMMarketFirstModelV2:
             self.CAP_TOTAL = self.AGGRESSIVE_CAP_TOTAL
         else:
             self.CAP_TOTAL = self.DEFAULT_CAP_TOTAL
+
+    def fetch_data(self):
+        """Pre-load data (No-op for V2, as it fetches per-request)."""
+        pass
+
+    def evaluate(self):
+        """Evaluate performance (No-op)."""
+        pass
+
+    def predict(self, game_id: str, home_team: str, away_team: str, market_total: float = 0) -> Dict[str, Any]:
+        """
+        Satisfy BaseModel interface by wrapping analyze().
+        """
+        from datetime import datetime
+        # Create minimal context
+        event = {
+            "id": game_id,
+            "home_team": standardize_team_name(home_team),
+            "away_team": standardize_team_name(away_team),
+            "sport": "NCAAM",
+            "league": "NCAAM",
+            "start_time": datetime.now()  # Default to now to prevent luck check failure
+        }
+        # Minimal market snap
+        snap = {
+            "total": market_total or 145.0,
+            "spread_home": 0.0
+        }
+        return self.analyze(game_id, market_snapshot=snap, event_context=event)
 
     def analyze(self, event_id: str, market_snapshot: Optional[Dict] = None, event_context: Optional[Dict] = None) -> Dict:
         """
@@ -446,7 +480,9 @@ class NCAAMMarketFirstModelV2:
         
         # Use CONSENSUS line for all recommendations (user prefers single line display)
         price_home = snap.get('spread_price_home', -110)
-        price_away = -110  # Standard vig assumption
+        # Use actual best away price if available (user feedback: don't hardcode -110)
+        best_away = snap.get('_best_spread_away', {})
+        price_away = best_away.get('price', -110) if best_away else -110
         book_consensus = snap.get('book_spread', 'Consensus')
         
         if line_s is not None:
@@ -468,33 +504,45 @@ class NCAAMMarketFirstModelV2:
             ev_away = self._calculate_ev(prob_away, price_away)
             kelly_away = self._calculate_kelly(prob_away, price_away)
             
-            threshold = 0.01
+            # Filter: Sniper Logic (Edge >= 2.5 pts)
+            market_line_s = float(line_s)
+            fair_line_s = float(mu_s) 
+            # Fair line is expected spread (e.g. -5).
+            # Market line is spread (e.g. -2).
+            # Edge = abs(-5 - -2) = 3pts.
+            edge_pts = abs(fair_line_s - market_line_s)
             
-            if ev_home > threshold:
+            threshold = 0.01
+            # "Sniper" Mode: Only return actionable bets if Edge >= 2.5
+            is_actionable = (edge_pts >= 2.5)
+
+            if ev_home > threshold and is_actionable:
                 # Home Bet - use consensus line
                 recs.append({
                     "market": "SPREAD",
                     "side": event['home_team'],
-                    "line": round(float(line_s), 1),  # Consensus line, 1 decimal
+                    "line": round(market_line_s, 1),
                     "price": price_home,
                     "prob": round(prob_home, 3),
                     "win_prob": round(prob_home, 3),
                     "ev": round(ev_home, 3),
                     "kelly": round(kelly_home, 3),
-                    "book": book_consensus
+                    "book": book_consensus,
+                    "edge_points": round(edge_pts, 1)
                 })
-            elif ev_away > threshold:
-                # Away Bet - use mirrored consensus line
+            elif ev_away > threshold and is_actionable:
+                # Away Bet
                 recs.append({
                     "market": "SPREAD",
                     "side": event['away_team'],
-                    "line": round(float(-line_s), 1),  # Mirrored consensus, 1 decimal
+                    "line": round(-market_line_s, 1),
                     "price": price_away,
                     "prob": round(prob_away, 3),
                     "win_prob": round(prob_away, 3),
                     "ev": round(ev_away, 3),
                     "kelly": round(kelly_away, 3),
-                    "book": book_consensus
+                    "book": book_consensus,
+                    "edge_points": round(edge_pts, 1)
                 })
 
         # --- Total ---
@@ -521,9 +569,16 @@ class NCAAMMarketFirstModelV2:
             ev_under = self._calculate_ev(prob_under, price_under)
             kelly_under = self._calculate_kelly(prob_under, price_under)
             
-            threshold = 0.01
+            # Filter: Sniper Logic Totals (Edge >= 3.0 pts)
+            # Re-enabled per user request but gated for quality.
+            market_line_t = float(line_t)
+            fair_line_t = float(mu_t)
+            edge_pts_t = abs(fair_line_t - market_line_t)
             
-            if ev_over > threshold:
+            threshold = 0.01
+            is_actionable_t = (edge_pts_t >= 3.0)
+            
+            if ev_over > threshold and is_actionable_t:
                 # Over Bet
                 recs.append({
                     "market": "TOTAL",
@@ -534,9 +589,10 @@ class NCAAMMarketFirstModelV2:
                     "win_prob": round(prob_over, 3),
                     "ev": round(ev_over, 3),
                     "kelly": round(kelly_over, 3),
-                    "book": book_over
+                    "book": book_over,
+                    "edge_points": round(edge_pts_t, 1)
                 })
-            elif ev_under > threshold:
+            elif ev_under > threshold and is_actionable_t:
                 # Under Bet
                 recs.append({
                     "market": "TOTAL",
@@ -547,7 +603,8 @@ class NCAAMMarketFirstModelV2:
                     "win_prob": round(prob_under, 3),
                     "ev": round(ev_under, 3),
                     "kelly": round(kelly_under, 3),
-                    "book": book_under
+                    "book": book_under,
+                    "edge_points": round(edge_pts_t, 1)
                 })
                  
         return recs
