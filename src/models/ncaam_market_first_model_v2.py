@@ -85,6 +85,35 @@ class NCAAMMarketFirstModelV2(BaseModel):
         """Evaluate performance (No-op)."""
         pass
 
+    def _get_dynamic_weights(self, game_date) -> float:
+        """
+        Returns a weight (W_BASE) that scales based on the time of year.
+        Early season: Trust Market heavily (projections are preseason-based).
+        Late season: Trust Projections more (based on actual games).
+        """
+        from datetime import datetime
+        
+        if game_date is None:
+            game_date = datetime.now()
+        elif isinstance(game_date, str):
+            try:
+                game_date = datetime.fromisoformat(game_date.replace('Z', '+00:00'))
+            except:
+                game_date = datetime.now()
+        
+        month = game_date.month
+        
+        # Off-season/Early Season (Nov/Dec) - Preseason projections
+        if month == 11: return 0.12  # Trust Market heavily
+        if month == 12: return 0.18  
+        # Conference Play (Jan/Feb) - Real data accumulating
+        if month == 1: return 0.25   # Standard Sniper Weight
+        if month == 2: return 0.32   # Trust Projections more
+        # Tournament Time (March) - Peak sample size
+        if month == 3: return 0.38   # Peak Alpha
+        # April+ (Rare, post-tournament)
+        return 0.25  # Default
+
     def predict(self, game_id: str, home_team: str, away_team: str, market_total: float = 0) -> Dict[str, Any]:
         """
         Satisfy BaseModel interface by wrapping analyze().
@@ -162,6 +191,11 @@ class NCAAMMarketFirstModelV2(BaseModel):
         # 4. Market Baselines
         mu_market_spread = market_snapshot.get('spread_home', 0.0)
         mu_market_total = market_snapshot.get('total', 145.0)
+
+        # 4b. Dynamic Weight Scaling (Sample Size Adjustment)
+        # Early season: Trust market more. Late season: Trust projections more.
+        game_date = event.get('start_time')
+        self.W_BASE = self._get_dynamic_weights(game_date)
 
         # 5. Blend Math (Strict mu_final)
         mu_torvik_spread = -torvik_view.get('margin', 0.0)
@@ -324,7 +358,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "luck_adj": luck_adjustment,
             "geo_adj": altitude_adj if 'altitude_adj' in locals() else 0.0,
             "is_neutral": is_neutral,
-            "basement_line": raw_basement_line  # Pure Power Rating Line
+            "basement_line": raw_basement_line,  # Pure Power Rating Line
+            "w_base": self.W_BASE  # Dynamic weight used for this game
         }
         
         # 8. Narrative (UI MATCH)
