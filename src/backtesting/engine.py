@@ -5,7 +5,7 @@ from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
 
 class BacktestEngine:
     """
-    Comparison Engine for Market-First Model V2.3.
+    Comparison Engine for Market-First Model V1 (Optimized).
     """
     
     def __init__(self):

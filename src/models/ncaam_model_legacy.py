@@ -1,8 +1,14 @@
 import datetime
 import math
+import json
 from typing import Dict, Any, List, Optional, Tuple
 from src.models.base_model import BaseModel
 from src.models.schemas import MarketSnapshot, TorvikMetrics, Signal, ModelSnapshot, PredictionResult, PredictionComponent, OpportunityRanking
+
+from src.services.odds_selection_service import OddsSelectionService
+from src.services.news_service import NewsService
+from src.services.geo_service import GeoService
+from src.database import get_db_connection, _exec, insert_model_prediction
 
 # Pure Python Norm CDF (Error Function)
 def norm_cdf(x, mu=0.0, sigma=1.0):
@@ -375,24 +381,162 @@ class NCAAMModel(BaseModel):
 
     def predict(self, game_id: str, home_team: str, away_team: str, market_total: float = 0) -> Dict[str, Any]:
         """
-        Legacy predict shim, calling V1 if possible or falling back.
+        Satisfy BaseModel requirement. Wraps analyze().
         """
-        snapshot = self.predict_v1(
-            home_team, 
-            away_team, 
-            MarketSnapshot(spread_home=0.0, total_line=market_total)
+        # Create minimal event context
+        event_context = {
+            "id": game_id,
+            "home_team": home_team,
+            "away_team": away_team,
+            "sport": "NCAAM",
+            "league": "NCAAM"
+        }
+        # Create minimal market snapshot
+        market_snapshot = {
+            "total": market_total,
+            "spread_home": 0.0 # Unknown
+        }
+        return self.analyze(game_id, market_snapshot=market_snapshot, event_context=event_context)
+
+    def analyze(self, event_id: str, market_snapshot: Optional[Dict] = None, event_context: Optional[Dict] = None) -> Dict:
+        """
+        On-demand analysis for one game (V1 Logic).
+        Replaced legacy predict() shim.
+        """
+        # 1. Load Event
+        event = event_context
+        if not event:
+            event = self._get_event(event_id)
+        
+        if not event:
+            return {"error": f"Event {event_id} not found."}
+
+        # 2. Market Snapshot (Consensus)
+        self.odds_selector = OddsSelectionService()
+        raw_snaps = []
+        if not market_snapshot:
+            raw_snaps = self._get_all_recent_odds(event_id)
+            
+            consensus_spread = self.odds_selector.get_consensus_snapshot(raw_snaps, 'SPREAD', 'HOME')
+            consensus_total = self.odds_selector.get_consensus_snapshot(raw_snaps, 'TOTAL', 'OVER')
+            
+            market_snapshot_dict = {
+                'spread_home': consensus_spread['line_value'] if consensus_spread else 0.0,
+                'total': consensus_total['line_value'] if consensus_total else 145.0,
+                '_raw_snaps': raw_snaps
+            }
+        else:
+            market_snapshot_dict = market_snapshot
+            raw_snaps = market_snapshot.get('_raw_snaps', [])
+
+        # 3. Call Core Model (V1)
+        # Construct strictly typed MarketSnapshot for predict_v1
+        m_snap = MarketSnapshot(
+            spread_home=float(market_snapshot_dict.get('spread_home', 0.0)),
+            total_line=float(market_snapshot_dict.get('total', 145.0))
         )
         
-        if not snapshot:
-            return {"error": "Prediction failed"}
-            
-        return {
-            "game_id": game_id,
-            "fair_total": round(snapshot.prediction.mu_final_total * 2) / 2,
-            "win_prob": snapshot.prediction.prob_over,
-            "edge": snapshot.prediction.edge_over,
-            "model_version": "2024-01-14-ncaam-v1"
+        # Signals? (Optional, maybe fetch market moves)
+        signals = [] # TODO: Port market move signal logic if needed
+        
+        model_res = self.predict_v1(event['home_team'], event['away_team'], m_snap, signals=signals)
+        
+        if not model_res:
+             return {"error": "Model prediction failed (missing stats?)"}
+
+        # 4. Generate Narrative & Recs
+        # Need News/KenPom for narrative context (fetched in predict_v1 but not exposed? No, fetch fresh)
+        self.news_service = NewsService()
+        news_context = self.news_service.fetch_game_context(event['home_team'], event['away_team'])
+        
+        # KenPom (already fetched in find_edges ensemble, here we re-fetch for narrative)
+        from src.services.kenpom_client import KenPomClient
+        kp_client = KenPomClient()
+        kp_adj = kp_client.calculate_kenpom_adjustment(event['home_team'], event['away_team'])
+        
+        # Torvik View (for narrative display)
+        # We can extract from model_res.torvik_metrics or model_res.components
+        torvik_view = {
+            "margin": -model_res.components.mu_torvik_margin, # Convert back to margin (Home-Away)
+            "projected_score": f"{model_res.prediction.score_home:.1f}-{model_res.prediction.score_away:.1f}" 
         }
+
+        # Generate Recommendations (UI format)
+        recs = self._generate_recommendations_v1(model_res, market_snapshot_dict, event)
+        
+        narrative = self._generate_narrative(
+            event, 
+            market_snapshot_dict, 
+            torvik_view, 
+            kp_adj, 
+            news_context, 
+            recs, 
+            raw_snaps
+        )
+
+        res = {
+            "id": None, 
+            "event_id": event_id,
+            "home_team": event['home_team'],
+            "away_team": event['away_team'],
+            "analyzed_at": datetime.datetime.now().isoformat(),
+            "model_version": "2026-02-01-ncaam-v1-sniper",
+            "market_type": recs[0]['market'] if recs else "AUTO",
+            "pick": recs[0]['side'] if recs else "NONE",
+            "bet_line": recs[0]['line'] if recs else None,
+            "bet_price": recs[0]['price'] if recs else None,
+            "book": recs[0]['book'] if recs else None,
+            
+            # Key Model Outputs
+            "mu_market": model_res.components.mu_market_margin,
+            "mu_torvik": model_res.components.mu_torvik_margin, 
+            "mu_final": model_res.prediction.mu_final_margin,
+            "sigma": 10.5, # V1 constant
+            "win_prob": recs[0]['win_prob'] if recs else 0.5,
+            "ev_per_unit": recs[0]['ev'] if recs else 0.0,
+            "confidence_0_100": int(recs[0]['ev'] * 100 * 5) if recs else 0, # Crude scale
+
+            "narrative": narrative, 
+            "narrative_json": json.dumps(narrative, default=str),
+            "recommendations": recs,
+            
+            # Context
+            "kenpom_data": kp_adj,
+            "news_summary": self.news_service.summarize_impact(news_context),
+            "key_factors": narrative.get('key_factors') or [],
+            "risks": narrative.get('risks') or [],
+            
+            # Debug
+            "debug": {
+                "w_market": 0.75, "w_torvik": 0.25,
+                "notes": "V1 Optimized Logic"
+            }
+        }
+        
+        import uuid
+        res['id'] = str(uuid.uuid4())
+        insert_model_prediction(res)
+        
+        return res
+
+    def _get_event(self, event_id: str) -> Optional[Dict]:
+        query = "SELECT * FROM events WHERE id = :id"
+        with get_db_connection() as conn:
+            row = _exec(conn, query, {"id": event_id}).fetchone()
+            if row: return dict(row)
+        return None
+
+    def _get_all_recent_odds(self, event_id: str) -> List[Dict]:
+        query = """
+        SELECT market_type, side, line_value, price, book, captured_at
+        FROM odds_snapshots 
+        WHERE event_id = :eid 
+        ORDER BY captured_at DESC
+        LIMIT 200
+        """
+        with get_db_connection() as conn:
+            rows = _exec(conn, query, {"eid": event_id}).fetchall()
+            return [dict(r) for r in rows]
 
     def find_edges(self):
         """
@@ -768,3 +912,163 @@ class NCAAMModel(BaseModel):
 
     def evaluate(self, predictions: List[Dict[str, Any]]):
         pass
+
+    def _generate_recommendations_v1(self, model_res: ModelSnapshot, market_snap: Dict, event: Dict) -> List[Dict]:
+        """
+        Generate UI recommendations based on V1 ModelSnapshot.
+        Mirroring the logic of find_edges() filters:
+        - Spread Edge >= 2.5
+        - Total Edge >= 3.0
+        """
+        recs = []
+        
+        # --- Spread ---
+        # mu_final_margin is "Fair Margin" (Home - Away). 
+        # e.g. +5.0 means Home wins by 5. 
+        # Spread is usually Home focused (e.g. -5.0).
+        # Fair Spread = -mu_final_margin (e.g. -5.0).
+        
+        fair_spread_home = -model_res.prediction.mu_final_margin
+        market_spread_home = float(market_snap.get('spread_home', 0.0))
+        
+        prob_cover = model_res.prediction.prob_cover
+        
+        # Prices
+        # TODO: Use best prices found in snapshot if available.
+        # market_snap might have '_raw_snaps' or 'spread_price_home'
+        price_home = -110 # Default
+        price_away = -110
+        
+        # EV Calc helper
+        def get_ev(prob, price):
+            if price > 0: payout = price / 100.0
+            else: payout = 100.0 / abs(price)
+            return (prob * payout) - (1.0 - prob)
+
+        # Home Bet
+        ev_home = get_ev(prob_cover, price_home)
+        edge_pts_home = abs(fair_spread_home - market_spread_home)
+        
+        # Away Bet
+        prob_away = 1.0 - prob_cover
+        ev_away = get_ev(prob_away, price_away)
+        
+        # Filter: Edge >= 2.5 (Sniper Mode)
+        if edge_pts_home >= 2.5:
+            # Which side?
+            # If fair is -8 and market is -5, we like Home.
+            # fair_spread_home < market_spread_home => Home is better than market thinks.
+            if fair_spread_home < market_spread_home:
+                # Bet Home
+                recs.append({
+                    "market": "SPREAD",
+                    "side": event['home_team'],
+                    "line": market_spread_home,
+                    "price": price_home,
+                    "prob": round(prob_cover, 3),
+                    "win_prob": round(prob_cover, 3),
+                    "ev": round(ev_home, 3),
+                    "edge": ev_home, # UI expects this key
+                    "kelly": round(ev_home/2, 3), # Quarter Kelly Approx
+                    "book": market_snap.get('book_spread', 'Consensus')
+                })
+            else:
+                # Bet Away
+                recs.append({
+                    "market": "SPREAD",
+                    "side": event['away_team'],
+                    "line": -market_spread_home,
+                    "price": price_away,
+                    "prob": round(prob_away, 3),
+                    "win_prob": round(prob_away, 3),
+                    "ev": round(ev_away, 3),
+                    "edge": ev_away,
+                    "kelly": round(ev_away/2, 3),
+                    "book": market_snap.get('book_spread', 'Consensus')
+                })
+                
+        # --- Totals ---
+        fair_total = model_res.prediction.mu_final_total
+        market_total = float(market_snap.get('total', 145.0))
+        prob_over = model_res.prediction.prob_over
+        prob_under = 1.0 - prob_over
+        
+        edge_pts_total = abs(fair_total - market_total)
+        
+        # Filter: Edge >= 3.0 (Sniper Mode for Totals)
+        if edge_pts_total >= 3.0:
+            if fair_total > market_total:
+                # Bet Over
+                ev = get_ev(prob_over, -110)
+                recs.append({
+                    "market": "TOTAL",
+                    "side": "OVER",
+                    "line": market_total,
+                    "price": -110,
+                    "prob": round(prob_over, 3),
+                    "win_prob": round(prob_over, 3),
+                    "ev": round(ev, 3),
+                    "edge": ev,
+                    "kelly": round(ev/2, 3),
+                    "book": market_snap.get('book_total', 'Consensus')
+                })
+            else:
+                # Bet Under
+                ev = get_ev(prob_under, -110)
+                recs.append({
+                    "market": "TOTAL",
+                    "side": "UNDER",
+                    "line": market_total,
+                    "price": -110,
+                    "prob": round(prob_under, 3),
+                    "win_prob": round(prob_under, 3),
+                    "ev": round(ev, 3),
+                    "edge": ev,
+                    "kelly": round(ev/2, 3),
+                    "book": market_snap.get('book_total', 'Consensus')
+                })
+                
+        return recs
+
+    def _generate_narrative(self, event, snap, torvik, kenpom, news, recs, raw_snaps: Optional[List[Dict]] = None) -> Dict:
+        """Generate matchup-specific narrative + factors."""
+        headline = "No Strong Edge"
+        rationale: List[str] = []
+        key_factors: List[str] = []
+        risks: List[str] = []
+
+        spread_mkt = snap.get('spread_home', None)
+        total_mkt = snap.get('total', None)
+
+        # Core rationale strings
+        if spread_mkt is not None:
+            rationale.append(f"Market spread (home): {spread_mkt:+.1f}")
+        if total_mkt is not None:
+            rationale.append(f"Market total: {float(total_mkt):.1f}")
+        
+        # Recommendation framing
+        if recs:
+            main = recs[0]
+            headline = f"Bet: {main['side']} {main['line'] or ''}".strip()
+            # EV explanation
+            rationale.append(f"High-confidence edge detected (>2.5pts spread / >3.0pts total)")
+
+        # Data quality risk
+        if not snap.get('spread_home'):
+            risks.append("Missing market snapshot (using defaults)")
+
+        if not key_factors and not recs:
+            key_factors.append("Market is efficient here; no significant edges found.")
+
+        return {
+            "headline": headline,
+            "market_summary": f"Line: {snap.get('spread_home','N/A')}  •  Total: {snap.get('total','N/A')}",
+            "recommendation": headline,
+            "rationale": rationale,
+            "key_factors": key_factors,
+            "risks": risks,
+            "torvik_view": str(torvik),
+            "kenpom_view": str(kenpom),
+            "news_view": news.get('summary', 'No News') if news else 'No News',
+            "data_quality": "High" if snap.get('spread_home') else "Low"
+        }

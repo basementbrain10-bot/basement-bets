@@ -904,7 +904,7 @@ async def get_research_edges(refresh: bool = False, user: dict = Depends(get_cur
     edges = []
     
     from src.models.nfl_model import NFLModel
-    from src.models.ncaam_model import NCAAMModel
+    from src.services.edge_scanner import EdgeScanner
     from src.models.epl_model import EPLModel
     from src.services.auditor import ResearchAuditor
     from src.services.risk_manager import RiskManager
@@ -937,10 +937,10 @@ async def get_research_edges(refresh: bool = False, user: dict = Depends(get_cur
     except Exception as e:
         print(f"[API] NFL Model Failed: {e}")
 
-    # 2. NCAAM (Totals)
+    # 2. NCAAM (V2 Market-First)
     try:
-        ncaam = NCAAMModel()
-        ncaam_edges = ncaam.find_edges()
+        scanner = EdgeScanner()
+        ncaam_edges = scanner.find_edges(days_ahead=3)
         for e in ncaam_edges:
             e['market'] = 'Total'
             e['logic'] = 'KenPom Efficiency'
@@ -1509,7 +1509,8 @@ async def get_model_health_report(request: Request):
         # Let's import the logic if possible or just create a simple generated string here.
         # actually, let's use the script's logic if refactored, OR just implement valid generation here.
         
-        from src.models.ncaam_model import NCAAMModel
+        from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
+        from src.services.edge_scanner import EdgeScanner
         import datetime
         
         report = []
@@ -1531,8 +1532,8 @@ async def get_model_health_report(request: Request):
         
         # 3. Live Opps
         report.append("\n## 3. Top Opportunities (Live)")
-        model = NCAAMModel()
-        edges = model.find_edges()
+        scanner = EdgeScanner()
+        edges = scanner.find_edges(days_ahead=3)
         if not edges:
              report.append("_No edges found currently._")
         else:

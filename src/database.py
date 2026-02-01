@@ -1385,3 +1385,26 @@ def insert_transactions_bulk(txns: list) -> int:
         except Exception as e:
             print(f"[DB] insert_transactions_bulk error: {e}")
     return count
+
+def get_team_efficiency_by_name(team_name: str) -> dict:
+    """
+    Fetch latest team efficiency metrics (AdjO, AdjD, etc) from bt_team_metrics.
+    Returns empty dict if not found.
+    """
+    # Use fuzzy match or strict? Strict for now, assuming canonical names are used or handled.
+    # Actually most reliable is to query by LIKE or exact.
+    query = """
+    SELECT * FROM bt_team_metrics
+    WHERE team_name = %s
+    ORDER BY date DESC
+    LIMIT 1
+    """
+    try:
+        with get_db_connection() as conn:
+            row = _exec(conn, query, (team_name,)).fetchone()
+            if row:
+                return dict(row)
+    except Exception as e:
+        print(f"[DB] get_team_efficiency_by_name error: {e}")
+    
+    return {}
