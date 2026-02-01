@@ -1,0 +1,40 @@
+name: Scrape Torvik Data
+
+on:
+  schedule:
+    # Run every 6 hours during CBB season
+    - cron: '0 */6 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install requests psycopg2-binary selenium webdriver-manager
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@latest
+        with:
+          chrome-version: stable
+
+      - name: Scrape Torvik and update DB
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python scripts/github_scrape_torvik.py
+
+      - name: Summary
+        run: |
+          echo "✅ Torvik scrape complete at $(date)"

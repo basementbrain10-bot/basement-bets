@@ -1023,3 +1023,31 @@ OSError: [Errno 9] Bad file descriptor
 
 Current thread 0x000000020a37ec40 (most recent call first):
   <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/edge_scanner.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/models/ncaam_market_first_model_v2.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/models/ncaam_market_first_model_v2.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/github_scrape_torvik.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
