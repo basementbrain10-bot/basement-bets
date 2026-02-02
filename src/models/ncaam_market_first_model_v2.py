@@ -415,7 +415,19 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
         # 3. External Projections & Signals
         # Torvik - PRIMARY SIGNAL
-        torvik_view = self.torvik_service.get_game_projection(event['home_team'], event['start_time'])
+        game_date_obj = event.get('start_time')
+        game_date_str = None
+        if game_date_obj:
+            try:
+                # Ensure we have a string YYYYMMDD for Torvik service
+                # If it's a string, try to parse it first (ISO format from earlier fix)
+                if isinstance(game_date_obj, str):
+                    game_date_obj = datetime.fromisoformat(game_date_obj.replace('Z', '+00:00'))
+                game_date_str = game_date_obj.strftime("%Y%m%d")
+            except Exception:
+                pass
+
+        torvik_view = self.torvik_service.get_projection(event['home_team'], event['away_team'], date=game_date_str)
         
         # VALIDATION: Abort if Torvik is missing (Stop the "0.0 edge" bug)
         if not torvik_view or torvik_view.get('lean') == 'No Data':
@@ -427,13 +439,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
             }
 
         # Other Signals
-        torvik_team_stats = self.torvik_service.get_matchup_team_stats(event['home_team'], event['away_team'])
+        torvik_team_stats = self.torvik_service.get_matchup_team_stats(event['home_team'], event['away_team'], date=game_date_str)
         kenpom_adj = self.kenpom_client.calculate_kenpom_adjustment(event['home_team'], event['away_team'])
         news_context = self.news_service.fetch_game_context(event['home_team'], event['away_team'])
         
         # 4. Dynamic Weight Scaling
-        game_date = event.get('start_time')
-        self.W_BASE = self._get_dynamic_weights(game_date)
+        self.W_BASE = self._get_dynamic_weights(game_date_obj)
         w_base = self.W_BASE
 
         # 5. Blend Math (Strict mu_final)
