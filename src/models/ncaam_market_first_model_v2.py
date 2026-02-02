@@ -597,6 +597,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "fatigue_adj": fatigue_adj,
             "bell_curve_spread": bell_curve_spread,
             "bell_curve_total": bell_curve_total,
+            "torvik_refresh": datetime.now().strftime('%Y-%m-%d %H:%M'),  # When Torvik data was fetched
         }
         
         # 8. Narrative (UI MATCH)

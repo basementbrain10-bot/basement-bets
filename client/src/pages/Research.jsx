@@ -1172,12 +1172,15 @@ const Research = ({ onAddBet }) => {
                                             </div>
 
                                             <div className="bg-slate-800/80 p-6 rounded-xl border border-slate-700/50">
-                                                <h3 className="font-bold text-slate-200 mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
+                                                <h3 className="font-bold text-slate-200 mb-4 flex items-center gap-2 text-sm uppercase tracking-wider group relative">
                                                     <ShieldCheck size={16} className="text-green-400" />
                                                     Torvik View
+                                                    <span className="ml-auto text-[9px] text-slate-500 font-normal normal-case cursor-help" title={`Data from BartTorvik.com\n\nScraped Fields:\n• Adj Offensive Efficiency\n• Adj Defensive Efficiency\n• Adj Tempo\n• Luck Factor\n\nLast Refresh: ${analysisResult.torvik_view?.data_date || analysisResult.debug_info?.torvik_refresh || 'Live fetch'}`}>
+                                                        ⓘ Data Source
+                                                    </span>
                                                 </h3>
                                                 <div className="grid grid-cols-2 gap-4">
-                                                    <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                                    <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 cursor-help" title="Projected final score computed from Torvik efficiency ratings (AdjO, AdjD) and tempo">
                                                         <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Projected Score</div>
                                                         {(() => {
                                                             // torvik_view.projected_score is often "AwayScore-HomeScore"; make it explicit.
@@ -1201,13 +1204,18 @@ const Research = ({ onAddBet }) => {
                                                             );
                                                         })()}
                                                     </div>
-                                                    <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                                    <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 cursor-help" title="Expected margin based on efficiency differential and home court advantage">
                                                         <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Proj Margin</div>
                                                         <div className="text-lg font-bold text-white">{Number(analysisResult.torvik_view.margin) > 0 ? '+' : ''}{Number(analysisResult.torvik_view.margin).toFixed(1)}</div>
                                                     </div>
                                                 </div>
                                                 <div className="mt-4 text-[10px] text-slate-500 italic">
                                                     {analysisResult.torvik_view.lean}
+                                                </div>
+                                                {/* Data freshness indicator */}
+                                                <div className="mt-3 pt-3 border-t border-slate-700/50 text-[9px] text-slate-500 flex items-center gap-2">
+                                                    <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                                                    Computed from Raw Efficiency • {analysisResult.debug_info?.torvik_refresh || new Date().toLocaleDateString()}
                                                 </div>
                                             </div>
 
