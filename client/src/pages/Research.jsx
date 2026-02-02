@@ -451,8 +451,8 @@ const Research = ({ onAddBet }) => {
                                     <div className="grid gap-2">
                                         {recentPicks.slice(0, 5).map((pick, idx) => (
                                             <div key={idx} className={`flex items-center justify-between p-3 rounded-lg ${pick.result === 'WIN' ? 'bg-green-900/30 border border-green-700/50' :
-                                                    pick.result === 'LOSS' ? 'bg-red-900/30 border border-red-700/50' :
-                                                        'bg-slate-800/50 border border-slate-700/50'
+                                                pick.result === 'LOSS' ? 'bg-red-900/30 border border-red-700/50' :
+                                                    'bg-slate-800/50 border border-slate-700/50'
                                                 }`}>
                                                 <div className="flex-1">
                                                     <div className="text-white font-medium text-sm">
@@ -1271,16 +1271,20 @@ const Research = ({ onAddBet }) => {
                                                     </div>
                                                     <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 cursor-help" title="Expected margin based on efficiency differential and home court advantage">
                                                         <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Proj Margin</div>
-                                                        <div className="text-lg font-bold text-white">{Number(analysisResult.torvik_view.margin) > 0 ? '+' : ''}{Number(analysisResult.torvik_view.margin).toFixed(1)}</div>
+                                                        <div className="text-lg font-bold text-white">
+                                                            {analysisResult.torvik_view?.margin !== undefined && analysisResult.torvik_view.margin !== null
+                                                                ? `${Number(analysisResult.torvik_view.margin) > 0 ? '+' : ''}${Number(analysisResult.torvik_view.margin).toFixed(1)}`
+                                                                : '—'}
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div className="mt-4 text-[10px] text-slate-500 italic">
-                                                    {analysisResult.torvik_view.lean}
+                                                    {analysisResult.torvik_view?.lean || 'No data available'}
                                                 </div>
                                                 {/* Data freshness indicator */}
                                                 <div className="mt-3 pt-3 border-t border-slate-700/50 text-[9px] text-slate-500 flex items-center gap-2">
-                                                    <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                                                    Computed from Raw Efficiency • {analysisResult.debug_info?.torvik_refresh || new Date().toLocaleDateString()}
+                                                    <span className={`inline-block w-2 h-2 rounded-full ${analysisResult.torvik_view ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                                                    {analysisResult.torvik_view ? 'Computed from Raw Efficiency' : 'Data Missing'} • {analysisResult.debug_info?.torvik_refresh || new Date().toLocaleDateString()}
                                                 </div>
                                             </div>
 
