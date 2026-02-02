@@ -399,13 +399,18 @@ class NCAAMMarketFirstModelV2(BaseModel):
         self.W_BASE = self._get_dynamic_weights(game_date)
 
         # 5. Blend Math (Strict mu_final)
-        mu_torvik_spread = -torvik_view.get('margin', 0.0)
-        mu_sched_spread = -torvik_view.get('official_margin', -mu_torvik_spread)
-        mu_kenpom_spread = kenpom_adj.get('spread_adj', 0.0) # This is an adjustment, not a raw line.
+        # Defensive None handling for all values
+        mu_torvik_spread = -(torvik_view.get('margin') or 0.0)
+        mu_sched_spread = -(torvik_view.get('official_margin') or -mu_torvik_spread)
+        mu_kenpom_spread = kenpom_adj.get('spread_adj') or 0.0  # This is an adjustment, not a raw line.
         # KenPom spread_adj from client: Home - Away efficiency diff. 
         # If Home > Away, it returns positive margin. spread is usually negative for home fav.
         # Wait, calculate_kenpom_adjustment returns spread_adj (points better home is).
         # So fair spread = -spread_adj.
+        
+        # Ensure mu_market_spread is not None
+        if mu_market_spread is None:
+            mu_market_spread = 0.0
         
         diff_torvik = (mu_torvik_spread - mu_market_spread)
         diff_sched = (mu_sched_spread - mu_market_spread)
@@ -413,7 +418,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         # KenPom Integration: 
         # kenpom_adj['spread_adj'] is expected Home margin. So spread = -margin.
         # diff = (-expected_margin) - market_spread
-        kp_margin = kenpom_adj.get('spread_adj', 0.0)
+        kp_margin = kenpom_adj.get('spread_adj') or 0.0
         mu_kenpom_line = -kp_margin
         diff_kenpom = (mu_kenpom_line - mu_market_spread)
         
@@ -474,9 +479,15 @@ class NCAAMMarketFirstModelV2(BaseModel):
         if abs(mu_spread_final - mu_market_spread) > self.CAP_SPREAD:
              mu_spread_final = mu_market_spread + (self.CAP_SPREAD * math.copysign(1, mu_spread_final - mu_market_spread))
 
-        # Total
-        mu_torvik_total = torvik_view.get('total', 145.0)
-        mu_kenpom_total = market_snapshot.get('total', 145.0) + kenpom_adj.get('total_adj', 0.0)
+        # Total - with None-safe handling
+        mu_torvik_total = torvik_view.get('total') or 145.0
+        kenpom_total_adj = kenpom_adj.get('total_adj') or 0.0
+        market_total = market_snapshot.get('total') or 145.0
+        mu_kenpom_total = market_total + kenpom_total_adj
+        
+        # Ensure mu_market_total is not None
+        if mu_market_total is None:
+            mu_market_total = 145.0
         
         mu_total_final = mu_market_total + (w_base * (mu_torvik_total - mu_market_total)) + (self.W_KENPOM * (mu_kenpom_total - mu_market_total))
         
