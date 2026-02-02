@@ -602,7 +602,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         # 8. Narrative (UI MATCH)
         # Pass raw odds so we can generate matchup-specific key factors (e.g., line movement)
-        narrative = self._generate_narrative(event, market_snapshot, torvik_view, kenpom_adj, news_context, recs, raw_snaps=raw_snaps)
+        narrative = self._generate_narrative(event, market_snapshot, torvik_view, kenpom_adj, news_context, recs, raw_snaps=raw_snaps, debug_info=debug_info)
         
         # 9. Result Object
         ui_recs = []
@@ -920,7 +920,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         # Quarter Kelly for safety
         return max(0.0, fraction * 0.25)
 
-    def _generate_narrative(self, event, snap, torvik, kenpom, news, recs, raw_snaps: Optional[List[Dict]] = None) -> Dict:
+    def _generate_narrative(self, event, snap, torvik, kenpom, news, recs, raw_snaps: Optional[List[Dict]] = None, debug_info: Optional[Dict] = None) -> Dict:
         """Generate matchup-specific narrative + factors.
 
         IMPORTANT: key_factors/risks must be specific to this matchup, not generic labels.
@@ -932,6 +932,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
         spread_mkt = snap.get('spread_home', None)
         total_mkt = snap.get('total', None)
+        
+        debug_info = debug_info or {}
 
         # --- Line movement (best effort) ---
         line_move = None
@@ -981,6 +983,44 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 key_factors.append(f"KenPom total adj {float(kenpom.get('total_adj')):+.1f} (market {float(total_mkt):.1f})")
         except Exception:
             pass
+
+        # === SIGNAL-BASED FACTORS (from debug_info) ===
+        
+        # Luck Regression
+        luck_adj = debug_info.get('luck_adj', 0.0)
+        if luck_adj and abs(luck_adj) >= 0.5:
+            direction = "inflated" if luck_adj > 0 else "deflated"
+            key_factors.append(f"Luck regression: Team performance {direction} by recent good fortune ({luck_adj:+.1f} pts adj)")
+        
+        # Fatigue / Short Rest
+        fatigue_adj = debug_info.get('fatigue_adj', 0.0)
+        if fatigue_adj and abs(fatigue_adj) >= 1.0:
+            if fatigue_adj < 0:
+                key_factors.append(f"Fatigue signal: Home team on short rest ({fatigue_adj:+.1f} pts)")
+            else:
+                key_factors.append(f"Fatigue signal: Away team on short rest ({fatigue_adj:+.1f} pts to home)")
+        
+        # Shooting Regression (3PT variance)
+        shooting_adj = debug_info.get('shooting_adj', 0.0)
+        if shooting_adj and abs(shooting_adj) >= 0.5:
+            if shooting_adj < 0:
+                key_factors.append(f"Shooting regression: Team shooting hot from 3, expect regression ({shooting_adj:+.1f} pts)")
+            else:
+                key_factors.append(f"Shooting bounce-back: Team shooting cold from 3, expect improvement ({shooting_adj:+.1f} pts)")
+        
+        # Situational Spots (Letdown/Lookahead)
+        spot_adj = debug_info.get('spot_adj', 0.0)
+        if spot_adj and abs(spot_adj) >= 0.5:
+            if spot_adj > 0:
+                key_factors.append(f"Situational spot: Away team in letdown spot after big win ({spot_adj:+.1f} pts to home)")
+            else:
+                key_factors.append(f"Situational spot: Home team in letdown spot ({spot_adj:+.1f} pts)")
+        
+        # Dynamic Weights (Season Progression)
+        w_base = debug_info.get('w_base', 0.25)
+        if w_base != 0.25:
+            trust_level = "high" if w_base >= 0.32 else "low"
+            key_factors.append(f"Model trust: {trust_level} projection confidence ({w_base:.0%} weight)")
 
         # News
         if news:

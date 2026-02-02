@@ -415,6 +415,71 @@ const Research = ({ onAddBet }) => {
                             </div>
                         )}
 
+                        {/* Top Recommended Bets Section */}
+                        {!loading && history.length > 0 && (() => {
+                            // Get picks from today or most recent date with picks
+                            const todayStr = getTodayStr();
+                            const recentPicks = history
+                                .filter(h => h.pick_side && h.pick_type)
+                                .slice(0, 10); // Show last 10 picks
+
+                            if (recentPicks.length === 0) return null;
+
+                            const wins = recentPicks.filter(p => p.result === 'WIN').length;
+                            const losses = recentPicks.filter(p => p.result === 'LOSS').length;
+                            const pending = recentPicks.filter(p => !p.result || p.result === 'PENDING').length;
+
+                            return (
+                                <div className="mb-6 bg-gradient-to-br from-slate-800/90 to-slate-900/90 border border-slate-700/50 rounded-xl p-4">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-white font-bold flex items-center gap-2">
+                                            <CheckCircle size={18} className="text-green-400" />
+                                            Top Model Picks
+                                        </h3>
+                                        <div className="flex items-center gap-3 text-sm">
+                                            <span className="text-green-400 font-bold">{wins}W</span>
+                                            <span className="text-slate-500">-</span>
+                                            <span className="text-red-400 font-bold">{losses}L</span>
+                                            {pending > 0 && (
+                                                <>
+                                                    <span className="text-slate-500">-</span>
+                                                    <span className="text-yellow-400 font-bold">{pending}P</span>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="grid gap-2">
+                                        {recentPicks.slice(0, 5).map((pick, idx) => (
+                                            <div key={idx} className={`flex items-center justify-between p-3 rounded-lg ${pick.result === 'WIN' ? 'bg-green-900/30 border border-green-700/50' :
+                                                    pick.result === 'LOSS' ? 'bg-red-900/30 border border-red-700/50' :
+                                                        'bg-slate-800/50 border border-slate-700/50'
+                                                }`}>
+                                                <div className="flex-1">
+                                                    <div className="text-white font-medium text-sm">
+                                                        {pick.away_team} @ {pick.home_team}
+                                                    </div>
+                                                    <div className="text-slate-400 text-xs mt-0.5">
+                                                        {pick.pick_side} {pick.pick_line !== null ? pick.pick_line : ''} ({pick.pick_type})
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    {pick.result === 'WIN' && (
+                                                        <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs font-bold rounded">WIN ✓</span>
+                                                    )}
+                                                    {pick.result === 'LOSS' && (
+                                                        <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded">LOSS ✗</span>
+                                                    )}
+                                                    {(!pick.result || pick.result === 'PENDING') && (
+                                                        <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded">PENDING</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
                         {!loading && edges.length > 0 && (
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse">
