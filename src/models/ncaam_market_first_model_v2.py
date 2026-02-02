@@ -418,7 +418,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         torvik_view = self.torvik_service.get_game_projection(event['home_team'], event['start_time'])
         
         # VALIDATION: Abort if Torvik is missing (Stop the "0.0 edge" bug)
-        if not torvik_view:
+        if not torvik_view or torvik_view.get('lean') == 'No Data':
              return {
                 "headline": "Data Unavailable",
                 "recommendation": "Pass",
