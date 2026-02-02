@@ -562,12 +562,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
             is_neutral = True
 
         # Altitude
-        altitude_adj = self.geo_service.get_altitude_adjustment(event['home_team'], neutral_site=is_neutral)
+        altitude_adj = self.geo_service.get_altitude_adjustment(event['home_team'], neutral_site=is_neutral) or 0.0
         if altitude_adj > 0:
             mu_spread_final -= altitude_adj
             
         # Travel
-        dist = self.geo_service.calculate_distance(event['home_team'], event['away_team'])
+        dist = self.geo_service.calculate_distance(event['home_team'], event['away_team']) or 0.0
         if dist > 1000 and not is_neutral:
             mu_spread_final -= 0.5
 
@@ -589,27 +589,27 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         # 6.5 Advanced Situational Signals
         # -- Shooting Regression (3PT Variance) --
-        shooting_regr_home = self._calculate_shooting_regression(event['home_team'])
-        shooting_regr_away = self._calculate_shooting_regression(event['away_team'])
+        shooting_regr_home = self._calculate_shooting_regression(event['home_team']) or 0.0
+        shooting_regr_away = self._calculate_shooting_regression(event['away_team']) or 0.0
         shooting_adj = shooting_regr_home - shooting_regr_away
         mu_spread_final += shooting_adj
         
         # -- Situational Spots (Letdown/Lookahead) --
-        spot_adj_home = self._calculate_situational_spots(event['home_team'], event)
-        spot_adj_away = self._calculate_situational_spots(event['away_team'], event)
+        spot_adj_home = self._calculate_situational_spots(event['home_team'], event) or 0.0
+        spot_adj_away = self._calculate_situational_spots(event['away_team'], event) or 0.0
         spot_adj = spot_adj_home - spot_adj_away
         mu_spread_final += spot_adj
         
         # -- Fatigue / Short Rest Signal --
         game_date = event.get('start_time')
         event_id = event.get('id')
-        h_fatigue = self._calculate_fatigue_penalty(event['home_team'], event_id, game_date)
-        a_fatigue = self._calculate_fatigue_penalty(event['away_team'], event_id, game_date)
+        h_fatigue = self._calculate_fatigue_penalty(event['home_team'], event_id, game_date) or 0.0
+        a_fatigue = self._calculate_fatigue_penalty(event['away_team'], event_id, game_date) or 0.0
         fatigue_adj = h_fatigue - a_fatigue
         mu_spread_final += fatigue_adj
         
         # -- Referee Signal (Totals) --
-        mu_total_final = self._apply_referee_signal(event['id'], mu_total_final)
+        mu_total_final = self._apply_referee_signal(event['id'], mu_total_final) or mu_total_final
         
         # 6.6 Generate Bell Curve Data for UI Visualization
         bell_curve_spread = self._generate_bell_curve(mu_spread_final, sigma_spread, mu_market_spread)
