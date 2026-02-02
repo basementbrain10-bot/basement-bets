@@ -150,7 +150,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         - Letdown: Team just upset a ranked opponent → hangover
         """
         from src.database import get_team_last_game, get_db_connection, _exec
-        from datetime import datetime, timedelta
+        from datetime import datetime
         
         adj = 0.0
         current_date = event.get('start_time', datetime.now())
@@ -186,11 +186,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 FROM events e
                 LEFT JOIN bt_team_metrics_daily m1 ON LOWER(m1.team_text) LIKE LOWER(CONCAT('%', e.home_team, '%'))
                 LEFT JOIN bt_team_metrics_daily m2 ON LOWER(m2.team_text) LIKE LOWER(CONCAT('%', e.away_team, '%'))
-                WHERE (LOWER(e.home_team) LIKE LOWER(%s) OR LOWER(e.away_team) LIKE LOWER(%s))
-                  AND e.start_time > %s
+                WHERE (LOWER(e.home_team) LIKE LOWER(:t) OR LOWER(e.away_team) LIKE LOWER(:t))
+                  AND e.start_time > :now
                 ORDER BY e.start_time ASC LIMIT 1
                 """
-                result = _exec(conn, query, (f"%{team_name}%", f"%{team_name}%", current_date)).fetchone()
+                # Use named parameters to avoid %s conflicts and improve safety
+                result = _exec(conn, query, {"t": f"%{team_name}%", "now": current_date}).fetchone()
                 
                 # This is complex - for MVP, just apply a small lookahead penalty
                 # if next opponent is highly ranked. Full implementation needs rivalry DB.
@@ -230,7 +231,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             
         return mu_total
 
-    def _calculate_fatigue_penalty(self, team_name: str, current_game_date) -> float:
+    def _calculate_fatigue_penalty(self, team_name: str, event_id: str, current_game_date) -> float:
         """
         Checks the schedule for 'Short Rest' spots.
         -2.5 pts for '3rd game in 6 days' (The 'Tired Legs' Spot)
@@ -248,14 +249,24 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 return 0.0
         
         try:
+            # Query recent games, excluding the current one
             query = """
-            SELECT start_time FROM events 
-            WHERE (LOWER(home_team) LIKE LOWER(%s) OR LOWER(away_team) LIKE LOWER(%s))
-            AND start_time < %s 
+            SELECT id, start_time FROM events 
+            WHERE (LOWER(home_team) LIKE LOWER(:t) OR LOWER(away_team) LIKE LOWER(:t))
+            AND start_time < :now
+            AND id != :eid  -- Critical fix: Exclude current game to prevent self-matching
             ORDER BY start_time DESC LIMIT 2
             """
+            
+            # Use named parameters
+            params = {
+                "t": f"%{team_name}%",
+                "now": current_game_date,
+                "eid": event_id
+            }
+            
             with get_db_connection() as conn:
-                rows = _exec(conn, query, (f"%{team_name}%", f"%{team_name}%", current_game_date)).fetchall()
+                rows = _exec(conn, query, params).fetchall()
                 
             if not rows: 
                 return 0.0
@@ -266,6 +277,13 @@ class NCAAMMarketFirstModelV2(BaseModel):
             
             days_rest = (current_game_date - last_game_date).days
             
+            # Only count >0 days to avoid weird intraday header issues, 
+            # though id exclusion handles the main bug.
+            if days_rest == 0:
+                 # Sanity check: if same day and not same ID, double header? 
+                 # Unlikely in NCAA. Assume data noise.
+                 pass
+
             if days_rest <= 1: 
                 print(f"[FATIGUE] {team_name}: Back-to-back (-1.5)")
                 return -1.5  # Back-to-back
@@ -366,9 +384,9 @@ class NCAAMMarketFirstModelV2(BaseModel):
             # Composite Snapshot for Analysis (uses CONSENSUS for model math)
             market_snapshot = {
                 # Consensus for model input
-                'spread_home': consensus_spread['line_value'] if consensus_spread else 0.0,
+                'spread_home': consensus_spread['line_value'] if consensus_spread else None,
                 'spread_price_home': consensus_spread['price'] if consensus_spread else -110,
-                'total': consensus_total['line_value'] if consensus_total else 145.0,
+                'total': consensus_total['line_value'] if consensus_total else None,
                 'total_over_price': consensus_total['price'] if consensus_total else -110,
                 'book_spread': 'Consensus',
                 'book_total': 'Consensus',
@@ -383,43 +401,52 @@ class NCAAMMarketFirstModelV2(BaseModel):
         else:
             raw_snaps = market_snapshot.get('_raw_snaps', [])
 
-        # 3. Get Signals
-        torvik_view = self.torvik_service.get_projection(event['home_team'], event['away_team'])
+        # VALIDATION: Abort if Critical Market Data is Missing
+        if market_snapshot.get('spread_home') is None or market_snapshot.get('total') is None:
+            return {
+                "headline": "Market Data Waiting",
+                "recommendation": "No Line",
+                "rationale": ["Market odds not yet fully populated."],
+                "is_actionable": False
+            }
+
+        mu_market_spread = float(market_snapshot['spread_home'])
+        mu_market_total = float(market_snapshot['total'])
+
+        # 3. External Projections & Signals
+        # Torvik - PRIMARY SIGNAL
+        torvik_view = self.torvik_service.get_game_projection(event['home_team'], event['start_time'])
+        
+        # VALIDATION: Abort if Torvik is missing (Stop the "0.0 edge" bug)
+        if not torvik_view:
+             return {
+                "headline": "Data Unavailable",
+                "recommendation": "Pass",
+                "rationale": ["Primary projection source (Torvik) unavailable for this game."],
+                "is_actionable": False
+            }
+
+        # Other Signals
         torvik_team_stats = self.torvik_service.get_matchup_team_stats(event['home_team'], event['away_team'])
         kenpom_adj = self.kenpom_client.calculate_kenpom_adjustment(event['home_team'], event['away_team'])
         news_context = self.news_service.fetch_game_context(event['home_team'], event['away_team'])
         
-        # 4. Market Baselines
-        mu_market_spread = market_snapshot.get('spread_home', 0.0)
-        mu_market_total = market_snapshot.get('total', 145.0)
-
-        # 4b. Dynamic Weight Scaling (Sample Size Adjustment)
-        # Early season: Trust market more. Late season: Trust projections more.
+        # 4. Dynamic Weight Scaling
         game_date = event.get('start_time')
         self.W_BASE = self._get_dynamic_weights(game_date)
+        w_base = self.W_BASE
 
         # 5. Blend Math (Strict mu_final)
-        # Defensive None handling for all values
+        # Defensive None handling
         mu_torvik_spread = -(torvik_view.get('margin') or 0.0)
         mu_sched_spread = -(torvik_view.get('official_margin') or -mu_torvik_spread)
-        mu_kenpom_spread = kenpom_adj.get('spread_adj') or 0.0  # This is an adjustment, not a raw line.
-        # KenPom spread_adj from client: Home - Away efficiency diff. 
-        # If Home > Away, it returns positive margin. spread is usually negative for home fav.
-        # Wait, calculate_kenpom_adjustment returns spread_adj (points better home is).
-        # So fair spread = -spread_adj.
         
-        # Ensure mu_market_spread is not None
-        if mu_market_spread is None:
-            mu_market_spread = 0.0
+        # KenPom Integration
+        kp_margin = kenpom_adj.get('spread_adj') or 0.0
+        mu_kenpom_line = -kp_margin
         
         diff_torvik = (mu_torvik_spread - mu_market_spread)
         diff_sched = (mu_sched_spread - mu_market_spread)
-        
-        # KenPom Integration: 
-        # kenpom_adj['spread_adj'] is expected Home margin. So spread = -margin.
-        # diff = (-expected_margin) - market_spread
-        kp_margin = kenpom_adj.get('spread_adj') or 0.0
-        mu_kenpom_line = -kp_margin
         diff_kenpom = (mu_kenpom_line - mu_market_spread)
         
         # --- Feature: Luck Regression ---
@@ -541,18 +568,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             mu_spread_final -= a_inj
 
         # --- Feature: Basement Line (Power Rating) ---
-        # Calculate a "Pure" line without Market influence for backtesting/CLV.
-        # Basement Line = Average(Torvik, KenPom) + Adjustments (Luck, Geo, Injury)
-        # Note: KenPom is an adjustment off market? No, it's relative efficiency.
-        # But our implementation uses it as an adjustment.
-        # Let's reconstruct consistent Basement Line.
-        # Torvik: mu_torvik_spread (Projected Margin)
-        # KenPom: mu_kenpom_line (Projected Margin)
-        # Geo/Luck: Adjustments.
-        # Basement Line = Average(Torvik, KenPom) + Adjustments
-        
         raw_basement_line = (mu_torvik_spread + mu_kenpom_line) / 2.0
-        # Add adjustments (Luck, Geo, Injury)
         raw_basement_line += luck_adjustment
         if altitude_adj > 0: raw_basement_line -= altitude_adj
         if dist > 1000 and not is_neutral: raw_basement_line -= 0.5
@@ -564,24 +580,21 @@ class NCAAMMarketFirstModelV2(BaseModel):
         # -- Shooting Regression (3PT Variance) --
         shooting_regr_home = self._calculate_shooting_regression(event['home_team'])
         shooting_regr_away = self._calculate_shooting_regression(event['away_team'])
-        # If home is shooting hot, fade them (add to spread, making it less favorable)
-        # If away is shooting hot, fade them (subtract from spread)
         shooting_adj = shooting_regr_home - shooting_regr_away
         mu_spread_final += shooting_adj
         
         # -- Situational Spots (Letdown/Lookahead) --
         spot_adj_home = self._calculate_situational_spots(event['home_team'], event)
         spot_adj_away = self._calculate_situational_spots(event['away_team'], event)
-        # Letdown penalty on home = add to spread (less favorable)
-        # Letdown penalty on away = subtract from spread (more favorable to home)
         spot_adj = spot_adj_home - spot_adj_away
         mu_spread_final += spot_adj
         
         # -- Fatigue / Short Rest Signal --
         game_date = event.get('start_time')
-        h_fatigue = self._calculate_fatigue_penalty(event['home_team'], game_date)
-        a_fatigue = self._calculate_fatigue_penalty(event['away_team'], game_date)
-        fatigue_adj = h_fatigue - a_fatigue  # Penalize appropriately
+        event_id = event.get('id')
+        h_fatigue = self._calculate_fatigue_penalty(event['home_team'], event_id, game_date)
+        a_fatigue = self._calculate_fatigue_penalty(event['away_team'], event_id, game_date)
+        fatigue_adj = h_fatigue - a_fatigue
         mu_spread_final += fatigue_adj
         
         # -- Referee Signal (Totals) --
