@@ -171,11 +171,11 @@ const Research = ({ onAddBet }) => {
         setSelectedDate(nextDate);
     };
 
-    const fmtSigned = (n, decimals = 0) => {
+    const fmtSigned = (n, decimals = 1) => {
         if (n === null || n === undefined || n === '') return '-';
         const x = Number(n);
         if (Number.isNaN(x)) return String(n);
-        const s = decimals > 0 ? x.toFixed(decimals) : String(x);
+        const s = decimals >= 0 ? x.toFixed(decimals) : String(x);
         return x > 0 ? `+${s}` : s;
     };
 
@@ -655,16 +655,34 @@ const Research = ({ onAddBet }) => {
                                                             </>
                                                         )}
                                                         <td className="py-3 px-4 text-center">
-                                                            <button
-                                                                onClick={() => analyzeGame(edge)}
-                                                                disabled={leagueFilter !== 'NCAAM' || (isAnalyzing && selectedGame?.id === edge.id)}
-                                                                title={leagueFilter !== 'NCAAM' ? 'Analysis currently supported for NCAAM only' : ''}
-                                                                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-bold transition-all shadow-lg ring-1 ring-white/10 flex items-center justify-center mx-auto"
-                                                            >
-                                                                {leagueFilter !== 'NCAAM' ? 'N/A' : (isAnalyzing && selectedGame?.id === edge.id ? (
-                                                                    <RefreshCw className="animate-spin" size={14} />
-                                                                ) : 'Analyze')}
-                                                            </button>
+                                                            {isEdge ? (
+                                                                <button
+                                                                    onClick={() => onAddBet?.({
+                                                                        sport: edge.sport,
+                                                                        game: `${edge.away_team} @ ${edge.home_team}`,
+                                                                        market: 'Spread', // Simplified default
+                                                                        pick: edge.home_spread > 0 ? edge.home_team : edge.away_team, // Placeholder logic
+                                                                        line: edge.home_spread,
+                                                                        odds: -110
+                                                                    })}
+                                                                    className="px-3 py-1 bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 rounded text-xs font-bold transition-all flex items-center justify-center mx-auto gap-1"
+                                                                >
+                                                                    <PlusCircle size={12} />
+                                                                    Bet
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => analyzeGame(edge)}
+                                                                    disabled={leagueFilter !== 'NCAAM' || (isAnalyzing && selectedGame?.id === edge.id)}
+                                                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg ring-1 ring-white/10 flex items-center justify-center mx-auto ${
+                                                                        (isAnalyzing && selectedGame?.id === edge.id) 
+                                                                            ? 'bg-slate-700 text-slate-400'
+                                                                            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                                                    }`}
+                                                                >
+                                                                    {isAnalyzing && selectedGame?.id === edge.id ? <RefreshCw className="animate-spin" size={14} /> : 'Analyze'}
+                                                                </button>
+                                                            )}
                                                         </td>
                                                     </tr>
                                                 );
