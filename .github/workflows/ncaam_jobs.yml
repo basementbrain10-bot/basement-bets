@@ -27,6 +27,11 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: python3 src/scripts/ingest_results.py
+
+      - name: Ingest Odds
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python3 src/scripts/ingest_odds.py
           
       - name: Run Settlement
         env:
