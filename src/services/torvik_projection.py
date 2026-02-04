@@ -170,11 +170,16 @@ class TorvikProjectionService:
                 "game_tempo": None,
                 "notes": "Missing team efficiency metrics"
             }
-        game_tempo = (h.get('adj_tempo', 0) + a.get('adj_tempo', 0)) / 2.0
+        # Be careful: DB rows may include keys with explicit NULLs (None), so `.get(key, 0)`
+        # can still return None. Coalesce to 0.0 before arithmetic to avoid
+        # `TypeError: unsupported operand type(s) for +: 'NoneType' and 'NoneType'`.
+        h_tempo = h.get('adj_tempo') or 0.0
+        a_tempo = a.get('adj_tempo') or 0.0
+        game_tempo = (float(h_tempo) + float(a_tempo)) / 2.0
         return {
             "home": h,
             "away": a,
-            "game_tempo": round(game_tempo, 1),
+            "game_tempo": round(game_tempo, 1) if game_tempo else None,
             "notes": None
         }
 
