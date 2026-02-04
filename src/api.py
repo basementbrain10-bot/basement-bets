@@ -940,7 +940,7 @@ async def get_research_edges(refresh: bool = False, user: dict = Depends(get_cur
     # 2. NCAAM (V2 Market-First)
     try:
         scanner = EdgeScanner()
-        ncaam_edges = scanner.find_edges(days_ahead=3)
+        ncaam_edges = scanner.find_edges(days_ahead=3, max_plays=3)
         for e in ncaam_edges:
             e['market'] = 'Total'
             e['logic'] = 'KenPom Efficiency'
@@ -1533,7 +1533,7 @@ async def get_model_health_report(request: Request):
         # 3. Live Opps
         report.append("\n## 3. Top Opportunities (Live)")
         scanner = EdgeScanner()
-        edges = scanner.find_edges(days_ahead=3)
+        edges = scanner.find_edges(days_ahead=3, max_plays=3)
         if not edges:
              report.append("_No edges found currently._")
         else:
