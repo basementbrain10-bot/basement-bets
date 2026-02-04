@@ -1,0 +1,28 @@
+{
+  "total_analyzed": 252,
+  "season_range": "2025-2026",
+  "metrics": {
+    "fast_total": {
+      "count": 24,
+      "win_rate": 0.3333333333333333,
+      "win_count": 8
+    },
+    "medium_total": {
+      "count": 84,
+      "win_rate": 0.42857142857142855,
+      "win_count": 36
+    },
+    "slow_total": {
+      "count": 139,
+      "win_rate": 0.2014388489208633,
+      "win_count": 28
+    },
+    "high_margin": null,
+    "positive_margin": null,
+    "negative_margin": null,
+    "spread_and_total": null,
+    "multi_leg": null,
+    "spread_only": null,
+    "fast_total_and_multi": null
+  }
+}
