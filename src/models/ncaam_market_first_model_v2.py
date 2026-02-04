@@ -774,12 +774,13 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
     _archetype_cache: Dict[str, Dict[str, Any]] = {}
 
-    def _archetype_key(self, market: str, edge_pts: float, spread_bucket: Optional[str], torvik_ok: bool) -> str:
+    def _archetype_key(self, market: str, side: str, edge_pts: float, spread_bucket: Optional[str], torvik_ok: bool) -> str:
         # Coarse buckets to stabilize stats.
         edge_bucket = int(round(min(10.0, max(0.0, float(edge_pts)))))
         sb = spread_bucket or "na"
         tv = "tv" if torvik_ok else "no_tv"
-        return f"{market}:{edge_bucket}:{sb}:{tv}"
+        s = (side or "").lower().replace(" ", "_")
+        return f"{market}:{s}:{edge_bucket}:{sb}:{tv}"
 
     def _spread_bucket(self, market_line_home: float) -> str:
         # Used for correlation-driven rules; for now only affects gating / future combos.
@@ -810,84 +811,45 @@ class NCAAMMarketFirstModelV2(BaseModel):
         payout = (price / 100.0) if price > 0 else (100.0 / abs(price))
         return payout if o == "WON" else -1.0
 
-    def _get_archetype_stats(self, key: str) -> Dict[str, Any]:
-        """Return cached realized ROI stats for an archetype key.
+    _action_network_stats: Optional[Dict[str, Any]] = None
 
-        Stats are computed from model_predictions where outcome is decided.
-        """
-        from time import time
+    def _load_action_network_stats(self) -> Dict[str, Any]:
+        if self._action_network_stats is not None:
+            return self._action_network_stats
 
-        now = time()
-        cached = self._archetype_cache.get(key)
-        if cached and (now - cached.get("ts", 0)) < 600:
-            return cached
+        import os
+        import json
 
-        # Parse key back into components for query filters
-        # key format: market:edge_bucket:spread_bucket:tv_flag
-        parts = key.split(":")
-        market = parts[0] if parts else None
-        edge_bucket = int(parts[1]) if len(parts) > 1 else None
-        spread_bucket = parts[2] if len(parts) > 2 else None
-
-        # We match on market_type plus a coarse edge_points bucket. Spread bucket is approximated via bet_line.
-        # This is intentionally coarse and will evolve.
-        q = """
-        SELECT outcome, bet_price, edge_points, bet_line, market_type
-        FROM model_predictions
-        WHERE market_type=%s
-          AND outcome IN ('WON','LOST','PUSH')
-          AND edge_points IS NOT NULL
-          AND analyzed_at > NOW() - INTERVAL '180 days'
-        """
-
-        vals: List[float] = []
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        path = os.path.join(repo_root, 'data', 'model_params', 'action_network_archetype_stats_ncaam.json')
 
         try:
-            from src.database import get_db_connection, _exec
-
-            with get_db_connection() as conn:
-                rows = _exec(conn, q, (market,)).fetchall()
-
-            for r in rows:
-                try:
-                    ep = float(r.get("edge_points") if isinstance(r, dict) else r[2])
-                    epb = int(round(min(10.0, max(0.0, ep))))
-                    if edge_bucket is not None and epb != edge_bucket:
-                        continue
-
-                    if market == "SPREAD" and spread_bucket and spread_bucket != "na":
-                        bl = float((r.get("bet_line") if isinstance(r, dict) else r[3]) or 0.0)
-                        sb = self._spread_bucket(bl)
-                        if sb != spread_bucket:
-                            continue
-
-                    outcome = r.get("outcome") if isinstance(r, dict) else r[0]
-                    price = r.get("bet_price") if isinstance(r, dict) else r[1]
-                    roi = self._realized_roi_per_unit(outcome, int(price) if price is not None else -110)
-                    if roi is not None:
-                        vals.append(float(roi))
-                except Exception:
-                    continue
+            with open(path, 'r', encoding='utf-8') as f:
+                self._action_network_stats = json.load(f)
         except Exception:
-            # If anything goes wrong (e.g. DB), treat as no stats.
-            vals = []
+            self._action_network_stats = {"bins": {}}
 
-        n = len(vals)
-        if n:
-            mean = sum(vals) / n
-            # sample std
-            if n > 1:
-                var = sum((x - mean) ** 2 for x in vals) / (n - 1)
-                sd = var ** 0.5
-            else:
-                sd = 0.0
-        else:
-            mean = 0.0
-            sd = 0.0
+        return self._action_network_stats
 
-        out = {"ts": now, "n": n, "mean": mean, "sd": sd}
-        self._archetype_cache[key] = out
-        return out
+    def _get_archetype_stats(self, key: str) -> Dict[str, Any]:
+        """Return realized ROI stats for an archetype key.
+
+        Canonical source: Action Network history artifact (precomputed).
+        """
+        stats = self._load_action_network_stats()
+        bins = (stats or {}).get('bins') or {}
+
+        # key here includes tv-flag; artifact does not. Strip the suffix.
+        # expected: MARKET:side:edge_bucket:spread_bucket:tv_flag
+        parts = key.split(':')
+        short_key = ':'.join(parts[:4]) if len(parts) >= 4 else key
+
+        row = bins.get(short_key) or {}
+        return {
+            "n": int(row.get('n') or 0),
+            "mean": float(row.get('mean') or 0.0),
+            "sd": float(row.get('sd') or 0.0),
+        }
 
     def _passes_publish_gates(self, rec: Dict[str, Any], market_line_home: Optional[float], torvik_ok: bool) -> bool:
         """Research publish gates.
@@ -907,7 +869,9 @@ class NCAAMMarketFirstModelV2(BaseModel):
         if market == "SPREAD":
             spread_bucket = self._spread_bucket(market_line_home or 0.0)
 
-        key = self._archetype_key(market, edge_pts=edge_pts, spread_bucket=spread_bucket, torvik_ok=torvik_ok)
+        # Action Network archetype artifact is currently market-only (edge_bucket=0).
+        # We keep the key structure stable but force edge_pts=0.0 for lookup.
+        key = self._archetype_key(market, side=str(rec.get('side') or ''), edge_pts=0.0, spread_bucket=spread_bucket, torvik_ok=torvik_ok)
         stats = self._get_archetype_stats(key)
 
         min_n = self.PUBLISH_MIN_N_TORVIK_OK if torvik_ok else self.PUBLISH_MIN_N_TORVIK_MISSING
@@ -986,7 +950,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
             # Candidate recs first
             cand_home = {
                 "market": "SPREAD",
-                "side": event["home_team"],
+                "side": "home",
+                "team": event["home_team"],
                 "line": round(market_line_s, 1),
                 "price": int(price_home),
                 "prob": round(prob_home, 3),
@@ -999,7 +964,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
             cand_away = {
                 "market": "SPREAD",
-                "side": event["away_team"],
+                "side": "away",
+                "team": event["away_team"],
                 "line": round(-market_line_s, 1),
                 "price": int(price_away),
                 "prob": round(prob_away, 3),
@@ -1042,7 +1008,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
             cand_over = {
                 "market": "TOTAL",
-                "side": "OVER",
+                "side": "over",
                 "line": float(best_over["line_value"] if best_over else line_t),
                 "price": int(price_over),
                 "prob": round(prob_over, 3),
@@ -1055,7 +1021,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
             cand_under = {
                 "market": "TOTAL",
-                "side": "UNDER",
+                "side": "under",
                 "line": float(best_under["line_value"] if best_under else line_t),
                 "price": int(price_under),
                 "prob": round(prob_under, 3),
