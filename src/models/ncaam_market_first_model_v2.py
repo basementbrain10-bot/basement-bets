@@ -616,7 +616,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         bell_curve_total = self._generate_bell_curve(mu_total_final, sigma_total, mu_market_total)
             
         # 7. Recommendations & EV
-        recs = self._generate_recommendations(mu_spread_final, sigma_spread, mu_total_final, sigma_total, market_snapshot, event)
+        recs = self._generate_recommendations(mu_spread_final, sigma_spread, mu_total_final, sigma_total, market_snapshot, event, torvik_view=torvik_view)
         
         debug_info = {
             "mu_spread_final": mu_spread_final,
@@ -764,157 +764,312 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         return res
 
-    def _generate_recommendations(self, mu_s, sig_s, mu_t, sig_t, snap, event) -> List[Dict]:
-        recs = []
-        if not snap: return recs
-        
+    # --- Publication gates (Research tab) ---
+    # Straight bets only for now. (Correlation/parlays are handled elsewhere.)
+    PUBLISH_MIN_EV = 0.02  # +2.0% per unit
+    PUBLISH_CI_Z = 1.96    # 95% CI on archetype mean
+    PUBLISH_MIN_N_TORVIK_OK = 40
+    PUBLISH_MIN_N_TORVIK_MISSING = 60
+    PUBLISH_MIN_EV_TORVIK_MISSING_BUMP = 0.005  # +0.5%
+
+    _archetype_cache: Dict[str, Dict[str, Any]] = {}
+
+    def _archetype_key(self, market: str, edge_pts: float, spread_bucket: Optional[str], torvik_ok: bool) -> str:
+        # Coarse buckets to stabilize stats.
+        edge_bucket = int(round(min(10.0, max(0.0, float(edge_pts)))))
+        sb = spread_bucket or "na"
+        tv = "tv" if torvik_ok else "no_tv"
+        return f"{market}:{edge_bucket}:{sb}:{tv}"
+
+    def _spread_bucket(self, market_line_home: float) -> str:
+        # Used for correlation-driven rules; for now only affects gating / future combos.
+        try:
+            v = abs(float(market_line_home or 0.0))
+        except Exception:
+            v = 0.0
+        if v <= 3.0:
+            return "close"
+        if v <= 7.0:
+            return "mid"
+        return "big"
+
+    def _realized_roi_per_unit(self, outcome: str, price: int) -> Optional[float]:
+        """Convert outcome + price into realized ROI per 1u risked."""
+        if not outcome:
+            return None
+        o = str(outcome).upper()
+        if o in ("PUSH",):
+            return 0.0
+        if o not in ("WON", "LOST"):
+            return None
+
+        # payout per 1u risk
+        if price is None:
+            price = -110
+        price = int(price)
+        payout = (price / 100.0) if price > 0 else (100.0 / abs(price))
+        return payout if o == "WON" else -1.0
+
+    def _get_archetype_stats(self, key: str) -> Dict[str, Any]:
+        """Return cached realized ROI stats for an archetype key.
+
+        Stats are computed from model_predictions where outcome is decided.
+        """
+        from time import time
+
+        now = time()
+        cached = self._archetype_cache.get(key)
+        if cached and (now - cached.get("ts", 0)) < 600:
+            return cached
+
+        # Parse key back into components for query filters
+        # key format: market:edge_bucket:spread_bucket:tv_flag
+        parts = key.split(":")
+        market = parts[0] if parts else None
+        edge_bucket = int(parts[1]) if len(parts) > 1 else None
+        spread_bucket = parts[2] if len(parts) > 2 else None
+
+        # We match on market_type plus a coarse edge_points bucket. Spread bucket is approximated via bet_line.
+        # This is intentionally coarse and will evolve.
+        q = """
+        SELECT outcome, bet_price, edge_points, bet_line, market_type
+        FROM model_predictions
+        WHERE market_type=%s
+          AND outcome IN ('WON','LOST','PUSH')
+          AND edge_points IS NOT NULL
+          AND analyzed_at > NOW() - INTERVAL '180 days'
+        """
+
+        vals: List[float] = []
+
+        try:
+            from src.database import get_db_connection, _exec
+
+            with get_db_connection() as conn:
+                rows = _exec(conn, q, (market,)).fetchall()
+
+            for r in rows:
+                try:
+                    ep = float(r.get("edge_points") if isinstance(r, dict) else r[2])
+                    epb = int(round(min(10.0, max(0.0, ep))))
+                    if edge_bucket is not None and epb != edge_bucket:
+                        continue
+
+                    if market == "SPREAD" and spread_bucket and spread_bucket != "na":
+                        bl = float((r.get("bet_line") if isinstance(r, dict) else r[3]) or 0.0)
+                        sb = self._spread_bucket(bl)
+                        if sb != spread_bucket:
+                            continue
+
+                    outcome = r.get("outcome") if isinstance(r, dict) else r[0]
+                    price = r.get("bet_price") if isinstance(r, dict) else r[1]
+                    roi = self._realized_roi_per_unit(outcome, int(price) if price is not None else -110)
+                    if roi is not None:
+                        vals.append(float(roi))
+                except Exception:
+                    continue
+        except Exception:
+            # If anything goes wrong (e.g. DB), treat as no stats.
+            vals = []
+
+        n = len(vals)
+        if n:
+            mean = sum(vals) / n
+            # sample std
+            if n > 1:
+                var = sum((x - mean) ** 2 for x in vals) / (n - 1)
+                sd = var ** 0.5
+            else:
+                sd = 0.0
+        else:
+            mean = 0.0
+            sd = 0.0
+
+        out = {"ts": now, "n": n, "mean": mean, "sd": sd}
+        self._archetype_cache[key] = out
+        return out
+
+    def _passes_publish_gates(self, rec: Dict[str, Any], market_line_home: Optional[float], torvik_ok: bool) -> bool:
+        """Research publish gates.
+
+        Requirements:
+        - EV ≥ +2.0%
+        - lower-bound EV (95% CI on archetype realized ROI mean) ≥ 0.0%
+        - MIN_N ≥ 40 (or 60 if Torvik missing)
+        - If Torvik missing: EV threshold +0.5%
+        """
+
+        ev = float(rec.get("ev") or 0.0)
+        edge_pts = float(rec.get("edge_points") or 0.0)
+        market = str(rec.get("market") or "")
+
+        spread_bucket = None
+        if market == "SPREAD":
+            spread_bucket = self._spread_bucket(market_line_home or 0.0)
+
+        key = self._archetype_key(market, edge_pts=edge_pts, spread_bucket=spread_bucket, torvik_ok=torvik_ok)
+        stats = self._get_archetype_stats(key)
+
+        min_n = self.PUBLISH_MIN_N_TORVIK_OK if torvik_ok else self.PUBLISH_MIN_N_TORVIK_MISSING
+        min_ev = self.PUBLISH_MIN_EV if torvik_ok else (self.PUBLISH_MIN_EV + self.PUBLISH_MIN_EV_TORVIK_MISSING_BUMP)
+
+        if ev < min_ev:
+            return False
+
+        if (stats.get("n") or 0) < min_n:
+            return False
+
+        n = int(stats.get("n") or 0)
+        mean = float(stats.get("mean") or 0.0)
+        sd = float(stats.get("sd") or 0.0)
+        se = (sd / (n ** 0.5)) if (n > 1 and sd > 0) else 0.0
+        lb = mean - (self.PUBLISH_CI_Z * se)
+
+        # lower-bound EV must be >= 0
+        if lb < 0.0:
+            return False
+
+        # attach stats for debugging/UI if needed
+        rec["archetype"] = {"key": key, "n": n, "mean": mean, "lb95": lb}
+        return True
+
+    def _generate_recommendations(self, mu_s, sig_s, mu_t, sig_t, snap, event, torvik_view: Optional[Dict[str, Any]] = None) -> List[Dict]:
+        recs: List[Dict[str, Any]] = []
+        if not snap:
+            return recs
+
+        # Torvik availability: do not hard-require; used to tighten gates.
+        torvik_ok = True
+        try:
+            if not torvik_view:
+                torvik_ok = False
+            elif str(torvik_view.get("lean") or "").lower().strip() in ("no data", ""):
+                torvik_ok = False
+        except Exception:
+            torvik_ok = False
+
         # Helper: Push probability for whole-number lines
         def get_push_prob(line, sigma):
             """Estimate push probability for whole-number lines."""
             if line is None:
                 return 0.0
-            # If half-point line (e.g., -5.5), no push possible
             if line % 1 != 0:
                 return 0.0
-            # For whole-number lines, estimate P(margin == line) using PDF approximation
-            # Approximate: push_prob ≈ 0.05 for common numbers, 0.03 otherwise
             key_numbers = {2, 3, 4, 5, 6, 7, 10, 14}
             if abs(line) in key_numbers:
                 return 0.05
             return 0.03
-        
+
         # --- Spread ---
-        line_s = snap.get('spread_home')
-        
-        # Use CONSENSUS line for all recommendations (user prefers single line display)
-        price_home = snap.get('spread_price_home', -110)
-        # Use actual best away price if available (user feedback: don't hardcode -110)
-        best_away = snap.get('_best_spread_away', {})
-        price_away = best_away.get('price', -110) if best_away else -110
-        book_consensus = snap.get('book_spread', 'Consensus')
-        
+        line_s = snap.get("spread_home")
+        price_home = snap.get("spread_price_home", -110)
+        best_away = snap.get("_best_spread_away", {})
+        price_away = best_away.get("price", -110) if best_away else -110
+        book_consensus = snap.get("book_spread", "Consensus")
+
         if line_s is not None:
-            # Calculate Home Side
-            # Correct formula: P(Home Covers) = P(Margin > -Spread)
-            # mu_s is Expected SPREAD (e.g. -5). Expected Margin is -mu_s (e.g. +5).
             prob_home_raw = 1.0 - self._normal_cdf(-line_s, -mu_s, sig_s)
-            
             push_prob = get_push_prob(line_s, sig_s)
-            # Adjust: subtract half of push probability
             prob_home = prob_home_raw - (push_prob / 2)
-            
-            # EV for Home
+
             ev_home = self._calculate_ev(prob_home, price_home)
             kelly_home = self._calculate_kelly(prob_home, price_home)
-            
-            # Away side (mirrored consensus line)
+
             prob_away = (1.0 - prob_home_raw) - (push_prob / 2)
             ev_away = self._calculate_ev(prob_away, price_away)
             kelly_away = self._calculate_kelly(prob_away, price_away)
-            
-            # Filter: Sniper Logic (Edge >= 2.5 pts)
-            market_line_s = float(line_s)
-            fair_line_s = float(mu_s) 
-            # Fair line is expected spread (e.g. -5).
-            # Market line is spread (e.g. -2).
-            # Edge = abs(-5 - -2) = 3pts.
-            edge_pts = abs(fair_line_s - market_line_s)
-            
-            threshold = 0.01
-            # "Sniper" Mode: Only return actionable bets if Edge >= 2.5
-            is_actionable = (edge_pts >= 2.5)
 
-            if ev_home > threshold and is_actionable:
-                # Home Bet - use consensus line
-                recs.append({
-                    "market": "SPREAD",
-                    "side": event['home_team'],
-                    "line": round(market_line_s, 1),
-                    "price": price_home,
-                    "prob": round(prob_home, 3),
-                    "win_prob": round(prob_home, 3),
-                    "ev": round(ev_home, 3),
-                    "kelly": round(kelly_home, 3),
-                    "book": book_consensus,
-                    "edge_points": round(edge_pts, 1)
-                })
-            elif ev_away > threshold and is_actionable:
-                # Away Bet
-                recs.append({
-                    "market": "SPREAD",
-                    "side": event['away_team'],
-                    "line": round(-market_line_s, 1),
-                    "price": price_away,
-                    "prob": round(prob_away, 3),
-                    "win_prob": round(prob_away, 3),
-                    "ev": round(ev_away, 3),
-                    "kelly": round(kelly_away, 3),
-                    "book": book_consensus,
-                    "edge_points": round(edge_pts, 1)
-                })
+            market_line_s = float(line_s)
+            fair_line_s = float(mu_s)
+            edge_pts = abs(fair_line_s - market_line_s)
+
+            # Candidate recs first
+            cand_home = {
+                "market": "SPREAD",
+                "side": event["home_team"],
+                "line": round(market_line_s, 1),
+                "price": int(price_home),
+                "prob": round(prob_home, 3),
+                "win_prob": round(prob_home, 3),
+                "ev": float(round(ev_home, 4)),
+                "kelly": float(round(kelly_home, 4)),
+                "book": book_consensus,
+                "edge_points": float(round(edge_pts, 2)),
+            }
+
+            cand_away = {
+                "market": "SPREAD",
+                "side": event["away_team"],
+                "line": round(-market_line_s, 1),
+                "price": int(price_away),
+                "prob": round(prob_away, 3),
+                "win_prob": round(prob_away, 3),
+                "ev": float(round(ev_away, 4)),
+                "kelly": float(round(kelly_away, 4)),
+                "book": book_consensus,
+                "edge_points": float(round(edge_pts, 2)),
+            }
+
+            # Choose the higher-EV side, then gate it.
+            best = cand_home if cand_home["ev"] >= cand_away["ev"] else cand_away
+            if self._passes_publish_gates(best, market_line_home=market_line_s, torvik_ok=torvik_ok):
+                recs.append(best)
 
         # --- Total ---
-        line_t = snap.get('total')
-        
-        # Get best prices for totals
-        best_over = snap.get('_best_total_over')
-        best_under = snap.get('_best_total_under')
-        
-        price_over = best_over['price'] if best_over else snap.get('total_over_price', -110)
-        price_under = best_under['price'] if best_under else -110
-        book_over = best_over['book'] if best_over else snap.get('book_total', 'Consensus')
-        book_under = best_under['book'] if best_under else snap.get('book_total', 'Consensus')
-        
+        line_t = snap.get("total")
+        best_over = snap.get("_best_total_over")
+        best_under = snap.get("_best_total_under")
+
+        price_over = best_over["price"] if best_over else snap.get("total_over_price", -110)
+        price_under = best_under["price"] if best_under else -110
+        book_over = best_over["book"] if best_over else snap.get("book_total", "Consensus")
+        book_under = best_under["book"] if best_under else snap.get("book_total", "Consensus")
+
         if line_t is not None:
-            # Prob Over = P(score > line)
             prob_over_raw = 1.0 - self._normal_cdf(line_t, mu_t, sig_t)
             push_prob_t = get_push_prob(line_t, sig_t)
             prob_over = prob_over_raw - (push_prob_t / 2)
             prob_under = (1.0 - prob_over_raw) - (push_prob_t / 2)
-            
+
             ev_over = self._calculate_ev(prob_over, price_over)
             kelly_over = self._calculate_kelly(prob_over, price_over)
             ev_under = self._calculate_ev(prob_under, price_under)
             kelly_under = self._calculate_kelly(prob_under, price_under)
-            
-            # Filter: Sniper Logic Totals (Edge >= 3.0 pts)
-            # Re-enabled per user request but gated for quality.
+
             market_line_t = float(line_t)
             fair_line_t = float(mu_t)
             edge_pts_t = abs(fair_line_t - market_line_t)
-            
-            threshold = 0.01
-            is_actionable_t = (edge_pts_t >= 3.0)
-            
-            if ev_over > threshold and is_actionable_t:
-                # Over Bet
-                recs.append({
-                    "market": "TOTAL",
-                    "side": "OVER",
-                    "line": best_over['line_value'] if best_over else line_t,
-                    "price": price_over,
-                    "prob": round(prob_over, 3),
-                    "win_prob": round(prob_over, 3),
-                    "ev": round(ev_over, 3),
-                    "kelly": round(kelly_over, 3),
-                    "book": book_over,
-                    "edge_points": round(edge_pts_t, 1)
-                })
-            elif ev_under > threshold and is_actionable_t:
-                # Under Bet
-                recs.append({
-                    "market": "TOTAL",
-                    "side": "UNDER",
-                    "line": best_under['line_value'] if best_under else line_t,
-                    "price": price_under,
-                    "prob": round(prob_under, 3),
-                    "win_prob": round(prob_under, 3),
-                    "ev": round(ev_under, 3),
-                    "kelly": round(kelly_under, 3),
-                    "book": book_under,
-                    "edge_points": round(edge_pts_t, 1)
-                })
-                 
+
+            cand_over = {
+                "market": "TOTAL",
+                "side": "OVER",
+                "line": float(best_over["line_value"] if best_over else line_t),
+                "price": int(price_over),
+                "prob": round(prob_over, 3),
+                "win_prob": round(prob_over, 3),
+                "ev": float(round(ev_over, 4)),
+                "kelly": float(round(kelly_over, 4)),
+                "book": book_over,
+                "edge_points": float(round(edge_pts_t, 2)),
+            }
+
+            cand_under = {
+                "market": "TOTAL",
+                "side": "UNDER",
+                "line": float(best_under["line_value"] if best_under else line_t),
+                "price": int(price_under),
+                "prob": round(prob_under, 3),
+                "win_prob": round(prob_under, 3),
+                "ev": float(round(ev_under, 4)),
+                "kelly": float(round(kelly_under, 4)),
+                "book": book_under,
+                "edge_points": float(round(edge_pts_t, 2)),
+            }
+
+            best = cand_over if cand_over["ev"] >= cand_under["ev"] else cand_under
+            if self._passes_publish_gates(best, market_line_home=None, torvik_ok=torvik_ok):
+                recs.append(best)
+
         return recs
 
     def _normal_cdf(self, x, mu, sigma):

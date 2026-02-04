@@ -15,9 +15,13 @@ class EdgeScanner:
     def __init__(self, model=None):
         self.model = model or NCAAMMarketFirstModelV2()
         
-    def find_edges(self, days_ahead: int = 3, min_edge: float = 2.5, force_refresh: bool = False) -> List[Dict]:
-        """
-        Scan upcoming games and return list of actionable opportunities.
+    def find_edges(self, days_ahead: int = 3, max_plays: int = 3, force_refresh: bool = False) -> List[Dict]:
+        """Scan upcoming games and return list of publishable opportunities.
+
+        Rules:
+        - Straight bets only (SPREAD/TOTAL)
+        - Publish at most `max_plays` per run/day (0 allowed)
+        - If none pass all gates, publish an empty list (UI should show "No Plays")
         """
         print(f"[EdgeScanner] Scanning next {days_ahead} days...")
         
@@ -103,5 +107,14 @@ class EdgeScanner:
                     print(f"[EdgeScanner] Error analyzing {ev['id']}: {e}")
                     continue
                     
-        print(f"[EdgeScanner] Scan complete. Found {len(edges)} actionable edges.")
+        # Keep top-N by EV (descending). If multiple plays exist, this enforces max plays/day.
+        try:
+            edges.sort(key=lambda x: float(x.get('ev') or 0.0), reverse=True)
+        except Exception:
+            pass
+
+        if max_plays is not None:
+            edges = edges[: max(0, int(max_plays))]
+
+        print(f"[EdgeScanner] Scan complete. Publishing {len(edges)} plays.")
         return edges
