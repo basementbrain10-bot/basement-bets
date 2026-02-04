@@ -10,9 +10,9 @@ from src.database import (
 )
 
 class PolicyEngine:
-    """
+    r"""
     The Brain of the Operation.
-    Curates weights ($w_M$, $w_T$), expands/contracts sigma ($\sigma$), 
+    Curates weights ($w_M$, $w_T$), expands/contracts sigma ($\sigma$),
     and manages the market allowlist based on realized performance.
     """
 

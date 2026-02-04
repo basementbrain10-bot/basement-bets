@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backfill missing odds for settled bets.
+r"""Backfill missing odds for settled bets.
 
 Goals:
 - For settled bets, odds should be present when it exists in raw payload/text.
