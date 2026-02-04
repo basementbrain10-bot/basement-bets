@@ -176,10 +176,16 @@ class TorvikProjectionService:
         h_tempo = h.get('adj_tempo') or 0.0
         a_tempo = a.get('adj_tempo') or 0.0
         game_tempo = (float(h_tempo) + float(a_tempo)) / 2.0
+
+        # If tempo is missing in DB for one/both teams, fall back to a sane NCAA baseline
+        # so downstream projection math never sees None.
+        if not game_tempo:
+            game_tempo = 68.0
+
         return {
             "home": h,
             "away": a,
-            "game_tempo": round(game_tempo, 1) if game_tempo else None,
+            "game_tempo": round(game_tempo, 1),
             "notes": None
         }
 
@@ -194,7 +200,7 @@ class TorvikProjectionService:
         if not h or not a:
              return {"margin": 0, "total": 145, "lean": "No Data"}
              
-        tempo = stats['game_tempo']
+        tempo = stats.get('game_tempo') or 68.0
         
         # Calculate scores
         # Home Score = (HomeAdjOE * AwayAdjDE) / LeagueAvg * (Tempo/100)
