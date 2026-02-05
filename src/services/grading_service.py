@@ -28,7 +28,10 @@ class GradingService:
         print("[GRADING] Starting grading process...")
         
         # 1. Update Game Results (Ingest latest scores)
-        active_leagues = ['NCAAM', 'NBA', 'NFL', 'NCAAF', 'EPL'] 
+        # NOTE: ESPN ingestion has been unreliable (infinite looping / drift errors).
+        # We currently grade NCAAM using Action Network as the source of truth.
+        # If you want other leagues, add them back explicitly once their ingest is stable.
+        active_leagues = ['NCAAM']
         for league in active_leagues:
             self._ingest_latest_scores(league)
 
@@ -127,25 +130,9 @@ class GradingService:
 
             # Note: we also run ESPN fallback below to support legacy espn:ncaam:* event ids.
 
-        # 2) ESPN fallback (all leagues, incl NCAAM if Action returned 0)
-        count = 0
-        for date_str in dates:
-            try:
-                events = self.espn_client.fetch_scoreboard(league, date_str)
-                for ev in events:
-                    if ev.get('status') in ['STATUS_FINAL', 'final', 'complete', 'completed']:
-                        res_data = {
-                            "event_id": ev['id'],
-                            "home_score": int(ev['home_score']) if ev.get('home_score') is not None else 0,
-                            "away_score": int(ev['away_score']) if ev.get('away_score') is not None else 0,
-                            "final": True,
-                            "period": "FINAL",
-                        }
-                        upsert_game_result(res_data)
-                        count += 1
-            except Exception as e:
-                print(f"[GRADING] ESPN error fetching {league} {date_str}: {e}")
-
+        # 2) ESPN fallback (DISABLED)
+        # We intentionally do *not* call ESPN here to avoid hangs/loops in scheduled jobs.
+        # If you need ESPN again, re-enable behind an env flag.
         return
 
     def _compute_clv_for_started_games(self):
