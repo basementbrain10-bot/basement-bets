@@ -1414,6 +1414,46 @@ const Research = ({ onAddBet }) => {
                                                             )}
                                                         </div>
                                                     </div>
+
+                                                    {/* Market Correlations */}
+                                                    {correlationResult && (
+                                                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 mt-4">
+                                                            <div className="flex items-center justify-between mb-3">
+                                                                <h3 className="font-bold text-white flex items-center gap-2">
+                                                                    <RefreshCw size={16} className="text-blue-400" />
+                                                                    Market Correlations
+                                                                </h3>
+                                                                {correlationResult.archetype && (
+                                                                    <div className="flex gap-2">
+                                                                        <span className="px-2 py-1 rounded bg-slate-700 text-xs font-mono text-slate-300">
+                                                                            {correlationResult.archetype.pace}
+                                                                        </span>
+                                                                        <span className="px-2 py-1 rounded bg-slate-700 text-xs font-mono text-slate-300">
+                                                                            {correlationResult.archetype.eff}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            {correlationResult.correlations?.pairs?.over_home_cover ? (
+                                                                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 flex justify-between items-center">
+                                                                    <div>
+                                                                        <div className="text-xs text-slate-500 uppercase font-bold">If OVER Hits → Home Cover %</div>
+                                                                        <div className="text-xl font-bold text-white">
+                                                                            {(correlationResult.correlations.pairs.over_home_cover.p_b_given_a * 100).toFixed(1)}%
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <div className="text-xs text-slate-500">Lift</div>
+                                                                        <div className={`text-lg font-bold ${correlationResult.correlations.pairs.over_home_cover.lift >= 1.2 ? 'text-green-400' : 'text-slate-200'}`}>
+                                                                            {correlationResult.correlations.pairs.over_home_cover.lift}x
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-sm text-slate-500">Insufficient data for archetype.</div>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
