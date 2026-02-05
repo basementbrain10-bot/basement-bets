@@ -869,9 +869,9 @@ class NCAAMMarketFirstModelV2(BaseModel):
         if market == "SPREAD":
             spread_bucket = self._spread_bucket(market_line_home or 0.0)
 
-        # Action Network archetype artifact is currently market-only (edge_bucket=0).
-        # We keep the key structure stable but force edge_pts=0.0 for lookup.
-        key = self._archetype_key(market, side=str(rec.get('side') or ''), edge_pts=0.0, spread_bucket=spread_bucket, torvik_ok=torvik_ok)
+        # Action Network archetype artifact bins by coarse edge_bucket (|fair-market|).
+        # Use the actual computed edge points for lookup.
+        key = self._archetype_key(market, side=str(rec.get('side') or ''), edge_pts=edge_pts, spread_bucket=spread_bucket, torvik_ok=torvik_ok)
         stats = self._get_archetype_stats(key)
 
         min_n = self.PUBLISH_MIN_N_TORVIK_OK if torvik_ok else self.PUBLISH_MIN_N_TORVIK_MISSING

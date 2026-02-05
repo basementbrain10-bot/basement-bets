@@ -42,7 +42,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from src.database import get_db_connection, _exec
-# Torvik is not used in this fast artifact build.
+from src.services.torvik_projection import TorvikProjectionService
 
 
 def american_payout_per_unit(price: int) -> float:
@@ -101,7 +101,21 @@ class Welford:
 
 
 def main() -> None:
-    torvik = None  # unused
+    # Use DB-backed Torvik heuristic to compute a coarse fair line (no external fetch).
+    # For speed, we intentionally use *latest* team metrics (date=None) and cache per-team stats.
+    torvik = TorvikProjectionService()
+
+    team_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+    _orig_get_latest = torvik._get_latest_metrics
+
+    def _cached_get_latest(team_name: str, date: str = None) -> Optional[Dict[str, Any]]:
+        if team_name in team_cache:
+            return team_cache[team_name]
+        val = _orig_get_latest(team_name, date=None)
+        team_cache[team_name] = val
+        return val
+
+    torvik._get_latest_metrics = _cached_get_latest  # type: ignore
 
     q = """
     WITH latest AS (
@@ -120,7 +134,7 @@ def main() -> None:
     WHERE h.sport='ncaab'
       AND h.start_time > NOW() - INTERVAL '365 days'
     ORDER BY h.start_time DESC
-    LIMIT 6000
+    LIMIT 2000
     """
 
     aggs: Dict[str, Welford] = {}
@@ -129,7 +143,9 @@ def main() -> None:
     with get_db_connection() as conn:
         rows = _exec(conn, q).fetchall()
 
-    for r in rows:
+    for i, r in enumerate(rows, start=1):
+        if i % 250 == 0:
+            print(f"processed {i}/{len(rows)}", flush=True)
         home = r.get("home_team")
         away = r.get("away_team")
         # NOTE: For speed and stability, we intentionally use *latest* Torvik-style
@@ -139,16 +155,27 @@ def main() -> None:
             continue
 
         ck = f"{home}||{away}"
-        # NOTE: We intentionally do NOT compute a "fair line" here (Torvik fetch/compute is too
-        # expensive for CI-gate stats). We treat archetype bins as market-only buckets for now.
-        # This still satisfies the MIN_N + CI gating concept; we can later refine bins to include
-        # fair-vs-market edge.
 
         mkt_spread_home = float(r.get("home_spread"))
         mkt_total = float(r.get("total_score"))
 
-        ep_spread = 0.0
-        ep_total = 0.0
+        # Compute coarse fair line from DB-backed Torvik heuristic (no selenium/external fetch).
+        # - TorvikProjectionService.compute_torvik_projection returns margin = (home_score - away_score)
+        # - Betting spread line is home-relative (negative means home favored), so fair spread line = -margin
+        # For speed, do not attempt historical date reconstruction here.
+        # (Team metrics are cached for date=None.)
+        if ck not in proj_cache:
+            try:
+                proj_cache[ck] = torvik.compute_torvik_projection(home, away, date=None)
+            except Exception:
+                proj_cache[ck] = {"margin": 0.0, "total": 0.0}
+
+        proj = proj_cache.get(ck) or {}
+        fair_spread_home = -float(proj.get('margin') or 0.0)
+        fair_total = float(proj.get('total') or 0.0)
+
+        ep_spread = abs(fair_spread_home - mkt_spread_home)
+        ep_total = abs(fair_total - mkt_total)
 
         sb = spread_bucket(mkt_spread_home)
 
