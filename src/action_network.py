@@ -48,14 +48,26 @@ def get_todays_games(sport, dates_or_weeks, headers=None):
                 odds_list = game.get('odds', [])
                 valid_odd = odds_list[0] if odds_list else {}
                 
+                # Extract Scores
+                box = game.get('boxscore', {})
+                home_score = box.get('total_home_points')
+                away_score = box.get('total_away_points')
+                status = game.get('status') # e.g. 'complete'
+                
                 # Convert to The Odds API format (or keep raw if preferred, but existing code converts)
                 # Event structure
+                field_start = game.get('start_time')
+                print(f"DEBUG AN Client: ID {game.get('id')} Start {field_start}")
+                
                 event = {
                     "id": str(game.get('id')),
                     "sport_key": sport,
                     "home_team": home_team_name,
                     "away_team": away_team_name,
-                    "commence_time": game.get('start_time'), # Check format? Usually ISO.
+                    "home_score": home_score,
+                    "away_score": away_score,
+                    "status": status,
+                    "commence_time": field_start, # Check format? Usually ISO.
                     "bookmakers": []
                 }
                 

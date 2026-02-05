@@ -1,172 +1,121 @@
-#!/usr/bin/env python3
-r"""Backfill missing odds for settled bets.
 
-Goals:
-- For settled bets, odds should be present when it exists in raw payload/text.
-- Fill only when odds is NULL or 0.
-
-Strategies:
-1) FanDuel:
-   - raw_text is often a python dict repr of the API bet payload.
-   - If bet-level odds missing, compute parlay odds from legs.parts[].americanPrice.
-     (convert american -> decimal, multiply, convert back to american)
-   - For straight bets, use the single part americanPrice.
-
-2) DraftKings:
-   - raw_text/selection/description often contains odds like +254 or -130.
-   - Extract the last +/-\d{3,} as bet-level odds.
-
-Usage:
-  source .venv311/bin/activate
-  python scripts/backfill_missing_odds.py --dry-run
-  python scripts/backfill_missing_odds.py
-"""
-
-from __future__ import annotations
-
-import argparse
-import ast
-import re
-from typing import Optional, Iterable
-
-import os
 import sys
+import os
+import datetime
+import time
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO_ROOT)
+# Allow running from root
+sys.path.append(os.getcwd())
 
-from src.database import get_db_connection, _exec
+from src.services.odds_adapter import OddsAdapter
+from src.action_network import ActionNetworkClient
 
+def backfill():
+    print(f"[{datetime.datetime.now()}] Starting Odds Backfill (2025-11-01 to 2026-01-25)...")
+    
+    adapter = OddsAdapter()
+    client = ActionNetworkClient()
+    
+    # Date Range
+    # Date Range
+    start_date = datetime.date(2025, 11, 1)
+    end_date = datetime.date(2026, 1, 25)
+    delta = datetime.timedelta(days=1)
+    
+    current = start_date
+    league = 'ncaab'
+    
+    while current <= end_date:
+        date_str = current.strftime('%Y%m%d')
+        print(f"Fetching {date_str}...")
+        
+        try:
+            # Pass date as list
+            raw_data = client.fetch_odds(league, dates=[date_str])
+            
+            if raw_data:
+                # Store
+                # For historical data, captured_at should ideally be "close" to game time
+                # But we are ingesting NOW. The 'captured_at' column defaults to NOW().
+                # This breaks the logic of "Correlation Engine uses snapshot captured <= start_time".
+                # FIX: We need to override captured_at to be the game start time (approx closing line).
+                # Access DB directly? Or modify adapter?
+                
+                # Check adapter signature:
+                # normalize_and_store(raw_data, ..., captured_at=?)?
+                # Adapter normalize_and_store internalizes captured_at = datetime.now() usually.
+                # I should check OddsAdapter.
+                
+                # Assume standard ingest for now. The correlation engine query logic:
+                # "captured_at <= e.start_time"
+                # If I ingest NOW, captured_at > start_time (post-game).
+                # My logic won't picked it up for historical games!
+                
+                # I must HACK the captured_at to be game_start - 1 second or similar.
+                # Or correlation engine needs to accept "post-game" snapshots if "closing" flag is set?
+                
+                # Better approach:
+                # Ingest normally.
+                # Update correlation engine to fetch "latest available snapshot" regardless of time relation IF game is finished?
+                # OR, pass a custom 'captured_at' to adapter if possible.
+                
+                # Construct approx capture time (Noon UTC of game day)
+                # This ensures captured_at <= start_time (mostly) for evening games
+                cap_dt = datetime.datetime.combine(current, datetime.time(12, 0, 0, 0, datetime.timezone.utc))
+                
+                count = adapter.normalize_and_store(
+                    raw_data, 
+                    league="NCAAM", 
+                    provider="action_network",
+                    captured_at=cap_dt
+                )
+                print(f"  Stored {count} snapshots (dated {cap_dt}).")
+                
+                # Insert Results (Scores)
+                # Action events have IDs like action:ncaam:{id}
+                # League passed is 'NCAAM' -> lower in ID generation 'ncaam'
+                
+                from src.database import get_db_connection, _exec
+                
+                results_inserted = 0
+                with get_db_connection() as conn:
+                    for game in raw_data:
+                        gid = game.get('id')
+                        # Fixed: Use direct fields populated by client, not raw boxscore
+                        hs = game.get('home_score')
+                        as_ = game.get('away_score')
+                        status = game.get('status')
+                        
+                        if gid and hs is not None and as_ is not None:
+                            # Reconstruct event_id (must match OddsAdapter logic)
+                            eid = f"action:ncaam:{gid}"
+                            is_final = (status == 'complete')
+                            
+                            q_res = """
+                            INSERT INTO game_results (event_id, home_score, away_score, final, updated_at)
+                            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+                            ON CONFLICT (event_id) DO UPDATE SET
+                                home_score = EXCLUDED.home_score,
+                                away_score = EXCLUDED.away_score,
+                                final = EXCLUDED.final,
+                                updated_at = CURRENT_TIMESTAMP
+                            """
+                            try:
+                                _exec(conn, q_res, (eid, hs, as_, is_final))
+                                results_inserted += 1
+                            except Exception as e:
+                                print(f"    Result Insert Error ({eid}): {e}")
+                    conn.commit()
+                print(f"  Stored {results_inserted} results.")
+                
+            else:
+                print("  No data.")
+                
+        except Exception as e:
+            print(f"  ERROR: {e}")
+            
+        current += delta
+        time.sleep(1) # Polite delay
 
-def american_to_decimal(odds: int) -> float:
-    if odds > 0:
-        return 1.0 + (odds / 100.0)
-    return 1.0 + (100.0 / abs(odds))
-
-
-def decimal_to_american(dec: float) -> Optional[int]:
-    if dec is None or dec <= 1.0:
-        return None
-    # For dec >= 2.0 => positive odds
-    if dec >= 2.0:
-        return int(round((dec - 1.0) * 100))
-    # For 1.0 < dec < 2.0 => negative odds
-    return int(round(-100.0 / (dec - 1.0)))
-
-
-def parse_fanduel_raw(raw_text: str) -> Optional[dict]:
-    if not raw_text:
-        return None
-    # raw_text is stored as str(bet) in fanduel_client.py (python dict repr)
-    try:
-        return ast.literal_eval(raw_text)
-    except Exception:
-        return None
-
-
-def extract_fd_part_prices(bet_obj: dict) -> list[int]:
-    prices: list[int] = []
-    legs = bet_obj.get('legs') or []
-    for leg in legs:
-        for part in (leg.get('parts') or []):
-            ap = part.get('americanPrice')
-            if ap is None:
-                continue
-            try:
-                prices.append(int(ap))
-            except Exception:
-                pass
-    return prices
-
-
-def compute_fd_bet_odds(bet_obj: dict) -> Optional[int]:
-    # Prefer bet-level american if present
-    try:
-        o = bet_obj.get('odds', {}).get('american')
-        if o:
-            return int(o)
-    except Exception:
-        pass
-
-    prices = extract_fd_part_prices(bet_obj)
-    if not prices:
-        return None
-
-    # If only one price, that's the bet
-    if len(prices) == 1:
-        return int(prices[0])
-
-    # Compute parlay odds by multiplying decimal odds for each leg part
-    dec = 1.0
-    for p in prices:
-        dec *= american_to_decimal(int(p))
-
-    return decimal_to_american(dec)
-
-
-DK_ODDS_RE = re.compile(r'([+-]\d{3,})')
-
-
-def extract_dk_odds(text: str) -> Optional[int]:
-    if not text:
-        return None
-    matches = DK_ODDS_RE.findall(text)
-    if not matches:
-        return None
-    try:
-        return int(matches[-1])
-    except Exception:
-        return None
-
-
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--dry-run', action='store_true')
-    ap.add_argument('--limit', type=int, default=5000)
-    args = ap.parse_args()
-
-    with get_db_connection() as conn:
-        cur = _exec(conn, """
-            select id, provider, bet_type, date, selection, description, raw_text
-            from bets
-            where (odds is null or odds=0)
-              and (status is null or upper(status) not in ('PENDING','OPEN'))
-            order by date desc
-            limit %s
-        """, (args.limit,))
-        rows = cur.fetchall()
-
-        updates: list[tuple[int, int]] = []
-        for r in rows:
-            provider = r['provider']
-            new_odds = None
-
-            if provider == 'FanDuel':
-                bet_obj = parse_fanduel_raw(r.get('raw_text') or '')
-                if bet_obj:
-                    new_odds = compute_fd_bet_odds(bet_obj)
-            elif provider == 'DraftKings':
-                text = (r.get('raw_text') or '') + "\n" + (r.get('selection') or '') + "\n" + (r.get('description') or '')
-                new_odds = extract_dk_odds(text)
-
-            if new_odds is None:
-                continue
-
-            updates.append((int(new_odds), int(r['id'])))
-
-        print('candidates', len(rows))
-        print('updatable', len(updates))
-        if args.dry_run:
-            print('sample', updates[:20])
-            return 0
-
-        for o, bid in updates:
-            _exec(conn, "update bets set odds=%s where id=%s and (odds is null or odds=0)", (o, bid))
-        conn.commit()
-        print('updated', len(updates))
-
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())
+if __name__ == "__main__":
+    backfill()

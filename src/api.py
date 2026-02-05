@@ -1619,3 +1619,123 @@ def sync_fanduel(payload: dict):
         return {"status": "error", "message": str(e)}
 
 
+@app.get("/api/ncaam/correlations/summary")
+def get_correlation_summary(season: str = "2025-2026"):
+    """
+    Returns the full correlation matrix (cached).
+    """
+    import json
+    cache_file = "data/correlation_cache_2025_2026.json"
+    
+    if os.path.exists(cache_file):
+        with open(cache_file, "r") as f:
+            return json.load(f)
+            
+    # If no cache, compute live (slow fallback)
+    from src.services.correlation.ncaam_correlation_engine import NCAAMCorrelationEngine
+    engine = NCAAMCorrelationEngine()
+    df = engine.fetch_season_data()
+    df = engine.build_archetype_bins(df)
+    metrics = engine.compute_metrics(df)
+    return {
+        "metadata": {"type": "live_compute", "season": season, "games_count": len(df)},
+        "archetypes": metrics
+    }
+
+@app.get("/api/ncaam/correlations/game")
+def get_game_correlation(event_id: str):
+    """
+    Returns correlation data for a specific game based on its archetype.
+    """
+    from src.services.correlation.ncaam_correlation_engine import NCAAMCorrelationEngine
+    from src.database import get_db_connection, _exec
+    import pandas as pd
+    
+    # 1. Fetch Game Data to determine archetype
+    query = """
+    SELECT 
+        e.id, 
+        e.start_time,
+        (
+            SELECT line_value FROM odds_snapshots os 
+            WHERE os.event_id = e.id AND os.market_type = 'SPREAD' AND os.captured_at <= NOW()
+            ORDER BY os.captured_at DESC LIMIT 1
+        ) as close_spread,
+        mh.adj_tempo as home_pace,
+        (mh.adj_off - mh.adj_def) as home_net_eff,
+        ma.adj_tempo as away_pace,
+        (ma.adj_off - ma.adj_def) as away_net_eff
+    FROM events e
+    -- Use LATEST team metrics as proxy for season identity (since historical daily metrics might be missing)
+    LEFT JOIN (
+        SELECT team_text, adj_tempo, adj_off, adj_def
+        FROM bt_team_metrics_daily
+        WHERE date = (SELECT MAX(date) FROM bt_team_metrics_daily)
+    ) mh ON LOWER(e.home_team) LIKE '%%' || LOWER(mh.team_text) || '%%'
+    LEFT JOIN (
+        SELECT team_text, adj_tempo, adj_off, adj_def
+        FROM bt_team_metrics_daily
+        WHERE date = (SELECT MAX(date) FROM bt_team_metrics_daily)
+    ) ma ON LOWER(e.away_team) LIKE '%%' || LOWER(ma.team_text) || '%%'
+    WHERE e.id = :eid
+    """
+    with get_db_connection() as conn:
+        row = _exec(conn, query, {"eid": event_id}).fetchone()
+        
+    if not row:
+        raise HTTPException(status_code=404, detail="Game not found")
+        
+    # Validations
+    if row['close_spread'] is None:
+         return {"archetype": None, "correlations": None, "status": "no_spread"}
+
+    # Convert to DataFrame row for binning
+    try:
+        if hasattr(row, '_index'):
+            d = {k: row[k] for k in row._index}
+        else:
+            d = dict(row) # Fallback
+            
+        df = pd.DataFrame([d])
+    except Exception as e:
+        print(f"DEBUG DF Creation Error: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        raise e
+    except Exception as e:
+        print(f"DEBUG DF Creation Error: {e}")
+        traceback.print_exc()
+        raise e
+    
+    # Compute bins
+    engine = NCAAMCorrelationEngine()
+    df = engine.build_archetype_bins(df)
+    
+    if df.empty or 'pace_bin' not in df.columns:
+        return {"archetype": None, "correlations": None}
+        
+    # Identify Archetype
+    row_processed = df.iloc[0]
+    archetype_key = f"{row_processed['pace_bin']}_{row_processed['eff_bin']}_{row_processed['spread_bucket']}"
+    
+    # Fetch Correlation Data from Cache or Engine
+    # For speed, load summary (or implement granular lookup)
+    # Using Summary Endpoint Logic reuse
+    import json
+    cache_file = "data/correlation_cache_2025_2026.json"
+    correlations = None
+    
+    if os.path.exists(cache_file):
+        with open(cache_file, "r") as f:
+            full_data = json.load(f)
+            correlations = full_data.get("archetypes", {}).get(archetype_key)
+            
+    return {
+        "archetype": {
+            "key": archetype_key,
+            "pace": row_processed['pace_bin'],
+            "eff": row_processed['eff_bin'],
+            "spread": row_processed['spread_bucket']
+        },
+        "correlations": correlations
+    }

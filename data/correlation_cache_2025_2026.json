@@ -1,0 +1,48 @@
+{
+  "metadata": {
+    "generated_at": "2026-02-04T20:56:53.418337",
+    "season": "2025-2026",
+    "games_count": 737
+  },
+  "archetypes": {
+    "Avg_Avg_Close": {
+      "status": "valid",
+      "n": 153,
+      "pairs": {
+        "over_home_cover": {
+          "p_a": 0.444,
+          "p_b": 0.503,
+          "p_joint": 0.216,
+          "p_b_given_a": 0.485,
+          "lift": 0.964
+        }
+      }
+    },
+    "Avg_Avg_Medium": {
+      "status": "valid",
+      "n": 203,
+      "pairs": {
+        "over_home_cover": {
+          "p_a": 0.453,
+          "p_b": 0.512,
+          "p_joint": 0.251,
+          "p_b_given_a": 0.554,
+          "lift": 1.082
+        }
+      }
+    },
+    "Avg_Avg_Big": {
+      "status": "valid",
+      "n": 381,
+      "pairs": {
+        "over_home_cover": {
+          "p_a": 0.446,
+          "p_b": 0.908,
+          "p_joint": 0.409,
+          "p_b_given_a": 0.918,
+          "lift": 1.01
+        }
+      }
+    }
+  }
+}

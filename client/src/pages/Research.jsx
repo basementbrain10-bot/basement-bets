@@ -23,6 +23,7 @@ const Research = ({ onAddBet }) => {
     // Game Analysis Modal State
     const [selectedGame, setSelectedGame] = useState(null);
     const [analysisResult, setAnalysisResult] = useState(null);
+    const [correlationResult, setCorrelationResult] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
     // Sorting State
@@ -107,12 +108,15 @@ const Research = ({ onAddBet }) => {
         setSelectedGame(game);
         setIsAnalyzing(true);
         setAnalysisResult(null);
+        setCorrelationResult(null);
 
         try {
-            const response = await api.post('/api/ncaam/analyze', {
-                event_id: game.id
-            });
-            setAnalysisResult(response.data);
+            const [analysisRes, corrRes] = await Promise.all([
+                api.post('/api/ncaam/analyze', { event_id: game.id }),
+                api.get('/api/ncaam/correlations/game', { params: { event_id: game.id } }).catch(e => ({ data: null }))
+            ]);
+            setAnalysisResult(analysisRes.data);
+            setCorrelationResult(corrRes.data);
             // Refresh history in background - isolated so it doesn't block analysis
             try {
                 const histRes = await api.get('/api/ncaam/history', { params: { limit: 500 } });
@@ -131,6 +135,7 @@ const Research = ({ onAddBet }) => {
     const closeAnalysisModal = () => {
         setSelectedGame(null);
         setAnalysisResult(null);
+        setCorrelationResult(null);
     };
 
     const refreshData = async () => {
@@ -674,11 +679,10 @@ const Research = ({ onAddBet }) => {
                                                                 <button
                                                                     onClick={() => analyzeGame(edge)}
                                                                     disabled={leagueFilter !== 'NCAAM' || (isAnalyzing && selectedGame?.id === edge.id)}
-                                                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg ring-1 ring-white/10 flex items-center justify-center mx-auto ${
-                                                                        (isAnalyzing && selectedGame?.id === edge.id) 
+                                                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg ring-1 ring-white/10 flex items-center justify-center mx-auto ${(isAnalyzing && selectedGame?.id === edge.id)
                                                                             ? 'bg-slate-700 text-slate-400'
                                                                             : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                                                                    }`}
+                                                                        }`}
                                                                 >
                                                                     {isAnalyzing && selectedGame?.id === edge.id ? <RefreshCw className="animate-spin" size={14} /> : 'Analyze'}
                                                                 </button>
@@ -999,43 +1003,156 @@ const Research = ({ onAddBet }) => {
                                                             betDisplay = selection || rec.bet_type || 'Unknown';
                                                         }
 
-                                                        let result = 'PENDING';
-                                                        if (rec.bet_type === 'SPREAD') {
+                                                        // Add Correlations Card
+                                                        const renderCorrelations = () => {
+                                                            if (!correlationResult || !correlationResult.archetype) return null;
+                                                            const { archetype, correlations } = correlationResult;
+
+                                                            const getLiftColor = (lift) => {
+                                                                if (lift >= 1.2) return 'text-green-400';
+                                                                if (lift <= 0.8) return 'text-red-400';
+                                                                return 'text-slate-400';
+                                                            };
+
+                                                            return (
+                                                                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 mt-4">
+                                                                    <div className="flex items-center justify-between mb-3">
+                                                                        <h3 className="font-bold text-white flex items-center gap-2">
+                                                                            <RefreshCw size={16} className="text-blue-400" />
+                                                                            Market Correlations
+                                                                        </h3>
+                                                                        <div className="flex gap-2">
+                                                                            <span className="px-2 py-1 rounded bg-slate-700 text-xs font-mono text-slate-300">
+                                                                                Pace: {archetype.pace}
+                                                                            </span>
+                                                                            <span className="px-2 py-1 rounded bg-slate-700 text-xs font-mono text-slate-300">
+                                                                                Eff: {archetype.eff}
+                                                                            </span>
+                                                                            <span className="px-2 py-1 rounded bg-slate-700 text-xs font-mono text-slate-300">
+                                                                                Spread: {archetype.spread}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {correlations && correlations.pairs ? (
+                                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                            {/* Over + Home Cover */}
+                                                                            {(() => {
+                                                                                const pair = correlations.pairs.over_home_cover;
+                                                                                if (!pair) return null;
+                                                                                return (
+                                                                                    <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                                                                                        <div className="text-xs text-slate-500 uppercase font-bold mb-2">If Total Goes OVER...</div>
+                                                                                        <div className="flex justify-between items-end">
+                                                                                            <div>
+                                                                                                <div className="text-sm text-slate-300">Home Cover Prob</div>
+                                                                                                <div className="text-xl font-bold text-white">{(pair.p_b_given_a * 100).toFixed(1)}%</div>
+                                                                                            </div>
+                                                                                            <div className="text-right">
+                                                                                                <div className="text-xs text-slate-500">Lift</div>
+                                                                                                <div className={`text-lg font-bold ${getLiftColor(pair.lift)}`}>{pair.lift}x</div>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                );
+                                                                            })()}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="text-sm text-slate-500 italic">Insufficient sample size for this archetype.</div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        };
+
+                                                        // Result Status Display
+                                                        // ... existing return ...
+                                                        return (
+                                                            <>
+                                                                {/* Render Correlations BEFORE or AFTER result? Let's put it after the result block */}
+                                                                <div className="text-right">
+                                                                    {/* existing result UI ... handled by parent return actually */}
+                                                                </div>
+                                                            </>
+                                                        );
+                                                    })()}
+
+                                                    {/* Render Correlation Card Here - outside the conditional block above */}
+                                                    {correlationResult && (
+                                                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 mt-4">
+                                                            <div className="flex items-center justify-between mb-3">
+                                                                <h3 className="font-bold text-white flex items-center gap-2">
+                                                                    <RefreshCw size={16} className="text-blue-400" />
+                                                                    Market Correlations
+                                                                </h3>
+                                                                {correlationResult.archetype && (
+                                                                    <div className="flex gap-2">
+                                                                        <span className="px-2 py-1 rounded bg-slate-700 text-xs font-mono text-slate-300">
+                                                                            {correlationResult.archetype.pace}
+                                                                        </span>
+                                                                        <span className="px-2 py-1 rounded bg-slate-700 text-xs font-mono text-slate-300">
+                                                                            {correlationResult.archetype.eff}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            {correlationResult.correlations?.pairs?.over_home_cover ? (
+                                                                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50 flex justify-between items-center">
+                                                                    <div>
+                                                                        <div className="text-xs text-slate-500 uppercase font-bold">If OVER Hits → Home Cover %</div>
+                                                                        <div className="text-xl font-bold text-white">
+                                                                            {(correlationResult.correlations.pairs.over_home_cover.p_b_given_a * 100).toFixed(1)}%
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <div className="text-xs text-slate-500">Lift</div>
+                                                                        <div className={`text-lg font-bold ${correlationResult.correlations.pairs.over_home_cover.lift >= 1.2 ? 'text-green-400' : 'text-slate-200'}`}>
+                                                                            {correlationResult.correlations.pairs.over_home_cover.lift}x
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-sm text-slate-500">Insufficient data for archetype.</div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    let result = 'PENDING';
+                                                    if (rec.bet_type === 'SPREAD') {
                                                             const effectiveMargin = isHome ? homeMargin : -homeMargin;
-                                                            const spread = isHome ? line : -line;
+                                                    const spread = isHome ? line : -line;
                                                             if (effectiveMargin + spread > 0) result = 'WON';
-                                                            else if (effectiveMargin + spread < 0) result = 'LOST';
-                                                            else result = 'PUSH';
+                                                    else if (effectiveMargin + spread < 0) result = 'LOST';
+                                                    else result = 'PUSH';
                                                         } else if (rec.bet_type === 'MONEYLINE') {
                                                             if (isHome) {
-                                                                result = homeMargin > 0 ? 'WON' : homeMargin < 0 ? 'LOST' : 'PUSH';
+                                                        result = homeMargin > 0 ? 'WON' : homeMargin < 0 ? 'LOST' : 'PUSH';
                                                             } else {
-                                                                result = homeMargin < 0 ? 'WON' : homeMargin > 0 ? 'LOST' : 'PUSH';
+                                                        result = homeMargin < 0 ? 'WON' : homeMargin > 0 ? 'LOST' : 'PUSH';
                                                             }
                                                         } else if (rec.bet_type === 'TOTAL') {
                                                             const totalScore = Number(selectedGame.home_score) + Number(selectedGame.away_score);
-                                                            const totalLine = Number(rec.line || 0);
-                                                            const isOver = selection.toLowerCase().includes('over');
-                                                            if (isOver) {
-                                                                result = totalScore > totalLine ? 'WON' : totalScore < totalLine ? 'LOST' : 'PUSH';
+                                                    const totalLine = Number(rec.line || 0);
+                                                    const isOver = selection.toLowerCase().includes('over');
+                                                    if (isOver) {
+                                                        result = totalScore > totalLine ? 'WON' : totalScore < totalLine ? 'LOST' : 'PUSH';
                                                             } else {
-                                                                result = totalScore < totalLine ? 'WON' : totalScore > totalLine ? 'LOST' : 'PUSH';
+                                                        result = totalScore < totalLine ? 'WON' : totalScore > totalLine ? 'LOST' : 'PUSH';
                                                             }
                                                         }
 
-                                                        return (
-                                                            <div className="text-right">
-                                                                <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Model Pick</div>
-                                                                <div className="text-sm font-bold text-white mb-1">{betDisplay}</div>
-                                                                <div className={`px-3 py-1 rounded-lg text-sm font-black inline-block ${result === 'WON' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                                                                    result === 'LOST' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                                                                        result === 'PUSH' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
-                                                                            'bg-slate-700 text-slate-400'
-                                                                    }`}>
-                                                                    {result}
-                                                                </div>
-                                                            </div>
-                                                        );
+                                                    return (
+                                                    <div className="text-right">
+                                                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Model Pick</div>
+                                                        <div className="text-sm font-bold text-white mb-1">{betDisplay}</div>
+                                                        <div className={`px-3 py-1 rounded-lg text-sm font-black inline-block ${result === 'WON' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                                                            result === 'LOST' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                                                                result === 'PUSH' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
+                                                                    'bg-slate-700 text-slate-400'
+                                                            }`}>
+                                                            {result}
+                                                        </div>
+                                                    </div>
+                                                    );
                                                     })()}
                                                 </div>
                                             </div>

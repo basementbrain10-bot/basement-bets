@@ -109,15 +109,16 @@ class OddsAdapter:
         # print(f"[OddsAdapter] Failed to resolve: {league} | {home_team} vs {away_team} | {dt}")
         return None
 
-    def normalize_and_store(self, raw_data: List[Dict], league: str = None, provider: str = "odds_api"):
+    def normalize_and_store(self, raw_data: List[Dict], league: str = None, provider: str = "odds_api", captured_at: datetime = None):
         """
-        raw_data: List of events with odds.
+        Normalize raw odds data and store snapshots.
         """
         if not raw_data:
             return 0
             
         final_snapshots = []
-        captured_at = datetime.now(timezone.utc)
+        if captured_at is None:
+            captured_at = datetime.now(timezone.utc)
 
         for event in raw_data:
             if provider == "action_network":
@@ -133,7 +134,10 @@ class OddsAdapter:
             
         return store_odds_snapshots(final_snapshots)
 
-    def _from_odds_api(self, event, league, captured_at):
+    def _from_odds_api(self, event: Dict, league: str, captured_at: datetime) -> List[Dict]:
+        """
+        Convert Odds API event to snapshots.
+        """
         final_snaps = []
         home_team = event.get('home_team')
         away_team = event.get('away_team')
@@ -182,6 +186,8 @@ class OddsAdapter:
         gid = event.get('game_id')
         if not gid:
             return None
+            
+        print(f"DEBUG Upsert Input: {start_time} Type: {type(start_time)}")
 
         event_id = f"action:{(league or '').lower()}:{gid}"
 
@@ -190,7 +196,8 @@ class OddsAdapter:
         if isinstance(start_time, str):
             try:
                 dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-            except Exception:
+            except Exception as e:
+                print(f"DEBUG Upsert Error: {e} for {start_time}")
                 dt = None
         elif isinstance(start_time, datetime):
             dt = start_time
@@ -223,6 +230,8 @@ class OddsAdapter:
           status=EXCLUDED.status,
           updated_at=CURRENT_TIMESTAMP
         """
+        
+        print(f"DEBUG Upserting {event_id} with start {dt}")
 
         with get_db_connection() as conn:
             _exec(conn, q, {
@@ -240,7 +249,7 @@ class OddsAdapter:
     def _from_action_network(self, event, league, captured_at):
         home_team = event.get('home_team')
         away_team = event.get('away_team')
-        start_time = event.get('start_time')
+        start_time = event.get('commence_time')
 
         # Action Network is the canonical board source for NCAAM now.
         # Use a stable Action-based event_id to avoid expensive fuzzy matching.
