@@ -223,9 +223,9 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                         <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-lg text-blue-200 text-sm">
                             <p className="font-bold mb-1">FanDuel API Sync</p>
                             <p className="text-xs opacity-80">
-                                1. Open DevTools (F12) > Network Tab.<br />
+                                1. Open DevTools (F12) &gt; Network Tab.<br />
                                 2. Refresh "Settled Bets" page.<br />
-                                3. Right Click request > Copy as cURL.<br />
+                                3. Right Click request &gt; Copy as cURL.<br />
                                 4. Paste below.
                             </p>
                         </div>
