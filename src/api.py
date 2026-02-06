@@ -1192,8 +1192,8 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
           ELSE 2
         END AS src_rank
       FROM events e
-      WHERE e.league = :league
-        AND DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN :start_date AND :end_date
+      WHERE e.league = %(league)s
+        AND DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN %(start_date)s AND %(end_date)s
     ),
     dedup_events AS (
       SELECT *
