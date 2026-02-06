@@ -717,6 +717,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "market_line": (round(float(market_line_side), 1) if market_line_side is not None else None),
                 "fair_line": (round(float(fair_line_side), 1) if fair_line_side is not None else None),
                 "edge_points": edge_points_side,
+                "price": int(r.get('price')) if r.get('price') is not None else None,
+                "kelly": float(r.get('kelly')) if r.get('kelly') is not None else None,
                 "confidence": "High" if r['ev'] * 100 * 5 > 80 else "Medium" if r['ev'] * 100 * 5 > 50 else "Low", # Using new confidence calc
                 "book": r['book']
             })

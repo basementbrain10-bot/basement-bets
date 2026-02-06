@@ -1048,6 +1048,97 @@ const Research = ({ onAddBet }) => {
                                             </div>
                                         )}
 
+                                        {/* Recommended Bet (make it painfully obvious) */}
+                                        {(() => {
+                                            const top = (analysisResult.recommendations || [])[0] || null;
+                                            if (!top) return null;
+
+                                            const priceStr = top.price !== null && top.price !== undefined ? fmtSigned(top.price, 0) : '—';
+                                            const wp = (top.win_prob !== null && top.win_prob !== undefined) ? `${Math.round(Number(top.win_prob) * 100)}%` : '—';
+                                            const kelly = (top.kelly !== null && top.kelly !== undefined) ? `${Math.max(0, Math.round(Number(top.kelly) * 100))}%` : '—';
+
+                                            return (
+                                                <div className="bg-gradient-to-br from-indigo-900/30 to-slate-900/70 p-4 rounded-xl border border-indigo-500/30">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="px-2 py-1 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-widest">Recommended Bet</div>
+                                                        <div className="ml-auto flex gap-2">
+                                                            <button
+                                                                onClick={() => onAddBet?.({
+                                                                    sport: selectedGame.sport,
+                                                                    game: `${selectedGame.away_team} @ ${selectedGame.home_team}`,
+                                                                    market: top.bet_type,
+                                                                    pick: top.selection,
+                                                                    line: top.market_line,
+                                                                    odds: top.price,
+                                                                    book: top.book,
+                                                                })}
+                                                                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-500/30 transition-colors"
+                                                            >
+                                                                Add to slip
+                                                            </button>
+                                                            <button
+                                                                onClick={() => navigator.clipboard?.writeText(`${top.selection} @ ${priceStr} (${top.book || 'book'})`)}
+                                                                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800/60 text-slate-200 hover:bg-slate-800 border border-slate-700 transition-colors"
+                                                            >
+                                                                Copy
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-3 text-3xl font-black text-white leading-tight">
+                                                        {(() => {
+                                                            try {
+                                                                if (top.bet_type === 'SPREAD') {
+                                                                    const m = String(top.selection || '').match(/^(.*)\s([-+]?\d+(?:\.\d+)?)$/);
+                                                                    if (!m) return top.selection;
+                                                                    const team = m[1].trim();
+                                                                    const line = Number(m[2]);
+                                                                    return `${team} ${fmtSigned(line, 1)}`;
+                                                                }
+                                                            } catch (e) { }
+                                                            return top.selection;
+                                                        })()}
+                                                    </div>
+
+                                                    <div className="mt-2 grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                                                        <div className="bg-slate-900/40 p-2 rounded border border-slate-700/50">
+                                                            <div className="text-[10px] text-slate-500 uppercase font-black">Book</div>
+                                                            <div className="text-slate-200 font-bold truncate">{top.book || '—'}</div>
+                                                        </div>
+                                                        <div className="bg-slate-900/40 p-2 rounded border border-slate-700/50">
+                                                            <div className="text-[10px] text-slate-500 uppercase font-black">Odds</div>
+                                                            <div className="text-slate-200 font-mono font-bold">{priceStr}</div>
+                                                        </div>
+                                                        <div className="bg-slate-900/40 p-2 rounded border border-slate-700/50">
+                                                            <div className="text-[10px] text-slate-500 uppercase font-black">EV</div>
+                                                            <div className="text-green-300 font-mono font-bold">+{top.edge}</div>
+                                                        </div>
+                                                        <div className="bg-slate-900/40 p-2 rounded border border-slate-700/50">
+                                                            <div className="text-[10px] text-slate-500 uppercase font-black">Win Prob</div>
+                                                            <div className="text-slate-200 font-mono font-bold">{wp}</div>
+                                                        </div>
+                                                        <div className="bg-slate-900/40 p-2 rounded border border-slate-700/50">
+                                                            <div className="text-[10px] text-slate-500 uppercase font-black">Stake (Kelly)</div>
+                                                            <div className="text-slate-200 font-mono font-bold">{kelly}</div>
+                                                        </div>
+                                                    </div>
+
+                                                    {(analysisResult.key_factors?.length || analysisResult.game_script?.length) ? (
+                                                        <div className="mt-3 text-xs text-slate-300">
+                                                            <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Narrative</div>
+                                                            <ul className="list-disc list-inside space-y-1">
+                                                                {(analysisResult.key_factors || []).slice(0, 3).map((x, i) => <li key={`rkf-${i}`}>{x}</li>)}
+                                                                {(analysisResult.game_script || []).slice(0, 2).map((x, i) => <li key={`rgs-${i}`}>{x}</li>)}
+                                                            </ul>
+                                                            {analysisResult.news_summary ? (
+                                                                <div className="mt-2 text-[11px] text-slate-400">News: {analysisResult.news_summary}</div>
+                                                            ) : null}
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            );
+                                        })()}
+
                                         {/* Market Lines (clarify who is favored) */}
                                         <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
                                             <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2">Market Lines</div>
