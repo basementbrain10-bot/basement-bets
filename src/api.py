@@ -1187,8 +1187,8 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
       SELECT e.*,
         DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') AS day_et,
         CASE
-          WHEN e.id LIKE 'action:ncaam:%' THEN 0
-          WHEN e.id LIKE 'espn:ncaam:%' THEN 1
+          WHEN e.id LIKE 'action:ncaam:%%' THEN 0
+          WHEN e.id LIKE 'espn:ncaam:%%' THEN 1
           ELSE 2
         END AS src_rank
       FROM events e
