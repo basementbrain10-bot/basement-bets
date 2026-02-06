@@ -1,6 +1,7 @@
 
 import math
 import json
+import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
@@ -441,7 +442,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
         # Other Signals
         torvik_team_stats = self.torvik_service.get_matchup_team_stats(event['home_team'], event['away_team'], date=game_date_str)
         kenpom_adj = self.kenpom_client.calculate_kenpom_adjustment(event['home_team'], event['away_team'])
-        news_context = self.news_service.fetch_game_context(event['home_team'], event['away_team'])
+        # News can be slow; fetch only if we have a candidate edge to write up.
+        news_context = {}
         
         # 4. Dynamic Weight Scaling
         self.W_BASE = self._get_dynamic_weights(game_date_obj)
@@ -617,6 +619,14 @@ class NCAAMMarketFirstModelV2(BaseModel):
             
         # 7. Recommendations & EV
         recs = self._generate_recommendations(mu_spread_final, sigma_spread, mu_total_final, sigma_total, market_snapshot, event, torvik_view=torvik_view)
+
+        # Only fetch news context if something passed the gates.
+        if recs:
+            try:
+                news_context = self.news_service.fetch_game_context(event['home_team'], event['away_team'])
+            except Exception as e:
+                print(f"[NEWS] fetch_game_context failed: {e}")
+                news_context = {}
         
         debug_info = {
             "mu_spread_final": mu_spread_final,
@@ -889,12 +899,19 @@ class NCAAMMarketFirstModelV2(BaseModel):
         se = (sd / (n ** 0.5)) if (n > 1 and sd > 0) else 0.0
         lb = mean - (self.PUBLISH_CI_Z * se)
 
-        # lower-bound EV must be >= 0
-        if lb < 0.0:
+        # Standard rule: lower-bound EV must be >= 0
+        # Override ("reward mode", option B): allow a small number of high-EV, high-edge plays
+        # even if the archetype lower bound is negative. This is used to keep the system placing
+        # some bets so we can learn/improve.
+        override_ev = float(os.getenv('PUBLISH_OVERRIDE_MIN_EV', '0.06'))  # 6%
+        override_edge = float(os.getenv('PUBLISH_OVERRIDE_MIN_EDGE_PTS', '2.0'))
+        override_ok = (ev >= override_ev) and (edge_pts >= override_edge) and (n >= min_n)
+
+        if lb < 0.0 and not override_ok:
             return False
 
         # attach stats for debugging/UI if needed
-        rec["archetype"] = {"key": key, "n": n, "mean": mean, "lb95": lb}
+        rec["archetype"] = {"key": key, "n": n, "mean": mean, "lb95": lb, "override_ok": override_ok}
         return True
 
     def _generate_recommendations(self, mu_s, sig_s, mu_t, sig_t, snap, event, torvik_view: Optional[Dict[str, Any]] = None) -> List[Dict]:

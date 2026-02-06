@@ -10,11 +10,20 @@ Fetches relevant news articles about teams to capture:
 
 import requests
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
+import time
+import urllib.parse
+import xml.etree.ElementTree as ET
 
 class NewsService:
-    """Fetch news articles relevant to upcoming games"""
-    
+    """Fetch news articles relevant to upcoming games.
+
+    Primary: NewsAPI (if NEWS_API_KEY is configured)
+    Fallback: Google News RSS (no API key)
+    """
+
+    _rss_cache: Dict[Tuple[str, int], Tuple[float, List[Dict]]] = {}
+
     def __init__(self, api_key: Optional[str] = None):
         """
         Initialize news service
@@ -25,7 +34,51 @@ class NewsService:
         import os
         self.api_key = api_key or os.environ.get('NEWS_API_KEY')
         self.base_url = "https://newsapi.org/v2/everything"
+        # RSS defaults
+        self.rss_ttl_seconds = int(os.environ.get('NEWS_RSS_TTL_SECONDS', '1800'))  # 30 min
     
+    def _fetch_google_news_rss(self, query: str, days_back: int = 3, limit: int = 5) -> List[Dict]:
+        """Fetch headlines from Google News RSS for a query (no API key required)."""
+        q = query
+        cache_key = (q, int(days_back))
+        now = time.time()
+        cached = self._rss_cache.get(cache_key)
+        if cached and (now - cached[0]) < self.rss_ttl_seconds:
+            return cached[1]
+
+        # Google News RSS search
+        qs = urllib.parse.quote_plus(q)
+        url = f"https://news.google.com/rss/search?q={qs}&hl=en-US&gl=US&ceid=US:en"
+        try:
+            resp = requests.get(url, timeout=6, headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+            root = ET.fromstring(resp.text)
+            items = root.findall('.//item')
+
+            out: List[Dict] = []
+            for it in items[:limit]:
+                title = (it.findtext('title') or '').strip()
+                link = (it.findtext('link') or '').strip()
+                pub = (it.findtext('pubDate') or '').strip()
+                source = None
+                # Google News titles are often "Headline - Source".
+                if ' - ' in title:
+                    title, source = title.rsplit(' - ', 1)
+                out.append({
+                    'title': title,
+                    'description': None,
+                    'url': link,
+                    'published_at': pub,
+                    'source': source or 'Google News',
+                })
+
+            self._rss_cache[cache_key] = (now, out)
+            return out
+        except Exception as e:
+            print(f"[NEWS] RSS error for query '{query}': {e}")
+            self._rss_cache[cache_key] = (now, [])
+            return []
+
     def fetch_team_news(self, team_name: str, days_back: int = 3) -> List[Dict]:
         """
         Fetch recent news articles about a team
@@ -38,15 +91,16 @@ class NewsService:
             List of news articles with title, description, url, publishedAt
         """
         if not self.api_key:
-            print("[NEWS] No API key configured, skipping news fetch")
-            return []
+            # Fallback: Google News RSS
+            q = f'"{team_name}" basketball (injury OR lineup OR suspended OR "out for")'
+            return self._fetch_google_news_rss(q, days_back=days_back, limit=5)
         
         # Calculate date range
         to_date = datetime.now()
         from_date = to_date - timedelta(days=days_back)
         
         # Build query
-        query = f'"{team_name}" AND (injury OR lineup OR suspended OR "out for")'
+        query = f'"{team_name}" basketball AND (injury OR lineup OR suspended OR "out for")'
         
         params = {
             'q': query,
@@ -95,8 +149,10 @@ class NewsService:
             'away_team': away_team,
             'home_news': home_news,
             'away_news': away_news,
-            'has_injury_news': any('injury' in (a.get('title', '') + a.get('description', '')).lower() 
-                                   for a in home_news + away_news)
+            'has_injury_news': any(
+                'injury' in ((a.get('title') or '') + ' ' + (a.get('description') or '')).lower()
+                for a in home_news + away_news
+            )
         }
     
     def summarize_impact(self, game_context: Dict) -> str:
