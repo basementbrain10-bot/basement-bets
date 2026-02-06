@@ -973,22 +973,35 @@ class NCAAMMarketFirstModelV2(BaseModel):
             ev_away = self._calculate_ev(prob_away, price_away)
             kelly_away = self._calculate_kelly(prob_away, price_away)
 
+            # Use consensus for model math, but use a bettable line for the displayed recommendation.
+            # Some consensus aggregations can produce quarter-points (e.g. -10.25) which are not real lines.
             market_line_s = float(line_s)
             fair_line_s = float(mu_s)
             edge_pts = abs(fair_line_s - market_line_s)
 
+            def _snap_half(x: float) -> float:
+                try:
+                    return round(float(x) * 2.0) / 2.0
+                except Exception:
+                    return float(x)
+
             # Candidate recs first
+            # Prefer best available line+price for the bet display (avoid quarter-point consensus lines).
+            best_home = snap.get('_best_spread_home') or {}
+            best_away_line = (best_away or {}).get('line_value')
+            best_home_line = best_home.get('line_value')
+
             cand_home = {
                 "market": "SPREAD",
                 "side": "home",
                 "team": event["home_team"],
-                "line": round(market_line_s, 1),
-                "price": int(price_home),
+                "line": _snap_half(best_home_line if best_home_line is not None else market_line_s),
+                "price": int(best_home.get('price')) if best_home.get('price') is not None else int(price_home),
                 "prob": round(prob_home, 3),
                 "win_prob": round(prob_home, 3),
                 "ev": float(round(ev_home, 4)),
                 "kelly": float(round(kelly_home, 4)),
-                "book": book_consensus,
+                "book": best_home.get('book') or book_consensus,
                 "edge_points": float(round(edge_pts, 2)),
             }
 
@@ -996,13 +1009,13 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "market": "SPREAD",
                 "side": "away",
                 "team": event["away_team"],
-                "line": round(-market_line_s, 1),
+                "line": _snap_half((best_away_line if best_away_line is not None else -market_line_s)),
                 "price": int(price_away),
                 "prob": round(prob_away, 3),
                 "win_prob": round(prob_away, 3),
                 "ev": float(round(ev_away, 4)),
                 "kelly": float(round(kelly_away, 4)),
-                "book": book_consensus,
+                "book": (best_away or {}).get('book') or book_consensus,
                 "edge_points": float(round(edge_pts, 2)),
             }
 
