@@ -18,18 +18,11 @@ export default function Dashboard({ financials, periodStats }) {
     setLoading(true);
     try {
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-      const [tpRes, boardRes] = await Promise.all([
-        api.get('/api/ncaam/top-picks', { params: { date: today, days: 1, limit_games: 25 } }),
-        api.get('/api/board', { params: { league: 'NCAAM', date: today, days: 1 } }).catch(() => ({ data: [] }))
-      ]);
-
+      const tpRes = await api.get('/api/ncaam/top-picks', { params: { date: today, days: 1, limit_games: 25 } });
       const picksObj = tpRes.data?.picks || {};
-      const events = boardRes.data || [];
-      const eventMap = {};
-      events.forEach((e) => { eventMap[e.id] = e; });
 
       const arr = Object.keys(picksObj)
-        .map((eid) => ({ event_id: eid, ...(picksObj[eid] || {}), event: eventMap[eid] }))
+        .map((eid) => ({ event_id: eid, ...(picksObj[eid] || {}) }))
         .filter(x => x.rec);
 
       setTopPicks(arr);

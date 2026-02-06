@@ -1326,7 +1326,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         rows = _exec(
             conn,
             """
-            SELECT id
+            SELECT id, home_team, away_team, start_time
             FROM events
             WHERE league='NCAAM'
               AND DATE(start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN %(start)s AND %(end)s
@@ -1336,7 +1336,21 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
             {"start": str(start_date), "end": str(end_date), "lim": int(limit_games)},
         ).fetchall()
 
-    event_ids = [r[0] if not isinstance(r, dict) else r.get('id') for r in rows]
+    # Preserve event metadata so the UI doesn't have to join against /api/board.
+    event_meta = {}
+    event_ids = []
+    for r in rows:
+        d = dict(r) if not isinstance(r, dict) else r
+        eid = d.get('id')
+        if not eid:
+            continue
+        event_ids.append(eid)
+        event_meta[eid] = {
+            'id': eid,
+            'home_team': d.get('home_team'),
+            'away_team': d.get('away_team'),
+            'start_time': d.get('start_time'),
+        }
 
     model = NCAAMMarketFirstModelV2()
     picks = {}
@@ -1345,7 +1359,11 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
             res = model.analyze(eid)
             top = (res.get('recommendations') or [None])[0]
             if top:
-                picks[eid] = {"rec": top, "analyzed_at": res.get('analyzed_at')}
+                picks[eid] = {
+                    "rec": top,
+                    "analyzed_at": res.get('analyzed_at'),
+                    "event": event_meta.get(eid),
+                }
         except Exception as e:
             # keep going; missing odds / missing torvik etc.
             print(f"[top-picks] analyze failed for {eid}: {e}")
