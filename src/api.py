@@ -1505,9 +1505,13 @@ async def ncaam_performance_report(days: int = 30):
             m.bet_price,
             m.ev_per_unit,
             m.confidence_0_100,
-            m.outcome
+            m.outcome,
+            gr.home_score,
+            gr.away_score,
+            gr.final
           FROM model_predictions m
           JOIN events e ON m.event_id=e.id
+          LEFT JOIN game_results gr ON gr.event_id=m.event_id
           WHERE e.league='NCAAM'
             AND m.analyzed_at > NOW() - (%(d)s || ' days')::interval
             AND m.selection IS NOT NULL AND m.selection <> '' AND m.pick IS NOT NULL AND m.pick <> 'NONE'
@@ -1519,6 +1523,13 @@ async def ncaam_performance_report(days: int = 30):
     for r in rows:
         day = r['day_et']
         by_day.setdefault(day, [])
+        hs = r.get('home_score') if isinstance(r, dict) else None
+        aw = r.get('away_score') if isinstance(r, dict) else None
+        final = r.get('final') if isinstance(r, dict) else None
+        score = None
+        if hs is not None and aw is not None:
+            score = f"{aw}-{hs}"  # away-home
+
         by_day[day].append({
             "event_id": r['event_id'],
             "matchup": f"{r['away_team']} @ {r['home_team']}",
@@ -1530,6 +1541,8 @@ async def ncaam_performance_report(days: int = 30):
             "ev_per_unit": float(r['ev_per_unit'] or 0.0),
             "confidence_0_100": int(r['confidence_0_100'] or 0),
             "outcome": r['outcome'],
+            "final": bool(final) if final is not None else None,
+            "final_score": score,
         })
 
     daily = [

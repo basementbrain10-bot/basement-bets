@@ -3,6 +3,7 @@ import api from '../api/axios';
 import { RefreshCw } from 'lucide-react';
 
 const fmtPct = (x) => (x === null || x === undefined) ? '—' : `${x >= 0 ? '+' : ''}${Number(x).toFixed(1)}%`;
+const fmtOdds = (p) => (p === null || p === undefined) ? '—' : `${Number(p) > 0 ? '+' : ''}${p}`;
 
 export default function PerformanceReportNCAAM() {
   const [data, setData] = useState(null);
@@ -26,11 +27,19 @@ export default function PerformanceReportNCAAM() {
     load();
   }, []);
 
+  const rows = (() => {
+    const out = [];
+    (data?.daily_recommended_bets || []).forEach((d) => {
+      (d.picks || []).forEach((p) => out.push({ day: d.day, ...p }));
+    });
+    return out;
+  })();
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
       <div className="flex items-center gap-3">
         <div>
-          <h2 className="text-lg font-bold text-white">NCAAM Performance Report</h2>
+          <h2 className="text-lg font-bold text-white">NCAAM Picks & Performance</h2>
           <div className="text-xs text-slate-500">Generated: {data?.generated_at || '—'}</div>
         </div>
         <button
@@ -86,37 +95,47 @@ export default function PerformanceReportNCAAM() {
           </div>
 
           <div className="mt-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Daily recommended bets</h3>
-              <div className="text-xs text-slate-500">(last 30 days)</div>
+              <div className="text-xs text-slate-500">(table; includes finals when graded)</div>
             </div>
 
-            <div className="mt-3 space-y-3">
-              {(data.daily_recommended_bets || []).slice(0, 10).map((d) => (
-                <div key={d.day} className="bg-slate-800/30 border border-slate-700 rounded-xl p-4">
-                  <div className="text-xs text-slate-400 font-bold mb-2">{d.day}</div>
-                  {(!d.picks || d.picks.length === 0) ? (
-                    <div className="text-slate-500 text-sm">No picks.</div>
-                  ) : (
-                    <ul className="space-y-1 text-sm">
-                      {d.picks.slice(0, 12).map((p) => (
-                        <li key={p.event_id} className="flex flex-wrap gap-2 items-center">
-                          <span className="text-slate-300">{p.matchup}</span>
-                          <span className="text-white font-bold">— {p.selection}</span>
-                          {p.price !== null && p.price !== undefined ? (
-                            <span className="text-slate-400 font-mono">({p.price > 0 ? '+' : ''}{p.price})</span>
-                          ) : null}
-                          <span className="text-green-300 font-mono font-bold">EV {Math.round((p.ev_per_unit || 0) * 1000) / 10}%</span>
-                          <span className="text-slate-500">conf {p.confidence_0_100}</span>
-                          {p.outcome ? (
-                            <span className={`text-xs font-bold ${String(p.outcome).toUpperCase() === 'WON' ? 'text-green-400' : String(p.outcome).toUpperCase() === 'LOST' ? 'text-red-400' : 'text-slate-400'}`}>{p.outcome}</span>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
+            <div className="overflow-x-auto border border-slate-800 rounded-xl">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-900/60 border-b border-slate-800">
+                  <tr className="text-[10px] uppercase tracking-wider text-slate-500">
+                    <th className="py-2 px-3">Day</th>
+                    <th className="py-2 px-3">Matchup</th>
+                    <th className="py-2 px-3">Recommended bet</th>
+                    <th className="py-2 px-3">Odds</th>
+                    <th className="py-2 px-3">EV%</th>
+                    <th className="py-2 px-3">Conf</th>
+                    <th className="py-2 px-3">Outcome</th>
+                    <th className="py-2 px-3">Final</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {rows.length === 0 ? (
+                    <tr><td className="py-4 px-3 text-slate-500" colSpan={8}>No picks in range.</td></tr>
+                  ) : rows.map((p) => {
+                    const evPct = Math.round((p.ev_per_unit || 0) * 1000) / 10;
+                    const out = (p.outcome || '').toUpperCase();
+                    const outCls = out === 'WON' ? 'text-green-400' : out === 'LOST' ? 'text-red-400' : out === 'PUSH' ? 'text-yellow-400' : 'text-slate-400';
+                    return (
+                      <tr key={`${p.day}-${p.event_id}-${p.selection}`} className="hover:bg-slate-800/30">
+                        <td className="py-2 px-3 text-slate-400 font-mono text-xs">{p.day}</td>
+                        <td className="py-2 px-3 text-slate-200">{p.matchup}</td>
+                        <td className="py-2 px-3 text-white font-bold">{p.selection}</td>
+                        <td className="py-2 px-3 text-slate-300 font-mono">{fmtOdds(p.price)}</td>
+                        <td className="py-2 px-3 text-green-300 font-mono font-bold">{evPct}%</td>
+                        <td className="py-2 px-3 text-slate-400">{p.confidence_0_100}</td>
+                        <td className={`py-2 px-3 font-bold ${outCls}`}>{out || 'PENDING'}</td>
+                        <td className="py-2 px-3 text-slate-300 font-mono">{p.final_score || '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </>

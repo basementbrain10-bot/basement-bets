@@ -11,6 +11,7 @@ import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
 import Picks from './pages/Picks';
+import Dashboard from './pages/Dashboard';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 // import { StagingBanner } from './components/StagingBanner';
 
@@ -395,18 +396,7 @@ function App() {
                     )}
 
                     {view === 'dashboard' ? (
-                        <SummaryView
-                            stats={stats}
-                            sportBreakdown={sportBreakdown}
-                            playerBreakdown={playerBreakdown}
-                            monthlyBreakdown={monthlyBreakdown}
-                            timeSeries={timeSeries}
-                            betTypeBreakdown={betTypeBreakdown}
-                            balances={balances}
-                            periodStats={periodStats}
-                            financials={financials}
-                            edgeBreakdown={edgeBreakdown}
-                        />
+                        <Dashboard financials={financials} periodStats={periodStats} />
                     ) : view === 'picks' ? (
                         <Picks />
                     ) : view === 'transactions' ? (
