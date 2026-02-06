@@ -6,8 +6,11 @@ import ModelPerformanceAnalytics from '../components/ModelPerformanceAnalytics';
 const Research = ({ onAddBet }) => {
     const [edges, setEdges] = useState([]);
     const [history, setHistory] = useState([]);
-    // Board view tabs: recommended (picks) vs full board
-    const [activeTab, setActiveTab] = useState('recommended');
+    // Top-level tabs: board vs history
+    const [activeTab, setActiveTab] = useState('live');
+
+    // Board sub-tabs: recommended vs full board
+    const [boardTab, setBoardTab] = useState('recommended');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -80,9 +83,9 @@ const Research = ({ onAddBet }) => {
                         mapped[eid] = { rec: tp[eid]?.rec, analyzedAt: tp[eid]?.analyzed_at };
                     });
                     setRowTopPicks(mapped);
-                    // Default to "Recommended" view if we have at least one pick.
+                    // Default board sub-tab to "Recommended" if we have at least one pick.
                     if (Object.keys(mapped).length > 0) {
-                        setActiveTab('recommended');
+                        setBoardTab('recommended');
                     }
                 }
             } catch (e) { }
@@ -455,8 +458,8 @@ const Research = ({ onAddBet }) => {
 
                             <div className="flex items-center gap-2">
                                 <button
-                                    onClick={() => setActiveTab('recommended')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${activeTab === 'recommended'
+                                    onClick={() => setBoardTab('recommended')}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${boardTab === 'recommended'
                                         ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/30'
                                         : 'bg-slate-900/20 text-slate-300 border-slate-700 hover:bg-slate-900/30'
                                         }`}
@@ -464,8 +467,8 @@ const Research = ({ onAddBet }) => {
                                     Recommended
                                 </button>
                                 <button
-                                    onClick={() => setActiveTab('full')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${activeTab === 'full'
+                                    onClick={() => setBoardTab('full')}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${boardTab === 'full'
                                         ? 'bg-purple-500/20 text-purple-200 border-purple-500/30'
                                         : 'bg-slate-900/20 text-slate-300 border-slate-700 hover:bg-slate-900/30'
                                         }`}
@@ -501,7 +504,7 @@ const Research = ({ onAddBet }) => {
 
                         {/* (Removed) Historical Top Model Picks summary to reduce duplication. */}
 
-                        {!loading && edges.length > 0 && activeTab === 'recommended' && (
+                        {!loading && edges.length > 0 && boardTab === 'recommended' && (
                             <div className="p-6">
                                 <div className="flex items-center justify-between mb-3">
                                     <div>
@@ -587,7 +590,7 @@ const Research = ({ onAddBet }) => {
                             </div>
                         )}
 
-                        {!loading && edges.length > 0 && activeTab === 'full' && (
+                        {!loading && edges.length > 0 && boardTab === 'full' && (
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse">
                                     <thead>
