@@ -116,7 +116,14 @@ export default function Dashboard({ financials, periodStats }) {
                       <td className="py-2 px-3 text-slate-300 font-mono text-xs whitespace-nowrap">{timeStr}</td>
                       <td className="py-2 px-3 text-slate-200 font-bold">{matchup}</td>
                       <td className="py-2 px-3 text-white font-bold">{x.rec?.selection}</td>
-                      <td className="py-2 px-3 text-green-300 font-mono font-bold">{x.rec?.edge}</td>
+                      <td className="py-2 px-3 text-green-300 font-mono font-bold">{(() => {
+                        const raw = x.rec?.edge;
+                        if (raw === null || raw === undefined) return '—';
+                        // edge is typically a string like "19.69%"; normalize to one decimal.
+                        const num = typeof raw === 'string' ? parseFloat(raw.replace('%', '')) : Number(raw);
+                        if (Number.isNaN(num)) return String(raw);
+                        return `${num.toFixed(1)}%`;
+                      })()}</td>
                       <td className="py-2 px-3 text-slate-300">{x.rec?.confidence}</td>
                     </tr>
                   );
