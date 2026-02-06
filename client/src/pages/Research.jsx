@@ -544,6 +544,21 @@ const Research = ({ onAddBet }) => {
                                                         const odds = (top.price !== null && top.price !== undefined)
                                                             ? fmtSigned(top.price, 0)
                                                             : '—';
+
+                                                        // Normalize pick text so it's always human-readable.
+                                                        let pickText = String(top.selection || '').trim();
+                                                        try {
+                                                            if (top.bet_type === 'SPREAD') {
+                                                                // If legacy selection is "home/away +/-x", map to team names.
+                                                                if (/^home\b/i.test(pickText)) pickText = pickText.replace(/^home\b/i, edge.home_team);
+                                                                if (/^away\b/i.test(pickText)) pickText = pickText.replace(/^away\b/i, edge.away_team);
+                                                            }
+                                                            if (top.bet_type === 'TOTAL') {
+                                                                // Ensure TOTAL is formatted as OVER/UNDER.
+                                                                pickText = pickText.toUpperCase();
+                                                            }
+                                                        } catch (e) { }
+
                                                         return (
                                                             <tr key={edge.id} className="hover:bg-slate-700/20">
                                                                 <td className="py-2 px-3 text-slate-400 text-xs whitespace-nowrap">
@@ -551,10 +566,17 @@ const Research = ({ onAddBet }) => {
                                                                     <div>{timeStr}</div>
                                                                 </td>
                                                                 <td className="py-2 px-3 text-slate-200 font-bold">{edge.away_team} @ {edge.home_team}</td>
-                                                                <td className="py-2 px-3 text-white font-black">{top.selection}</td>
-                                                                <td className="py-2 px-3 text-slate-300 font-mono">{odds}</td>
-                                                                <td className="py-2 px-3 text-green-300 font-mono font-bold">+{top.edge}</td>
-                                                                <td className="py-2 px-3 text-slate-300">{top.confidence}</td>
+                                                                <td className="py-2 px-3">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="px-2 py-0.5 rounded bg-slate-900/40 border border-slate-700 text-[10px] font-black text-slate-300 uppercase tracking-wider">
+                                                                            {top.bet_type}
+                                                                        </span>
+                                                                        <span className="text-white font-black break-words">{pickText}</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="py-2 px-3 text-slate-300 font-mono whitespace-nowrap">{odds}</td>
+                                                                <td className="py-2 px-3 text-green-300 font-mono font-bold whitespace-nowrap">+{top.edge}</td>
+                                                                <td className="py-2 px-3 text-slate-300 whitespace-nowrap">{top.confidence}</td>
                                                                 <td className="py-2 px-3">
                                                                     <div className="flex justify-end gap-2">
                                                                         <button
@@ -562,7 +584,7 @@ const Research = ({ onAddBet }) => {
                                                                                 sport: edge.sport,
                                                                                 game: `${edge.away_team} @ ${edge.home_team}`,
                                                                                 market: top.bet_type,
-                                                                                pick: top.selection,
+                                                                                pick: pickText,
                                                                                 line: top.market_line,
                                                                                 odds: top.price,
                                                                                 book: top.book,
