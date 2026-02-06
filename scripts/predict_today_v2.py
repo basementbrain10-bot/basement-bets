@@ -14,9 +14,22 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.database import get_db_connection, _exec
 from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
+from src.services.grading_service import GradingService
 
 
-def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors: bool = True):
+def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors: bool = True, grade_completed: bool = True):
+    # If our lookback window includes already-completed games, grade them first so
+    # yesterday's results don't sit PENDING.
+    if grade_completed:
+        try:
+            svc = GradingService()
+            graded = svc._evaluate_db_predictions()
+            if graded:
+                print(f"[predict_today_v2] graded {graded} completed games before recommending")
+        except Exception as e:
+            if show_errors:
+                print(f"[predict_today_v2] grading prepass failed: {e}")
+
     model = NCAAMMarketFirstModelV2()
 
     # Use proper ET date display when available
@@ -95,10 +108,12 @@ if __name__ == "__main__":
     ap.add_argument("--window-hours", type=int, default=24)
     ap.add_argument("--lookback-hours", type=int, default=4)
     ap.add_argument("--quiet-errors", action="store_true")
+    ap.add_argument("--no-grade", action="store_true", help="Skip grading completed games before recommending")
     args = ap.parse_args()
 
     run_predictions(
         window_hours=args.window_hours,
         lookback_hours=args.lookback_hours,
         show_errors=not args.quiet_errors,
+        grade_completed=not args.no_grade,
     )
