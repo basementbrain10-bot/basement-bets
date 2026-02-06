@@ -46,7 +46,7 @@ const Research = ({ onAddBet }) => {
             setBalanceError(null);
 
             // Fetch NCAAM board (next N days from selected date), overall history, and balance snapshots
-            const [boardRes, historyRes, balancesRes] = await Promise.all([
+            const [boardRes, historyRes, balancesRes, topPicksRes] = await Promise.all([
                 api.get('/api/board', { params: { league: leagueFilter, date: selectedDate, days: BOARD_DAYS_DEFAULT } }),
                 api.get('/api/ncaam/history', { params: { limit: 500 } }).catch((e) => {
                     console.warn("History fetch failed:", e);
@@ -56,7 +56,11 @@ const Research = ({ onAddBet }) => {
                     // Don't fail the entire page if balances error out
                     setBalanceError(e);
                     return { data: [] };
-                })
+                }),
+                (leagueFilter === 'NCAAM'
+                    ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 40 } }).catch(() => ({ data: null }))
+                    : Promise.resolve({ data: null })
+                )
             ]);
 
             setEdges(boardRes.data || []);
@@ -65,6 +69,18 @@ const Research = ({ onAddBet }) => {
             const rawSnaps = balancesRes.data || [];
             const snapsArr = Array.isArray(rawSnaps) ? rawSnaps : Object.values(rawSnaps || {});
             setBalanceSnaps(snapsArr);
+
+            // Hydrate row badges from server-side top picks (avoid N analyze calls)
+            try {
+                const tp = topPicksRes?.data?.picks || null;
+                if (tp && typeof tp === 'object') {
+                    const mapped = {};
+                    Object.keys(tp).forEach((eid) => {
+                        mapped[eid] = { rec: tp[eid]?.rec, analyzedAt: tp[eid]?.analyzed_at };
+                    });
+                    setRowTopPicks(mapped);
+                }
+            } catch (e) { }
 
         } catch (err) {
             console.error(err);

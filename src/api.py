@@ -178,6 +178,10 @@ _research_cache = {
 }
 RESEARCH_TTL = timedelta(minutes=5)
 
+# --- Top Picks Cache (avoid N client-side analyze calls) ---
+_top_picks_cache = {}
+TOP_PICKS_TTL = timedelta(seconds=90)
+
 def get_analytics_engine(user_id=None):
     global _analytics_engines, _analytics_refresh_times
     
@@ -1255,6 +1259,88 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
 async def get_ncaam_board(date: Optional[str] = None, days: int = 1):
     """Back-compat wrapper."""
     return await get_board(league="NCAAM", date=date, days=days)
+
+
+@app.get("/api/ncaam/top-picks")
+async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_games: int = 25):
+    """Return top model pick per game for the NCAAM board window.
+
+    Goal: allow UI to render a 'Top pick' badge without firing /analyze for every row.
+
+    Notes:
+    - This still runs model analysis server-side, but it's a single request and is TTL-cached.
+    - Hard-capped to avoid expensive work.
+
+    Returns:
+      { generated_at, date, days, picks: { [event_id]: { rec, analyzed_at } } }
+    """
+    from src.database import get_db_connection, _exec
+    from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
+
+    if not date:
+        with get_db_connection() as conn:
+            date = _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text").fetchone()[0]
+
+    try:
+        days = int(days)
+    except Exception:
+        days = 1
+    days = max(1, min(days, 7))
+
+    try:
+        limit_games = int(limit_games)
+    except Exception:
+        limit_games = 25
+    limit_games = max(1, min(limit_games, 60))
+
+    cache_key = f"{date}:{days}:{limit_games}"
+    now = datetime.now()
+    cached = _top_picks_cache.get(cache_key)
+    if cached and (now - cached["at"]) < TOP_PICKS_TTL:
+        return cached["data"]
+
+    # Pull the same board window as /api/board, but NCAAM only.
+    start_date = datetime.strptime(date, "%Y-%m-%d").date()
+    end_date = (start_date + timedelta(days=days - 1))
+
+    with get_db_connection() as conn:
+        rows = _exec(
+            conn,
+            """
+            SELECT id
+            FROM events
+            WHERE league='NCAAM'
+              AND DATE(start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN %(start)s AND %(end)s
+            ORDER BY start_time ASC
+            LIMIT %(lim)s
+            """,
+            {"start": str(start_date), "end": str(end_date), "lim": int(limit_games)},
+        ).fetchall()
+
+    event_ids = [r[0] if not isinstance(r, dict) else r.get('id') for r in rows]
+
+    model = NCAAMMarketFirstModelV2()
+    picks = {}
+    for eid in event_ids:
+        try:
+            res = model.analyze(eid)
+            top = (res.get('recommendations') or [None])[0]
+            if top:
+                picks[eid] = {"rec": top, "analyzed_at": res.get('analyzed_at')}
+        except Exception as e:
+            # keep going; missing odds / missing torvik etc.
+            print(f"[top-picks] analyze failed for {eid}: {e}")
+
+    data = {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "date": date,
+        "days": days,
+        "limit_games": limit_games,
+        "picks": picks,
+    }
+
+    _top_picks_cache[cache_key] = {"at": now, "data": data}
+    return data
 
 def _ensure_utc(data: list) -> list:
     """
