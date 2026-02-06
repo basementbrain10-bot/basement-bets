@@ -10,6 +10,7 @@ console.log("Basement Bets Frontend v1.2.1 (Profit X-Axis) Loaded at " + new Dat
 import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
+import PerformanceReportNCAAM from './components/PerformanceReportNCAAM';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 // import { StagingBanner } from './components/StagingBanner';
 
@@ -414,20 +415,21 @@ function App() {
 }
 
 function PerformanceView({ timeSeries, drawdown, financials }) {
-    if (!timeSeries || timeSeries.length === 0) {
-        return (
-            <div className="bg-slate-900 border border-slate-800 p-10 rounded-xl text-center">
-                <p className="text-gray-400">No performance data available yet. Settle some bets to see your equity curve!</p>
-            </div>
-        );
-    }
-
+    // Always show the model report, even if there are no settled bets yet.
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <PerformanceReportNCAAM />
+
             {/* Financial Overview */}
-            <div className="flex flex-wrap gap-4 items-stretch">
-                <FinancialHeader financials={financials} mode="performance" />
-            </div>
+            {timeSeries && timeSeries.length > 0 ? (
+                <div className="flex flex-wrap gap-4 items-stretch">
+                    <FinancialHeader financials={financials} mode="performance" />
+                </div>
+            ) : (
+                <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl text-center">
+                    <p className="text-gray-400">No portfolio performance series yet (settle some bets to see the equity curve).</p>
+                </div>
+            )}
 
             {/* Sportsbook Balance Summary Tiles */}
             {financials?.breakdown && (

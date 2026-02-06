@@ -1411,6 +1411,143 @@ async def get_ncaam_history(limit: int = 100):
     data = fetch_model_history(limit=limit)
     return _ensure_utc(data)
 
+@app.get("/api/ncaam/performance-report")
+async def ncaam_performance_report(days: int = 30):
+    """NCAAM model performance report.
+
+    Designed for the Vercel UI so you can view it anytime.
+
+    Includes:
+    - summary windows (7d, 30d)
+    - daily recommended bets (last N days)
+
+    Notes:
+    - Uses model_predictions + events join (league filter via events).
+    - ROI uses realized outcomes and actual bet_price when present; otherwise assumes -110.
+    """
+    from src.database import get_db_connection, _exec
+
+    def payout_per_unit(price: int) -> float:
+        # payout when risking 1u
+        if price is None:
+            price = -110
+        p = int(price)
+        return (p / 100.0) if p > 0 else (100.0 / abs(p))
+
+    def roi_per_unit(outcome: str, price: int) -> float:
+        o = (outcome or '').upper()
+        if o == 'WON':
+            return payout_per_unit(price)
+        if o == 'LOST':
+            return -1.0
+        if o == 'PUSH':
+            return 0.0
+        return 0.0
+
+    try:
+        days = int(days)
+    except Exception:
+        days = 30
+    days = max(3, min(days, 120))
+
+    def window_stats(window_days: int):
+        with get_db_connection() as conn:
+            rows = _exec(conn, """
+              SELECT m.outcome, m.bet_price, m.ev_per_unit, m.clv_points
+              FROM model_predictions m
+              JOIN events e ON m.event_id=e.id
+              WHERE e.league='NCAAM'
+                AND m.analyzed_at > NOW() - (%(d)s || ' days')::interval
+                AND m.selection IS NOT NULL AND m.selection <> '' AND m.pick IS NOT NULL AND m.pick <> 'NONE'
+            """, {"d": int(window_days)}).fetchall()
+
+        decided = [r for r in rows if (r['outcome'] or '').upper() in ('WON','LOST','PUSH')]
+        won = sum(1 for r in decided if (r['outcome'] or '').upper() == 'WON')
+        lost = sum(1 for r in decided if (r['outcome'] or '').upper() == 'LOST')
+        push = sum(1 for r in decided if (r['outcome'] or '').upper() == 'PUSH')
+        n = len(decided)
+        win_rate = (won / (won + lost) * 100.0) if (won + lost) else 0.0
+
+        # ROI per unit wagered
+        roi_vals = [roi_per_unit(r['outcome'], r['bet_price'] if r['bet_price'] is not None else -110) for r in decided]
+        roi = (sum(roi_vals) / n * 100.0) if n else 0.0
+
+        ev_vals = [float(r['ev_per_unit'] or 0.0) for r in rows]
+        avg_ev = (sum(ev_vals) / len(ev_vals)) if ev_vals else 0.0
+
+        clv_vals = [float(r['clv_points']) for r in rows if r.get('clv_points') is not None]
+        avg_clv = (sum(clv_vals) / len(clv_vals)) if clv_vals else None
+        pos_clv_rate = (sum(1 for x in clv_vals if x > 0) / len(clv_vals) * 100.0) if clv_vals else None
+
+        return {
+            "days": window_days,
+            "decided": n,
+            "record": {"won": won, "lost": lost, "push": push},
+            "win_rate": round(win_rate, 2),
+            "roi_pct": round(roi, 2),
+            "avg_ev_per_unit": round(avg_ev, 4),
+            "avg_clv_points": round(avg_clv, 3) if avg_clv is not None else None,
+            "pos_clv_rate": round(pos_clv_rate, 2) if pos_clv_rate is not None else None,
+        }
+
+    # Daily picks (last N days)
+    with get_db_connection() as conn:
+        rows = _exec(conn, """
+          SELECT 
+            (m.analyzed_at AT TIME ZONE 'America/New_York')::date::text AS day_et,
+            m.event_id,
+            e.away_team,
+            e.home_team,
+            e.start_time,
+            m.market_type,
+            m.selection,
+            m.bet_line,
+            m.bet_price,
+            m.ev_per_unit,
+            m.confidence_0_100,
+            m.outcome
+          FROM model_predictions m
+          JOIN events e ON m.event_id=e.id
+          WHERE e.league='NCAAM'
+            AND m.analyzed_at > NOW() - (%(d)s || ' days')::interval
+            AND m.selection IS NOT NULL AND m.selection <> '' AND m.pick IS NOT NULL AND m.pick <> 'NONE'
+          ORDER BY m.analyzed_at DESC
+          LIMIT 1000
+        """, {"d": int(days)}).fetchall()
+
+    by_day = {}
+    for r in rows:
+        day = r['day_et']
+        by_day.setdefault(day, [])
+        by_day[day].append({
+            "event_id": r['event_id'],
+            "matchup": f"{r['away_team']} @ {r['home_team']}",
+            "start_time": r['start_time'],
+            "market_type": r['market_type'],
+            "selection": r['selection'],
+            "line": r['bet_line'],
+            "price": r['bet_price'],
+            "ev_per_unit": float(r['ev_per_unit'] or 0.0),
+            "confidence_0_100": int(r['confidence_0_100'] or 0),
+            "outcome": r['outcome'],
+        })
+
+    daily = [
+        {"day": d, "picks": by_day[d]}
+        for d in sorted(by_day.keys(), reverse=True)
+    ]
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "league": "NCAAM",
+        "windows": {
+            "7d": window_stats(7),
+            "30d": window_stats(30),
+        },
+        "daily_recommended_bets": daily,
+    }
+
+
 @app.get("/api/ncaam/analytics")
 async def get_ncaam_analytics(days: int = 30):
     """
