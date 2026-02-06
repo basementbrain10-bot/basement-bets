@@ -10,7 +10,7 @@ console.log("Basement Bets Frontend v1.2.1 (Profit X-Axis) Loaded at " + new Dat
 import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
-import PerformanceReportNCAAM from './components/PerformanceReportNCAAM';
+import Picks from './pages/Picks';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 // import { StagingBanner } from './components/StagingBanner';
 
@@ -77,7 +77,7 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
-    const [view, setView] = useState('summary');
+    const [view, setView] = useState('dashboard');
     const [stats, setStats] = useState(null);
     const [bets, setBets] = useState([]);
     const [sportBreakdown, setSportBreakdown] = useState([]);
@@ -331,10 +331,16 @@ function App() {
                             </div>        </div>
                         <div className="flex gap-2">
                             <button
-                                onClick={() => setView('summary')}
-                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'summary' ? 'bg-green-500 text-black font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
+                                onClick={() => setView('dashboard')}
+                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'dashboard' ? 'bg-green-500 text-black font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
                             >
-                                <LayoutDashboard size={18} /> Summary
+                                <LayoutDashboard size={18} /> Dashboard
+                            </button>
+                            <button
+                                onClick={() => setView('picks')}
+                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'picks' ? 'bg-indigo-500 text-white font-bold shadow-[0_0_15px_rgba(99,102,241,0.35)]' : 'bg-slate-800 hover:bg-slate-700'}`}
+                            >
+                                <Table size={18} /> Picks
                             </button>
                             <button
                                 onClick={() => setView('transactions')}
@@ -346,7 +352,7 @@ function App() {
                                 onClick={() => setView('research')}
                                 className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'research' ? 'bg-purple-500 text-white font-bold shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
                             >
-                                <TrendingUp size={18} /> Research
+                                <TrendingUp size={18} /> Market
                             </button>
                             <button
                                 onClick={() => setView('performance')}
@@ -388,7 +394,7 @@ function App() {
                         </div>
                     )}
 
-                    {view === 'summary' ? (
+                    {view === 'dashboard' ? (
                         <SummaryView
                             stats={stats}
                             sportBreakdown={sportBreakdown}
@@ -401,6 +407,8 @@ function App() {
                             financials={financials}
                             edgeBreakdown={edgeBreakdown}
                         />
+                    ) : view === 'picks' ? (
+                        <Picks />
                     ) : view === 'transactions' ? (
                         <TransactionView bets={bets} financials={financials} />
                     ) : view === 'performance' ? (
@@ -415,21 +423,21 @@ function App() {
 }
 
 function PerformanceView({ timeSeries, drawdown, financials }) {
-    // Always show the model report, even if there are no settled bets yet.
+    // Charts-only view (no daily picks feed here).
+    if (!timeSeries || timeSeries.length === 0) {
+        return (
+            <div className="bg-slate-900 border border-slate-800 p-10 rounded-xl text-center">
+                <p className="text-gray-400">No performance data available yet. Settle some bets to see your equity curve!</p>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <PerformanceReportNCAAM />
-
             {/* Financial Overview */}
-            {timeSeries && timeSeries.length > 0 ? (
-                <div className="flex flex-wrap gap-4 items-stretch">
-                    <FinancialHeader financials={financials} mode="performance" />
-                </div>
-            ) : (
-                <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl text-center">
-                    <p className="text-gray-400">No portfolio performance series yet (settle some bets to see the equity curve).</p>
-                </div>
-            )}
+            <div className="flex flex-wrap gap-4 items-stretch">
+                <FinancialHeader financials={financials} mode="performance" />
+            </div>
 
             {/* Sportsbook Balance Summary Tiles */}
             {financials?.breakdown && (
