@@ -10,7 +10,6 @@ console.log("Basement Bets Frontend v1.2.1 (Profit X-Axis) Loaded at " + new Dat
 import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
-import Picks from './pages/Picks';
 import Dashboard from './pages/Dashboard';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 // import { StagingBanner } from './components/StagingBanner';
@@ -338,12 +337,6 @@ function App() {
                                 <LayoutDashboard size={18} /> Dashboard
                             </button>
                             <button
-                                onClick={() => setView('picks')}
-                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'picks' ? 'bg-indigo-500 text-white font-bold shadow-[0_0_15px_rgba(99,102,241,0.35)]' : 'bg-slate-800 hover:bg-slate-700'}`}
-                            >
-                                <Table size={18} /> Picks
-                            </button>
-                            <button
                                 onClick={() => setView('transactions')}
                                 className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'transactions' ? 'bg-green-500 text-black font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
                             >
@@ -353,7 +346,7 @@ function App() {
                                 onClick={() => setView('research')}
                                 className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'research' ? 'bg-purple-500 text-white font-bold shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
                             >
-                                <TrendingUp size={18} /> Market
+                                <TrendingUp size={18} /> Board
                             </button>
                             <button
                                 onClick={() => setView('performance')}
@@ -397,8 +390,6 @@ function App() {
 
                     {view === 'dashboard' ? (
                         <Dashboard financials={financials} periodStats={periodStats} />
-                    ) : view === 'picks' ? (
-                        <Picks />
                     ) : view === 'transactions' ? (
                         <TransactionView bets={bets} financials={financials} />
                     ) : view === 'performance' ? (

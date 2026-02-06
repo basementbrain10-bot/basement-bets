@@ -6,7 +6,8 @@ import ModelPerformanceAnalytics from '../components/ModelPerformanceAnalytics';
 const Research = ({ onAddBet }) => {
     const [edges, setEdges] = useState([]);
     const [history, setHistory] = useState([]);
-    const [activeTab, setActiveTab] = useState('live');
+    // Board view tabs: recommended (picks) vs full board
+    const [activeTab, setActiveTab] = useState('recommended');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -79,6 +80,10 @@ const Research = ({ onAddBet }) => {
                         mapped[eid] = { rec: tp[eid]?.rec, analyzedAt: tp[eid]?.analyzed_at };
                     });
                     setRowTopPicks(mapped);
+                    // Default to "Recommended" view if we have at least one pick.
+                    if (Object.keys(mapped).length > 0) {
+                        setActiveTab('recommended');
+                    }
                 }
             } catch (e) { }
 
@@ -439,11 +444,34 @@ const Research = ({ onAddBet }) => {
                     </div>
 
                     <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-xl overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
-                            <h2 className="text-lg font-semibold text-slate-200">Market Board</h2>
-                            <div className="text-xs text-slate-500 flex items-center">
-                                <Info size={12} className="mr-1" />
-                                Times shown in ET • lines shown as (team/side, line, odds)
+                        <div className="px-6 py-4 border-b border-slate-700 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+                            <div>
+                                <h2 className="text-lg font-semibold text-slate-200">Board</h2>
+                                <div className="text-xs text-slate-500 flex items-center mt-1">
+                                    <Info size={12} className="mr-1" />
+                                    Times shown in ET • lines shown as (team/side, line, odds)
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setActiveTab('recommended')}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${activeTab === 'recommended'
+                                        ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/30'
+                                        : 'bg-slate-900/20 text-slate-300 border-slate-700 hover:bg-slate-900/30'
+                                        }`}
+                                >
+                                    Recommended
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('full')}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${activeTab === 'full'
+                                        ? 'bg-purple-500/20 text-purple-200 border-purple-500/30'
+                                        : 'bg-slate-900/20 text-slate-300 border-slate-700 hover:bg-slate-900/30'
+                                        }`}
+                                >
+                                    Full board
+                                </button>
                             </div>
                         </div>
 
@@ -471,72 +499,95 @@ const Research = ({ onAddBet }) => {
                             </div>
                         )}
 
-                        {/* Top Recommended Bets Section */}
-                        {!loading && history.length > 0 && (() => {
-                            // Get picks from today or most recent date with picks
-                            const todayStr = getTodayStr();
-                            const recentPicks = history
-                                .filter(h => h.pick_side && h.pick_type)
-                                .slice(0, 10); // Show last 10 picks
+                        {/* (Removed) Historical Top Model Picks summary to reduce duplication. */}
 
-                            if (recentPicks.length === 0) return null;
-
-                            const wins = recentPicks.filter(p => p.result === 'WIN').length;
-                            const losses = recentPicks.filter(p => p.result === 'LOSS').length;
-                            const pending = recentPicks.filter(p => !p.result || p.result === 'PENDING').length;
-
-                            return (
-                                <div className="mb-6 bg-gradient-to-br from-slate-800/90 to-slate-900/90 border border-slate-700/50 rounded-xl p-4">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-white font-bold flex items-center gap-2">
-                                            <CheckCircle size={18} className="text-green-400" />
-                                            Top Model Picks
-                                        </h3>
-                                        <div className="flex items-center gap-3 text-sm">
-                                            <span className="text-green-400 font-bold">{wins}W</span>
-                                            <span className="text-slate-500">-</span>
-                                            <span className="text-red-400 font-bold">{losses}L</span>
-                                            {pending > 0 && (
-                                                <>
-                                                    <span className="text-slate-500">-</span>
-                                                    <span className="text-yellow-400 font-bold">{pending}P</span>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="grid gap-2">
-                                        {recentPicks.slice(0, 5).map((pick, idx) => (
-                                            <div key={idx} className={`flex items-center justify-between p-3 rounded-lg ${pick.result === 'WIN' ? 'bg-green-900/30 border border-green-700/50' :
-                                                pick.result === 'LOSS' ? 'bg-red-900/30 border border-red-700/50' :
-                                                    'bg-slate-800/50 border border-slate-700/50'
-                                                }`}>
-                                                <div className="flex-1">
-                                                    <div className="text-white font-medium text-sm">
-                                                        {pick.away_team} @ {pick.home_team}
-                                                    </div>
-                                                    <div className="text-slate-400 text-xs mt-0.5">
-                                                        {pick.pick_side} {pick.pick_line !== null ? pick.pick_line : ''} ({pick.pick_type})
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    {pick.result === 'WIN' && (
-                                                        <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs font-bold rounded">WIN ✓</span>
-                                                    )}
-                                                    {pick.result === 'LOSS' && (
-                                                        <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded">LOSS ✗</span>
-                                                    )}
-                                                    {(!pick.result || pick.result === 'PENDING') && (
-                                                        <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded">PENDING</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
+                        {!loading && edges.length > 0 && activeTab === 'recommended' && (
+                            <div className="p-6">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Recommended picks</div>
+                                        <div className="text-xs text-slate-500 mt-1">Top pick per game (precomputed). Use Add to slip or open details.</div>
                                     </div>
                                 </div>
-                            );
-                        })()}
 
-                        {!loading && edges.length > 0 && (
+                                {(() => {
+                                    const rows = getProcessedEdges()
+                                        .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null }))
+                                        .filter((x) => x.top);
+
+                                    if (!rows.length) {
+                                        return <div className="text-slate-500">No recommendations available for this window.</div>;
+                                    }
+
+                                    return (
+                                        <div className="overflow-x-auto border border-slate-700/60 rounded-xl">
+                                            <table className="min-w-full text-left text-sm">
+                                                <thead className="bg-slate-900/40 border-b border-slate-700/60">
+                                                    <tr className="text-[10px] uppercase tracking-wider text-slate-500">
+                                                        <th className="py-2 px-3">Time</th>
+                                                        <th className="py-2 px-3">Matchup</th>
+                                                        <th className="py-2 px-3">Pick</th>
+                                                        <th className="py-2 px-3">Odds</th>
+                                                        <th className="py-2 px-3">EV</th>
+                                                        <th className="py-2 px-3">Conf</th>
+                                                        <th className="py-2 px-3 text-right">Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-700/40">
+                                                    {rows.slice(0, 50).map(({ edge, top }) => {
+                                                        const date = edge.start_time ? new Date(edge.start_time) : null;
+                                                        const dateStr = date ? date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', timeZone: 'America/New_York' }) : '-';
+                                                        const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
+                                                        const odds = (top.price !== null && top.price !== undefined)
+                                                            ? fmtSigned(top.price, 0)
+                                                            : '—';
+                                                        return (
+                                                            <tr key={edge.id} className="hover:bg-slate-700/20">
+                                                                <td className="py-2 px-3 text-slate-400 text-xs whitespace-nowrap">
+                                                                    <div className="font-bold text-slate-300">{dateStr}</div>
+                                                                    <div>{timeStr}</div>
+                                                                </td>
+                                                                <td className="py-2 px-3 text-slate-200 font-bold">{edge.away_team} @ {edge.home_team}</td>
+                                                                <td className="py-2 px-3 text-white font-black">{top.selection}</td>
+                                                                <td className="py-2 px-3 text-slate-300 font-mono">{odds}</td>
+                                                                <td className="py-2 px-3 text-green-300 font-mono font-bold">+{top.edge}</td>
+                                                                <td className="py-2 px-3 text-slate-300">{top.confidence}</td>
+                                                                <td className="py-2 px-3">
+                                                                    <div className="flex justify-end gap-2">
+                                                                        <button
+                                                                            onClick={() => onAddBet?.({
+                                                                                sport: edge.sport,
+                                                                                game: `${edge.away_team} @ ${edge.home_team}`,
+                                                                                market: top.bet_type,
+                                                                                pick: top.selection,
+                                                                                line: top.market_line,
+                                                                                odds: top.price,
+                                                                                book: top.book,
+                                                                            })}
+                                                                            className="px-3 py-1 bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-500/30 rounded text-xs font-bold"
+                                                                        >
+                                                                            Add
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => analyzeGame(edge)}
+                                                                            className="px-3 py-1 bg-slate-800/60 text-slate-200 hover:bg-slate-800 border border-slate-700 rounded text-xs font-bold"
+                                                                        >
+                                                                            Details
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
+
+                        {!loading && edges.length > 0 && activeTab === 'full' && (
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse">
                                     <thead>
