@@ -57,13 +57,19 @@ async def check_access_key(request: Request, call_next):
 
 @app.get("/api/version")
 def get_version():
-    """Public endpoint to check the current deployed version and build time."""
+    """Public endpoint to check the current deployed version and build metadata."""
     return {
-        "version": "1.2.4",
-        "build_time": "2026-01-30T22:00:00Z",
+        "version": os.environ.get("APP_VERSION", "dev"),
         "env": os.environ.get("VERCEL_ENV", "local"),
+        "vercel": {
+            "deployment_id": os.environ.get("VERCEL_DEPLOYMENT_ID"),
+            "region": os.environ.get("VERCEL_REGION"),
+            "git_sha": os.environ.get("VERCEL_GIT_COMMIT_SHA"),
+            "git_ref": os.environ.get("VERCEL_GIT_COMMIT_REF"),
+            "git_msg": os.environ.get("VERCEL_GIT_COMMIT_MESSAGE"),
+        },
+        # keep a small auth sanity signal without leaking secrets
         "debug_password_len": len(settings.BASEMENT_PASSWORD) if settings.BASEMENT_PASSWORD else 0,
-        "debug_password_start": settings.BASEMENT_PASSWORD[0] if settings.BASEMENT_PASSWORD else "N/A"
     }
 
 
