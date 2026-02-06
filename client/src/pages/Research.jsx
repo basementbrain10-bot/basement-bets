@@ -26,6 +26,10 @@ const Research = ({ onAddBet }) => {
     const [correlationResult, setCorrelationResult] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+    // Quick-pick state (board row badges)
+    const [rowTopPicks, setRowTopPicks] = useState({}); // event_id -> { rec, analyzedAt }
+    const [rowPickingId, setRowPickingId] = useState(null);
+
     // Sorting State
     const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
 
@@ -117,6 +121,18 @@ const Research = ({ onAddBet }) => {
             ]);
             setAnalysisResult(analysisRes.data);
             setCorrelationResult(corrRes.data);
+
+            // Also surface the top pick back on the board row
+            try {
+                const top = (analysisRes.data?.recommendations || [])[0] || null;
+                if (top) {
+                    setRowTopPicks(prev => ({
+                        ...prev,
+                        [game.id]: { rec: top, analyzedAt: new Date().toISOString() }
+                    }));
+                }
+            } catch (e) { }
+
             // Refresh history in background - isolated so it doesn't block analysis
             try {
                 const histRes = await api.get('/api/ncaam/history', { params: { limit: 500 } });
@@ -129,6 +145,25 @@ const Research = ({ onAddBet }) => {
             setAnalysisResult({ error: err.response?.data?.detail || 'Analysis failed' });
         } finally {
             setIsAnalyzing(false);
+        }
+    };
+
+    const quickPick = async (game) => {
+        // Fetch analysis without opening the modal; then show badge + allow one-click add.
+        setRowPickingId(game.id);
+        try {
+            const analysisRes = await api.post('/api/ncaam/analyze', { event_id: game.id });
+            const top = (analysisRes.data?.recommendations || [])[0] || null;
+            if (top) {
+                setRowTopPicks(prev => ({
+                    ...prev,
+                    [game.id]: { rec: top, analyzedAt: new Date().toISOString() }
+                }));
+            }
+        } catch (err) {
+            console.warn('QuickPick failed:', err);
+        } finally {
+            setRowPickingId(null);
         }
     };
 
@@ -660,33 +695,70 @@ const Research = ({ onAddBet }) => {
                                                             </>
                                                         )}
                                                         <td className="py-3 px-4 text-center">
-                                                            {isEdge ? (
-                                                                <button
-                                                                    onClick={() => onAddBet?.({
-                                                                        sport: edge.sport,
-                                                                        game: `${edge.away_team} @ ${edge.home_team}`,
-                                                                        market: 'Spread', // Simplified default
-                                                                        pick: edge.home_spread > 0 ? edge.home_team : edge.away_team, // Placeholder logic
-                                                                        line: edge.home_spread,
-                                                                        odds: -110
-                                                                    })}
-                                                                    className="px-3 py-1 bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 rounded text-xs font-bold transition-all flex items-center justify-center mx-auto gap-1"
-                                                                >
-                                                                    <PlusCircle size={12} />
-                                                                    Bet
-                                                                </button>
-                                                            ) : (
-                                                                <button
-                                                                    onClick={() => analyzeGame(edge)}
-                                                                    disabled={leagueFilter !== 'NCAAM' || (isAnalyzing && selectedGame?.id === edge.id)}
-                                                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg ring-1 ring-white/10 flex items-center justify-center mx-auto ${(isAnalyzing && selectedGame?.id === edge.id)
-                                                                        ? 'bg-slate-700 text-slate-400'
-                                                                        : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                                                                        }`}
-                                                                >
-                                                                    {isAnalyzing && selectedGame?.id === edge.id ? <RefreshCw className="animate-spin" size={14} /> : 'Analyze'}
-                                                                </button>
-                                                            )}
+                                                            {(() => {
+                                                                const top = rowTopPicks?.[edge.id]?.rec || null;
+                                                                if (top) {
+                                                                    return (
+                                                                        <div className="flex flex-col items-center gap-2">
+                                                                            <div className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-widest">
+                                                                                Top pick
+                                                                            </div>
+                                                                            <div className="text-xs font-bold text-white max-w-[180px] truncate" title={top.selection}>
+                                                                                {top.selection}
+                                                                            </div>
+                                                                            <div className="text-[11px] text-green-300 font-mono font-bold">+{top.edge}</div>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <button
+                                                                                    onClick={() => onAddBet?.({
+                                                                                        sport: edge.sport,
+                                                                                        game: `${edge.away_team} @ ${edge.home_team}`,
+                                                                                        market: top.bet_type,
+                                                                                        pick: top.selection,
+                                                                                        line: top.market_line,
+                                                                                        odds: top.price,
+                                                                                        book: top.book,
+                                                                                    })}
+                                                                                    className="px-3 py-1 bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-500/30 rounded text-xs font-bold transition-colors"
+                                                                                >
+                                                                                    Add
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => analyzeGame(edge)}
+                                                                                    className="px-3 py-1 bg-slate-800/60 text-slate-200 hover:bg-slate-800 border border-slate-700 rounded text-xs font-bold transition-colors"
+                                                                                >
+                                                                                    Details
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                }
+
+                                                                // Default: show quick-pick + analyze
+                                                                return (
+                                                                    <div className="flex flex-col items-center gap-2">
+                                                                        <button
+                                                                            onClick={() => quickPick(edge)}
+                                                                            disabled={leagueFilter !== 'NCAAM' || rowPickingId === edge.id}
+                                                                            className={`px-3 py-1 rounded text-xs font-bold transition-colors border ${rowPickingId === edge.id
+                                                                                ? 'bg-slate-700 text-slate-400 border-slate-600'
+                                                                                : 'bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 border-indigo-500/30'
+                                                                                }`}
+                                                                        >
+                                                                            {rowPickingId === edge.id ? 'Picking…' : 'Quick pick'}
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => analyzeGame(edge)}
+                                                                            disabled={leagueFilter !== 'NCAAM' || (isAnalyzing && selectedGame?.id === edge.id)}
+                                                                            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg ring-1 ring-white/10 flex items-center justify-center mx-auto ${(isAnalyzing && selectedGame?.id === edge.id)
+                                                                                ? 'bg-slate-700 text-slate-400'
+                                                                                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                                                                                }`}
+                                                                        >
+                                                                            {isAnalyzing && selectedGame?.id === edge.id ? <RefreshCw className="animate-spin" size={14} /> : 'Analyze'}
+                                                                        </button>
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </td>
                                                     </tr>
                                                 );
