@@ -187,7 +187,7 @@ class OddsAdapter:
         if not gid:
             return None
             
-        print(f"DEBUG Upsert Input: {start_time} Type: {type(start_time)}")
+        # Debug print removed (too noisy in cron)
 
         event_id = f"action:{(league or '').lower()}:{gid}"
 
@@ -230,8 +230,8 @@ class OddsAdapter:
           status=EXCLUDED.status,
           updated_at=CURRENT_TIMESTAMP
         """
-        
-        print(f"DEBUG Upserting {event_id} with start {dt}")
+
+        # (Debug logging removed; this runs frequently in cron)
 
         with get_db_connection() as conn:
             _exec(conn, q, {
@@ -249,7 +249,8 @@ class OddsAdapter:
     def _from_action_network(self, event, league, captured_at):
         home_team = event.get('home_team')
         away_team = event.get('away_team')
-        start_time = event.get('commence_time')
+        # ActionNetwork fetcher returns `start_time` (ISO). Some older helpers use `commence_time`.
+        start_time = event.get('commence_time') or event.get('start_time')
 
         # Action Network is the canonical board source for NCAAM now.
         # Use a stable Action-based event_id to avoid expensive fuzzy matching.

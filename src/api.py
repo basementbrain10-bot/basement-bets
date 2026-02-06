@@ -1183,6 +1183,27 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
     end_date = (start_date + timedelta(days=days - 1))
 
     query = """
+    WITH base_events AS (
+      SELECT e.*,
+        DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') AS day_et,
+        CASE
+          WHEN e.id LIKE 'action:ncaam:%' THEN 0
+          WHEN e.id LIKE 'espn:ncaam:%' THEN 1
+          ELSE 2
+        END AS src_rank
+      FROM events e
+      WHERE e.league = :league
+        AND DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN :start_date AND :end_date
+    ),
+    dedup_events AS (
+      SELECT *
+      FROM (
+        SELECT *,
+          ROW_NUMBER() OVER (PARTITION BY league, day_et, home_team, away_team ORDER BY src_rank ASC, start_time ASC) AS rn
+        FROM base_events
+      ) t
+      WHERE rn = 1
+    )
     SELECT e.id, e.league as sport, e.home_team, e.away_team, e.start_time, e.status,
            -- SPREAD (HOME/AWAY)
            s_home.line_value as home_spread,
@@ -1201,7 +1222,7 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
            s_home.price as moneyline_home,
            t_over.price as moneyline_away,
            gr.home_score, gr.away_score, gr.final
-    FROM events e
+    FROM dedup_events e
     LEFT JOIN (
         SELECT DISTINCT ON (event_id) event_id, line_value, price
         FROM odds_snapshots
@@ -1245,8 +1266,6 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
         ORDER BY event_id, captured_at DESC
     ) ml_draw ON e.id = ml_draw.event_id
     LEFT JOIN game_results gr ON e.id = gr.event_id
-    WHERE e.league = :league
-      AND DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN :start_date AND :end_date
     ORDER BY e.start_time ASC
     """
 
