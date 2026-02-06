@@ -1187,100 +1187,41 @@ const Research = ({ onAddBet }) => {
                                                 <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
                                                     <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Model Summary</div>
                                                     <div className="text-slate-300 text-xs leading-snug">
-                                                        {analysisResult.narrative?.market_summary || '—'}
+                                                        {(analysisResult.narrative?.market_summary || '').slice(0, 220) || '—'}
                                                     </div>
+                                                    <div className="text-[10px] text-slate-600 mt-1">(Full narrative shown above)</div>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Recommendations */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {analysisResult.recommendations?.map((rec, idx) => (
-                                                <div key={idx} className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                                            {rec.bet_type} — {(() => {
-                                                                try {
-                                                                    if (rec.bet_type === 'SPREAD' && rec.edge_points !== null && rec.edge_points !== undefined) {
-                                                                        return `Line value ${rec.edge_points >= 0 ? '+' : ''}${rec.edge_points} pts`;
-                                                                    }
-                                                                    if (rec.bet_type === 'TOTAL' && rec.edge_points !== null && rec.edge_points !== undefined) {
-                                                                        return `Line value ${rec.edge_points >= 0 ? '+' : ''}${rec.edge_points} pts`;
-                                                                    }
-                                                                } catch (e) { }
-                                                                return 'Recommendation';
-                                                            })()}
-                                                        </span>
-                                                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${rec.confidence === 'High' ? 'bg-green-500/20 text-green-400' :
-                                                            rec.confidence === 'Medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                                                                'bg-slate-700 text-slate-400'
-                                                            }`}>
-                                                            {rec.confidence} Confidence
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-2xl font-bold text-white mb-1">
-                                                        {(() => {
-                                                            // Ensure spread picks display with a + when appropriate (avoid ambiguity)
-                                                            try {
-                                                                if (rec.bet_type === 'SPREAD') {
-                                                                    const m = String(rec.selection || '').match(/^(.*)\s([-+]?\d+(?:\.\d+)?)$/);
-                                                                    if (!m) return rec.selection;
-                                                                    const team = m[1].trim();
-                                                                    const line = Number(m[2]);
-                                                                    if (Number.isNaN(line)) return rec.selection;
-                                                                    return `${team} ${fmtSigned(line, 1)}`;
-                                                                }
-                                                            } catch (e) { }
-                                                            return rec.selection;
-                                                        })()}
-                                                    </div>
-                                                    <div className="text-xs text-slate-400">
-                                                        EV: <span className="text-green-400 font-bold">+{rec.edge}</span> •
-                                                        Fair: <span className="text-slate-200 font-mono font-bold">{rec.fair_line ?? '—'}</span>
-                                                        {rec.market_line !== null && rec.market_line !== undefined ? (
-                                                            <span> • Market: <span className="text-slate-300 font-mono">{rec.market_line}</span></span>
-                                                        ) : null}
-                                                        {rec.edge_points !== null && rec.edge_points !== undefined ? (
-                                                            <span> • Line value: <span className={`${rec.edge_points >= 0 ? 'text-green-400' : 'text-red-400'} font-mono font-bold`}>{rec.edge_points >= 0 ? '+' : ''}{rec.edge_points} pts</span></span>
-                                                        ) : null}
-                                                    </div>
-                                                    <div className="mt-3 text-xs text-slate-300 bg-slate-900/30 p-3 rounded-lg border border-slate-700/50">
-                                                        <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Win condition</div>
-                                                        {(() => {
-                                                            try {
-                                                                if (rec.bet_type === 'SPREAD') {
-                                                                    // selection looks like: "TeamName -12.5" or "TeamName 4.5"
-                                                                    const m = String(rec.selection || '').match(/^(.*)\s([-+]?\d+(?:\.\d+)?)$/);
-                                                                    const team = (m?.[1] || rec.selection || '').trim();
-                                                                    const line = m ? Number(m[2]) : null;
-                                                                    if (line === null || Number.isNaN(line)) return 'Team must cover the spread.';
-                                                                    const needed = line < 0 ? `win by ${Math.abs(line) + 0.5}+` : `lose by ${Math.abs(line) - 0.5} or win`;
-                                                                    return `${team} must cover ${line > 0 ? '+' : ''}${line} (i.e., ${needed}).`;
-                                                                }
-                                                                if (rec.bet_type === 'TOTAL') {
-                                                                    // selection looks like: "OVER 151.5" / "UNDER 151.5"
-                                                                    const mm = String(rec.selection || '').match(/^(OVER|UNDER)\s+(\d+(?:\.\d+)?)$/i);
-                                                                    const side = (mm?.[1] || 'TOTAL').toUpperCase();
-                                                                    const line = mm ? Number(mm[2]) : null;
-                                                                    if (line === null || Number.isNaN(line)) return 'Game total must land on the correct side of the total.';
-                                                                    return side === 'OVER'
-                                                                        ? `Combined score must finish OVER ${line}.`
-                                                                        : `Combined score must finish UNDER ${line}.`;
-                                                                }
-                                                                return 'Bet outcome must align with the recommended side.';
-                                                            } catch (e) {
-                                                                return 'Bet outcome must align with the recommended side.';
-                                                            }
-                                                        })()}
+                                        {/* Recommendations (avoid repetition: only show "Other leans" if multiple) */}
+                                        {(() => {
+                                            const recs = analysisResult.recommendations || [];
+                                            if (!recs.length) {
+                                                return <div className="text-center py-4 text-slate-500">No recommendations generated.</div>;
+                                            }
+                                            if (recs.length <= 1) return null;
+
+                                            return (
+                                                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                                                    <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2">Other leans</div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                        {recs.slice(1, 5).map((rec, idx) => (
+                                                            <div key={idx} className="bg-slate-900/30 p-3 rounded-lg border border-slate-700/50">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="text-white font-bold text-sm">{rec.selection}</div>
+                                                                    <div className="text-xs text-green-300 font-mono font-bold">+{rec.edge}</div>
+                                                                </div>
+                                                                <div className="mt-1 text-[11px] text-slate-400">
+                                                                    {rec.bet_type} • win {rec.win_prob !== null && rec.win_prob !== undefined ? `${Math.round(rec.win_prob * 100)}%` : '—'}
+                                                                    {rec.price !== null && rec.price !== undefined ? ` • ${fmtSigned(rec.price, 0)}` : ''}
+                                                                </div>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 </div>
-                                            ))}
-                                            {!analysisResult.recommendations?.length && (
-                                                <div className="col-span-2 text-center py-4 text-slate-500">
-                                                    No recommendations generated.
-                                                </div>
-                                            )}
-                                        </div>
+                                            );
+                                        })()}
 
                                         {/* Narrative & Torvik View */}
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -708,9 +708,20 @@ class NCAAMMarketFirstModelV2(BaseModel):
                     # For totals, interpret edge points as difference in line (direction depends on OVER/UNDER)
                     edge_points_side = round(float(fair_line_side) - float(market_line_side), 1)
 
+            # Build a human-friendly selection label (avoid "home/away" in UI)
+            sel = None
+            if r['market'] == 'SPREAD':
+                team = r.get('team') or (event['home_team'] if r.get('side') == 'home' else event['away_team'])
+                sel = team + (f" {r['line']}" if r.get('line') is not None else "")
+            elif r['market'] == 'TOTAL':
+                side = str(r.get('side') or '').upper()
+                sel = side + (f" {r['line']}" if r.get('line') is not None else "")
+            else:
+                sel = str(r.get('side') or '')
+
             ui_recs.append({
                 "bet_type": r['market'],
-                "selection": r['side'] + (f" {r['line']}" if r['line'] is not None else ""),
+                "selection": sel,
                 # Keep legacy key name for UI, but this is EV% not points.
                 "edge": f"{(r['ev']*100):.2f}%",
                 "win_prob": round(float(win_prob), 3) if win_prob is not None else None,
