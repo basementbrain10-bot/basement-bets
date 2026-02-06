@@ -18,9 +18,20 @@ export default function Dashboard({ financials, periodStats }) {
     setLoading(true);
     try {
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-      const res = await api.get('/api/ncaam/top-picks', { params: { date: today, days: 1, limit_games: 25 } });
-      const picksObj = res.data?.picks || {};
-      const arr = Object.keys(picksObj).map((eid) => ({ event_id: eid, ...(picksObj[eid] || {}) })).filter(x => x.rec);
+      const [tpRes, boardRes] = await Promise.all([
+        api.get('/api/ncaam/top-picks', { params: { date: today, days: 1, limit_games: 25 } }),
+        api.get('/api/board', { params: { league: 'NCAAM', date: today, days: 1 } }).catch(() => ({ data: [] }))
+      ]);
+
+      const picksObj = tpRes.data?.picks || {};
+      const events = boardRes.data || [];
+      const eventMap = {};
+      events.forEach((e) => { eventMap[e.id] = e; });
+
+      const arr = Object.keys(picksObj)
+        .map((eid) => ({ event_id: eid, ...(picksObj[eid] || {}), event: eventMap[eid] }))
+        .filter(x => x.rec);
+
       setTopPicks(arr);
     } catch (e) {
       setTopPicks([]);
@@ -92,21 +103,31 @@ export default function Dashboard({ financials, periodStats }) {
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-900/60 border-b border-slate-800">
                 <tr className="text-[10px] uppercase tracking-wider text-slate-500">
-                  <th className="py-2 px-3">Event</th>
+                  <th className="py-2 px-3">Time (ET)</th>
+                  <th className="py-2 px-3">Matchup</th>
                   <th className="py-2 px-3">Pick</th>
                   <th className="py-2 px-3">EV%</th>
                   <th className="py-2 px-3">Conf</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {topPicks.slice(0, 12).map((x) => (
-                  <tr key={x.event_id} className="hover:bg-slate-800/30">
-                    <td className="py-2 px-3 text-slate-400 font-mono text-xs">{x.event_id}</td>
-                    <td className="py-2 px-3 text-white font-bold">{x.rec?.selection}</td>
-                    <td className="py-2 px-3 text-green-300 font-mono font-bold">{x.rec?.edge}</td>
-                    <td className="py-2 px-3 text-slate-300">{x.rec?.confidence}</td>
-                  </tr>
-                ))}
+                {topPicks.slice(0, 12).map((x) => {
+                  const st = x?.event?.start_time ? new Date(x.event.start_time) : null;
+                  const timeStr = st ? st.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '—';
+                  const matchup = (x?.event?.away_team && x?.event?.home_team)
+                    ? `${x.event.away_team} @ ${x.event.home_team}`
+                    : x.event_id;
+
+                  return (
+                    <tr key={x.event_id} className="hover:bg-slate-800/30">
+                      <td className="py-2 px-3 text-slate-300 font-mono text-xs whitespace-nowrap">{timeStr}</td>
+                      <td className="py-2 px-3 text-slate-200 font-bold">{matchup}</td>
+                      <td className="py-2 px-3 text-white font-bold">{x.rec?.selection}</td>
+                      <td className="py-2 px-3 text-green-300 font-mono font-bold">{x.rec?.edge}</td>
+                      <td className="py-2 px-3 text-slate-300">{x.rec?.confidence}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
