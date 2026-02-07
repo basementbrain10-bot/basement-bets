@@ -677,6 +677,17 @@ async def save_manual_bet(request: Request, user: dict = Depends(get_current_use
         else:
             provider = provider_raw
 
+        # Strong dedupe for FanDuel: extract BET ID from raw_text when present.
+        external_id = None
+        try:
+            import re
+            rt = bet_data.get('raw_text') or ''
+            m = re.search(r"BET ID:\s*([^\n\r]+)", rt)
+            if m:
+                external_id = m.group(1).strip()
+        except Exception:
+            external_id = None
+
         doc = {
             "user_id": user_id,
             "account_id": account_id,
@@ -694,6 +705,7 @@ async def save_manual_bet(request: Request, user: dict = Depends(get_current_use
             "closing_odds": (bet_data.get("closing_odds")
                              or (bet_data.get("closing_price") or {}).get("american")
                              or None),
+            "external_id": external_id,
             "is_live": bet_data.get("is_live", False),
             "is_bonus": bet_data.get("is_bonus", False),
             "raw_text": bet_data.get("raw_text")

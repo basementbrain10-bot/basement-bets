@@ -237,7 +237,11 @@ def init_bets_db():
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS is_bonus BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS raw_text TEXT;",
         # In case we ever need account_id if it was missing 
-        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS account_id TEXT;"
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS account_id TEXT;",
+        # Sportsbook-native id for strong dedupe (e.g. FanDuel BET ID: O/...) 
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS external_id TEXT;",
+        # Unique index for external_id when present
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bets_user_provider_external_id ON bets(user_id, provider, external_id) WHERE external_id IS NOT NULL;",
     ]
 
     with get_admin_db_connection() as conn:
@@ -857,15 +861,64 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
         import hashlib
         doc['hash_id'] = hashlib.sha256(raw.encode()).hexdigest()
 
+    # Strong dedupe: if we have a sportsbook-native external_id, upsert by that.
+    external_id = doc.get('external_id')
+
+    if external_id:
+        with get_db_connection() as conn:
+            # 1) Try find existing
+            cur = _exec(
+                conn,
+                """
+                SELECT id FROM bets
+                WHERE user_id=%s AND provider=%s AND external_id=%s
+                LIMIT 1;
+                """,
+                (doc.get('user_id'), doc.get('provider'), external_id),
+            )
+            row = cur.fetchone()
+            if row and row.get('id'):
+                bet_id = row['id']
+                _exec(
+                    conn,
+                    """
+                    UPDATE bets SET
+                        account_id=%s,
+                        date=%s,
+                        sport=%s,
+                        bet_type=%s,
+                        wager=%s,
+                        profit=%s,
+                        status=%s,
+                        description=%s,
+                        selection=%s,
+                        odds=%s,
+                        closing_odds=%s,
+                        is_live=%s,
+                        is_bonus=%s,
+                        raw_text=%s
+                    WHERE id=%s
+                    """,
+                    (
+                        doc.get('account_id'), doc.get('date'), doc.get('sport'), doc.get('bet_type'),
+                        doc.get('wager'), doc.get('profit'), doc.get('status'), doc.get('description'),
+                        doc.get('selection'), doc.get('odds'), doc.get('closing_odds'), doc.get('is_live'),
+                        doc.get('is_bonus'), doc.get('raw_text'), bet_id
+                    ),
+                )
+                conn.commit()
+                return bet_id
+            conn.commit()
+
     query = """
     INSERT INTO bets (
         user_id, account_id, provider, date, sport, bet_type, wager, profit, status, 
-        description, selection, odds, closing_odds, is_live, is_bonus, raw_text, 
-        hash_id, validation_errors
+        description, selection, odds, closing_odds, is_live, is_bonus, raw_text,
+        external_id, validation_errors
     ) VALUES (
         :user_id, :account_id, :provider, :date, :sport, :bet_type, :wager, :profit, :status, 
-        :description, :selection, :odds, :closing_odds, :is_live, :is_bonus, :raw_text, 
-        :hash_id, :validation_errors
+        :description, :selection, :odds, :closing_odds, :is_live, :is_bonus, :raw_text,
+        :external_id, :validation_errors
     )
     ON CONFLICT (user_id, provider, description, date, wager) DO UPDATE SET
         profit = EXCLUDED.profit,
@@ -874,7 +927,7 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
         odds = EXCLUDED.odds,
         closing_odds = EXCLUDED.closing_odds,
         raw_text = EXCLUDED.raw_text,
-        hash_id = EXCLUDED.hash_id,
+        external_id = COALESCE(EXCLUDED.external_id, bets.external_id),
         validation_errors = EXCLUDED.validation_errors
     RETURNING id;
     """
