@@ -76,7 +76,7 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
-    const [view, setView] = useState('performance');
+    const [view, setView] = useState('research');
     const [stats, setStats] = useState(null);
     const [bets, setBets] = useState([]);
     const [sportBreakdown, setSportBreakdown] = useState([]);
@@ -330,18 +330,6 @@ function App() {
                             </div>        </div>
                         <div className="flex gap-2">
                             <button
-                                onClick={() => setView('performance')}
-                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'performance' ? 'bg-blue-500 text-white font-bold shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
-                            >
-                                <LayoutDashboard size={18} /> Overview
-                            </button>
-                            <button
-                                onClick={() => setView('transactions')}
-                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'transactions' ? 'bg-green-500 text-black font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
-                            >
-                                <List size={18} /> Transactions
-                            </button>
-                            <button
                                 onClick={() => setView('research')}
                                 className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'research' ? 'bg-purple-500 text-white font-bold shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
                             >
@@ -349,10 +337,15 @@ function App() {
                             </button>
                             <button
                                 onClick={() => setView('performance')}
-                                className="hidden"
-                                aria-hidden="true"
+                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'performance' ? 'bg-blue-500 text-white font-bold shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
                             >
-                                Performance
+                                <LayoutDashboard size={18} /> Performance
+                            </button>
+                            <button
+                                onClick={() => setView('transactions')}
+                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'transactions' ? 'bg-green-500 text-black font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
+                            >
+                                <List size={18} /> Transactions
                             </button>
                             <button
                                 onClick={handleSyncResults}

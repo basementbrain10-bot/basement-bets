@@ -678,15 +678,22 @@ class AnalyticsEngine:
             # Filter bets for this provider
             provider_bets = [b for b in bets if b.get('provider', 'Unknown') == provider]
             last_date_str = None
-            
+
+            # Normalize last-bet date so old strings like "Sep 6, 2024, 3:37pm ET" don't win.
+            def to_day_key(s: str):
+                try:
+                    return self._to_day_key(s)
+                except Exception:
+                    return None
+
             for b in provider_bets:
                 profit = b['profit']
                 date_str = b.get('date', '')
-                
-                # Update last bet date for UI
-                if date_str:
-                    if not last_date_str or date_str > last_date_str:
-                        last_date_str = date_str
+
+                day_key = to_day_key(date_str)
+                if day_key:
+                    if not last_date_str or day_key > last_date_str:
+                        last_date_str = day_key
                 
                 # Decide whether to include in balance
                 # Note: b['date'] is usually string "YYYY-MM-DD". Snapshot is full datetime.
