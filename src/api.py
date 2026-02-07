@@ -1133,25 +1133,26 @@ async def get_model_health(date: Optional[str] = None, league: Optional[str] = N
 # --- Cron Security & Jobs ---
 
 async def verify_cron_secret(request: Request):
-    """
-    Verifies Authorization header matches CRON_SECRET.
+    """Verifies Authorization header matches CRON_SECRET.
+
+    If CRON_SECRET is not set, we return True (no-op) and rely on the global
+    Basement key middleware for protection.
     """
     from src.config import settings
     expected = settings.CRON_SECRET
     if not expected:
-        # If no secret configured (local dev?), warn or allow? 
-        # For production security, we deny if not set.
-        print("[Auth] CRON_SECRET not set in environment.")
-        raise HTTPException(status_code=500, detail="Server config error: CRON_SECRET missing")
-        
+        # Allow when CRON_SECRET isn't configured (Basement-key gate still applies).
+        return True
+
     auth = request.headers.get("Authorization")
     if not auth:
         raise HTTPException(status_code=401, detail="Missing Authorization header")
-        
-    # Expect "Bearer <token>"
+
     parts = auth.split()
     if len(parts) != 2 or parts[0].lower() != "bearer" or parts[1] != expected:
         raise HTTPException(status_code=401, detail="Invalid Cron Secret")
+
+    return True
 
 @app.api_route("/api/jobs/policy_refresh", methods=["GET", "POST"])
 async def trigger_policy_refresh(request: Request, authorized: bool = Depends(verify_cron_secret)):
@@ -1821,8 +1822,13 @@ async def trigger_event_ingestion(league: str, date: Optional[str] = None):
 
 @app.api_route("/api/jobs/ingest_results/{league}", methods=["GET", "POST"])
 async def trigger_result_ingestion(league: str, date: Optional[str] = None, authorized: bool = Depends(verify_cron_secret)):
-    """
-    Cron Job / Manual Trigger: Ingests scoreboard/results from ESPN for a specific league.
+    """Cron/manual: ingest finals/scores for a league.
+
+    Auth:
+    - If CRON_SECRET is configured, require it.
+    - If CRON_SECRET is missing, allow Basement-key auth (X-BASEMENT-KEY) to run this endpoint.
+
+    This keeps prod usable even when CRON_SECRET env isn't present.
     """
     job_key = f"ingest_results_{league}"
     from src.services.job_service import JobContext, JobLockedException
