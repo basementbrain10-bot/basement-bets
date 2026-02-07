@@ -56,10 +56,10 @@ const Research = ({ onAddBet }) => {
                     console.warn("History fetch failed:", e);
                     return { data: [] };
                 }),
-                api.get('/api/balances/snapshots/latest').catch((e) => {
+                api.get('/api/balances').catch((e) => {
                     // Don't fail the entire page if balances error out
                     setBalanceError(e);
-                    return { data: [] };
+                    return { data: {} };
                 }),
                 (leagueFilter === 'NCAAM'
                     ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 40 } }).catch(() => ({ data: null }))
@@ -69,10 +69,8 @@ const Research = ({ onAddBet }) => {
 
             setEdges(boardRes.data || []);
             setHistory(historyRes.data || []);
-            // balances endpoint may return either an array or an object keyed by provider
-            const rawSnaps = balancesRes.data || [];
-            const snapsArr = Array.isArray(rawSnaps) ? rawSnaps : Object.values(rawSnaps || {});
-            setBalanceSnaps(snapsArr);
+            // balances endpoint returns computed balances keyed by provider
+            setBalanceSnaps(balancesRes.data || {});
 
             // Hydrate row badges from server-side top picks (avoid N analyze calls)
             try {
@@ -323,6 +321,18 @@ const Research = ({ onAddBet }) => {
 
     const getSnap = (providerKey) => {
         const key = String(providerKey || '').toLowerCase();
+
+        // New shape: { DraftKings: {balance,last_bet}, FanDuel: {...} }
+        if (balanceSnaps && typeof balanceSnaps === 'object' && !Array.isArray(balanceSnaps)) {
+            const entries = Object.entries(balanceSnaps);
+            for (const [prov, val] of entries) {
+                if (String(prov || '').toLowerCase() === key) {
+                    return { provider: prov, ...(val || {}) };
+                }
+            }
+        }
+
+        // Legacy shape: array of snapshots
         const snaps = Array.isArray(balanceSnaps) ? balanceSnaps : Object.values(balanceSnaps || {});
         return (snaps || []).find(s => String(s?.provider || '').toLowerCase() === key);
     };
@@ -362,12 +372,12 @@ const Research = ({ onAddBet }) => {
                         <div className="px-2 py-1 rounded bg-slate-800/60 border border-slate-700">
                             <span className="text-slate-400">DraftKings:</span>{' '}
                             <span className="font-bold text-white">{fmtMoney(dk?.balance)}</span>
-                            {dk?.captured_at ? <span className="text-slate-500"> · {fmtTs(dk.captured_at)}</span> : null}
+                            {dk?.captured_at ? <span className="text-slate-500"> · {fmtTs(dk.captured_at)}</span> : (dk?.last_bet ? <span className="text-slate-500"> · last bet {dk.last_bet}</span> : null)}
                         </div>
                         <div className="px-2 py-1 rounded bg-slate-800/60 border border-slate-700">
                             <span className="text-slate-400">FanDuel:</span>{' '}
                             <span className="font-bold text-white">{fmtMoney(fd?.balance)}</span>
-                            {fd?.captured_at ? <span className="text-slate-500"> · {fmtTs(fd.captured_at)}</span> : null}
+                            {fd?.captured_at ? <span className="text-slate-500"> · {fmtTs(fd.captured_at)}</span> : (fd?.last_bet ? <span className="text-slate-500"> · last bet {fd.last_bet}</span> : null)}
                         </div>
                         {balanceError ? (
                             <div className="text-xs text-amber-300">
