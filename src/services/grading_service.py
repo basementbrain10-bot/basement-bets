@@ -83,15 +83,28 @@ class GradingService:
                 print(f"[GRADING] Warning: could not prefetch known NCAAM Action event ids: {e}")
 
             count = 0
+            seen_game_ids = set()
             for date_str in dates:
                 try:
-                    games = get_todays_games('ncaab', [date_str])
+                    # Action Network date param appears to be UTC-based; to reliably capture
+                    # late-night ET games, also query the following UTC day.
+                    try:
+                        dt0 = datetime.strptime(date_str, "%Y%m%d")
+                        date_next = (dt0 + timedelta(days=1)).strftime("%Y%m%d")
+                    except Exception:
+                        date_next = None
+
+                    query_dates = [date_str] + ([date_next] if date_next else [])
+                    games = get_todays_games('ncaab', query_dates)
                     for g in games:
                         if not g.get('completed'):
                             continue
                         game_id = g.get('id') or g.get('game_id')
                         if not game_id:
                             continue
+                        if game_id in seen_game_ids:
+                            continue
+                        seen_game_ids.add(game_id)
 
                         # Our internal event ids are namespaced.
                         event_id = f"action:ncaam:{game_id}"
