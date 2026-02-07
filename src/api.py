@@ -305,6 +305,38 @@ async def get_latest_balance_snapshots(user: dict = Depends(get_current_user)):
     user_id = user.get("sub")
     return fetch_latest_balance_snapshots(user_id=str(user_id))
 
+
+@app.post("/api/balances/snapshots")
+async def add_balance_snapshot(request: Request):
+    """Manually add a balance snapshot (Basement key auth only).
+
+    Payload: { provider: 'FanDuel'|'DraftKings'|..., balance: number, captured_at?: iso, note?: str, source?: str }
+    """
+    try:
+        payload = await request.json()
+        provider = (payload or {}).get('provider')
+        balance = (payload or {}).get('balance')
+        if provider is None or balance is None:
+            raise HTTPException(status_code=400, detail='provider and balance are required')
+
+        from src.database import insert_balance_snapshot
+        from src.sync_jobs import DEFAULT_USER_ID
+
+        ok = insert_balance_snapshot({
+            'provider': provider,
+            'balance': float(balance),
+            'captured_at': payload.get('captured_at'),
+            'source': payload.get('source') or 'manual',
+            'note': payload.get('note'),
+            'raw_data': payload.get('raw_data'),
+            'user_id': DEFAULT_USER_ID,
+        })
+        return {'status': 'success' if ok else 'error'}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/api/stats/period")
 async def get_period_stats(days: Optional[int] = None, year: Optional[int] = None, user: dict = Depends(get_current_user)):
     user_id = user.get("sub")
