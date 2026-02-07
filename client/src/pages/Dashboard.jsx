@@ -11,29 +11,22 @@ const formatCurrency = (val) => {
 };
 
 export default function Dashboard({ financials, periodStats }) {
-  const [topPicks, setTopPicks] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [modelPerf, setModelPerf] = useState(null);
+  const [loadingPerf, setLoadingPerf] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
+  const loadPerf = async () => {
+    setLoadingPerf(true);
     try {
-      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-      const tpRes = await api.get('/api/ncaam/top-picks', { params: { date: today, days: 1, limit_games: 25 } });
-      const picksObj = tpRes.data?.picks || {};
-
-      const arr = Object.keys(picksObj)
-        .map((eid) => ({ event_id: eid, ...(picksObj[eid] || {}) }))
-        .filter(x => x.rec);
-
-      setTopPicks(arr);
+      const res = await api.get('/api/ncaam/performance-report', { params: { days: 30 } });
+      setModelPerf(res.data || null);
     } catch (e) {
-      setTopPicks([]);
+      setModelPerf(null);
     } finally {
-      setLoading(false);
+      setLoadingPerf(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { loadPerf(); }, []);
 
   const dk = (financials?.breakdown || []).find(x => x.provider === 'DraftKings');
   const fd = (financials?.breakdown || []).find(x => x.provider === 'FanDuel');
@@ -49,13 +42,13 @@ export default function Dashboard({ financials, periodStats }) {
       <div className="flex items-center gap-3">
         <div>
           <h1 className="text-2xl font-black text-white">Dashboard</h1>
-          <p className="text-slate-400 text-sm mt-1">Balances, performance, and today’s picks.</p>
+          <p className="text-slate-400 text-sm mt-1">Balances and high-level performance KPIs.</p>
         </div>
         <button
-          onClick={load}
+          onClick={loadPerf}
           className="ml-auto px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-bold flex items-center gap-2"
         >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Refresh picks
+          <RefreshCw size={16} className={loadingPerf ? 'animate-spin' : ''} /> Refresh KPIs
         </button>
       </div>
 
@@ -85,51 +78,34 @@ export default function Dashboard({ financials, periodStats }) {
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Today’s top picks (NCAAM)</h2>
-          <div className="text-xs text-slate-500">server-side generated</div>
+          <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Model KPIs (NCAAM)</h2>
+          <div className="text-xs text-slate-500">last 7d / 30d</div>
         </div>
 
-        {topPicks.length === 0 ? (
-          <div className="mt-3 text-slate-500 text-sm">No picks available yet.</div>
+        {(!modelPerf || !modelPerf.windows) ? (
+          <div className="mt-3 text-slate-500 text-sm">{loadingPerf ? 'Loading KPIs…' : 'No model KPI data yet.'}</div>
         ) : (
-          <div className="mt-3 overflow-x-auto border border-slate-800 rounded-xl">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-900/60 border-b border-slate-800">
-                <tr className="text-[10px] uppercase tracking-wider text-slate-500">
-                  <th className="py-2 px-3">Time (ET)</th>
-                  <th className="py-2 px-3">Matchup</th>
-                  <th className="py-2 px-3">Pick</th>
-                  <th className="py-2 px-3">EV%</th>
-                  <th className="py-2 px-3">Conf</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {topPicks.slice(0, 12).map((x) => {
-                  const st = x?.event?.start_time ? new Date(x.event.start_time) : null;
-                  const timeStr = st ? st.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '—';
-                  const matchup = (x?.event?.away_team && x?.event?.home_team)
-                    ? `${x.event.away_team} @ ${x.event.home_team}`
-                    : x.event_id;
-
-                  return (
-                    <tr key={x.event_id} className="hover:bg-slate-800/30">
-                      <td className="py-2 px-3 text-slate-300 font-mono text-xs whitespace-nowrap">{timeStr}</td>
-                      <td className="py-2 px-3 text-slate-200 font-bold">{matchup}</td>
-                      <td className="py-2 px-3 text-white font-bold">{x.rec?.selection}</td>
-                      <td className="py-2 px-3 text-green-300 font-mono font-bold">{(() => {
-                        const raw = x.rec?.edge;
-                        if (raw === null || raw === undefined) return '—';
-                        // edge is typically a string like "19.69%"; normalize to one decimal.
-                        const num = typeof raw === 'string' ? parseFloat(raw.replace('%', '')) : Number(raw);
-                        if (Number.isNaN(num)) return String(raw);
-                        return `${num.toFixed(1)}%`;
-                      })()}</td>
-                      <td className="py-2 px-3 text-slate-300">{x.rec?.confidence}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {(() => {
+              const w7 = modelPerf.windows?.['7d'];
+              const w30 = modelPerf.windows?.['30d'];
+              const kpis = [
+                { label: '7d Win%', value: `${(w7?.win_rate ?? 0).toFixed(1)}%` },
+                { label: '7d ROI', value: `${(w7?.roi_pct ?? 0).toFixed(1)}%` },
+                { label: '30d Win%', value: `${(w30?.win_rate ?? 0).toFixed(1)}%` },
+                { label: '30d ROI', value: `${(w30?.roi_pct ?? 0).toFixed(1)}%` },
+                { label: '30d Avg EV/u', value: `${(((w30?.avg_ev_per_unit ?? 0) * 100)).toFixed(1)}%` },
+                { label: '30d Avg CLV', value: (w30?.avg_clv_points ?? null) === null ? '—' : `${Number(w30.avg_clv_points).toFixed(2)}` },
+                { label: '30d +CLV Rate', value: (w30?.pos_clv_rate ?? null) === null ? '—' : `${Number(w30.pos_clv_rate).toFixed(1)}%` },
+                { label: '30d Decided', value: `${w30?.decided ?? 0}` },
+              ];
+              return kpis;
+            })().map((k, i) => (
+              <div key={i} className="bg-slate-950/30 border border-slate-800 rounded-xl p-4">
+                <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{k.label}</div>
+                <div className="mt-1 text-xl font-black text-white">{k.value}</div>
+              </div>
+            ))}
           </div>
         )}
       </div>
