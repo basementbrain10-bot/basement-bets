@@ -1437,21 +1437,94 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
             'start_time': st,
         }
 
+    import json
+    from dateutil.parser import parse as parse_date
+
+    def _dt(x):
+        if not x:
+            return None
+        if isinstance(x, str):
+            try:
+                return parse_date(x)
+            except Exception:
+                return None
+        if hasattr(x, 'isoformat'):
+            return x
+        return None
+
+    def _load_locked_pick(conn, eid: str):
+        """Load the most recent stored pick for an event (used once game starts)."""
+        row = _exec(
+            conn,
+            """
+            SELECT analyzed_at, outputs_json, selection, price, ev_per_unit, confidence_0_100, market_type
+            FROM model_predictions
+            WHERE event_id=%s
+            ORDER BY analyzed_at DESC
+            LIMIT 1
+            """,
+            (eid,),
+        ).fetchone()
+        if not row:
+            return None
+        r = dict(row)
+        rec = None
+        try:
+            out = json.loads(r.get('outputs_json') or '{}')
+            top = (out.get('recommendations') or [None])[0]
+            if top:
+                rec = top
+        except Exception:
+            rec = None
+
+        if not rec:
+            # Fallback: reconstruct a minimal rec
+            ev = float(r.get('ev_per_unit') or 0.0)
+            rec = {
+                'bet_type': r.get('market_type') or 'UNKNOWN',
+                'selection': r.get('selection') or '—',
+                'price': r.get('price'),
+                'edge': f"{(ev * 100.0):.2f}%",
+                'confidence': r.get('confidence_0_100'),
+            }
+        return {'rec': rec, 'analyzed_at': r.get('analyzed_at')}
+
     model = NCAAMMarketFirstModelV2()
     picks = {}
-    for eid in event_ids:
-        try:
-            res = model.analyze(eid)
-            top = (res.get('recommendations') or [None])[0]
-            if top:
-                picks[eid] = {
-                    "rec": top,
-                    "analyzed_at": res.get('analyzed_at'),
-                    "event": event_meta.get(eid),
-                }
-        except Exception as e:
-            # keep going; missing odds / missing torvik etc.
-            print(f"[top-picks] analyze failed for {eid}: {e}")
+
+    with get_db_connection() as conn:
+        now_dt = datetime.now(timezone.utc)
+        for eid in event_ids:
+            try:
+                st = _dt((event_meta.get(eid) or {}).get('start_time'))
+                if st and st.tzinfo is None:
+                    # assume UTC if naive
+                    st = st.replace(tzinfo=timezone.utc)
+
+                # Lock recommendation once game starts: return stored pick and do NOT re-analyze.
+                if st and st <= now_dt:
+                    locked = _load_locked_pick(conn, eid)
+                    if locked and locked.get('rec'):
+                        picks[eid] = {
+                            'rec': locked['rec'],
+                            'analyzed_at': locked.get('analyzed_at'),
+                            'event': event_meta.get(eid),
+                            'locked': True,
+                        }
+                        continue
+
+                res = model.analyze(eid)
+                top = (res.get('recommendations') or [None])[0]
+                if top:
+                    picks[eid] = {
+                        "rec": top,
+                        "analyzed_at": res.get('analyzed_at'),
+                        "event": event_meta.get(eid),
+                        'locked': False,
+                    }
+            except Exception as e:
+                # keep going; missing odds / missing torvik etc.
+                print(f"[top-picks] analyze failed for {eid}: {e}")
 
     data = {
         "generated_at": datetime.utcnow().isoformat() + "Z",
