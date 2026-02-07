@@ -406,11 +406,43 @@ class AnalyticsEngine:
         if user_id and user_id != self.user_id:
              bets = [b for b in self.bets if b.get('user_id') == user_id]
 
+        import re
+        from dateutil.parser import parse as parse_date
+
+        def to_day_key(s: str):
+            if not s:
+                return None
+            # Fast-path: already ISO date
+            if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+                return s
+            # If it looks like ISO datetime, keep date part
+            if re.match(r"^\d{4}-\d{2}-\d{2}T", s):
+                return s.split('T')[0]
+            # Otherwise try to parse; if it fails, skip (prevents bad curves)
+            try:
+                dt = parse_date(str(s), fuzzy=True)
+                return dt.strftime('%Y-%m-%d')
+            except Exception:
+                return None
+
         for b in bets:
             date_str = b.get('date', '')
-            if not date_str or date_str == 'Unknown': continue
-            day_key = date_str.split(' ')[0] if ' ' in date_str else date_str
-            daily_profit[day_key] += b['profit']
+            if not date_str or date_str == 'Unknown':
+                continue
+
+            day_key = to_day_key(date_str)
+            if not day_key:
+                continue
+
+            status = (b.get('status') or 'PENDING').upper()
+            wager = float(b.get('wager') or 0.0)
+            profit = float(b.get('profit') or 0.0)
+
+            # Bankroll impact: pending bets tie up stake; settled bets realize profit/loss.
+            if status in ('PENDING', 'OPEN'):
+                daily_profit[day_key] -= wager
+            else:
+                daily_profit[day_key] += profit
             
         # 2. Transactions (Deposits/Withdrawals) - graceful degradation if table missing
         query = "SELECT date, type, amount FROM transactions WHERE type IN ('Deposit', 'Withdrawal')"
@@ -420,8 +452,11 @@ class AnalyticsEngine:
                 cur.execute(query)
                 for r in cur.fetchall():
                     date_str = r['date']
-                    if not date_str: continue
-                    day_key = date_str.split(' ')[0] if ' ' in date_str else date_str
+                    if not date_str:
+                        continue
+                    day_key = to_day_key(date_str)
+                    if not day_key:
+                        continue
                     
                     if r['type'] == 'Deposit':
                         daily_deposits[day_key] += abs(float(r['amount']))
