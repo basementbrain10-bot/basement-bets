@@ -121,31 +121,51 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
     const handleSaveBatch = async () => {
         if (!batchResults) return;
         setIsSaving(true);
+        setError(null);
 
-        try {
-            // Loop and save
-            let successCount = 0;
-            for (const bet of batchResults) {
+        const failures = [];
+        let successCount = 0;
+
+        for (let i = 0; i < batchResults.length; i++) {
+            const bet = batchResults[i];
+            try {
                 await api.post('/api/bets/manual', {
                     ...bet,
                     // If scraper didn't set provider, use syncParams
-                    provider: bet.provider || syncParams?.provider || 'Unknown',
-                    sportsbook: sportsbook, // Use UI selection? Scraper usually sets provider text.
+                    provider: bet.provider || syncParams?.provider || (sportsbook === 'DK' ? 'DraftKings' : 'FanDuel') || 'Unknown',
+                    sportsbook: sportsbook,
                     account_id: bankrollAccount
                 });
                 successCount++;
+            } catch (err) {
+                const msg = err?.response?.data?.detail || err?.response?.data?.message || err?.message || 'Save failed';
+                failures.push({
+                    idx: i + 1,
+                    event_name: bet?.event_name || bet?.description || '—',
+                    status: bet?.status || '—',
+                    odds: bet?.price?.american ?? bet?.odds ?? '—',
+                    message: msg,
+                });
             }
+        }
 
-            setBatchResults(null);
+        if (successCount > 0) {
             if (onSaveSuccess) onSaveSuccess();
+        }
+
+        if (failures.length === 0) {
+            setBatchResults(null);
             alert(`Successfully saved ${successCount} bets!`);
             onClose();
-
-        } catch (err) {
-            setError('Failed to save some bets. Please try again.');
-        } finally {
-            setIsSaving(false);
+        } else {
+            // Keep batchResults so user can retry; show a helpful summary.
+            const preview = failures.slice(0, 6)
+                .map(f => `#${f.idx} ${f.event_name} (${f.status}) odds=${f.odds}: ${f.message}`)
+                .join('\n');
+            setError(`Saved ${successCount}/${batchResults.length} bets. ${failures.length} failed:\n${preview}${failures.length > 6 ? `\n…and ${failures.length - 6} more.` : ''}`);
         }
+
+        setIsSaving(false);
     };
 
     const handleParse = async () => {
