@@ -160,7 +160,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"message": f"Internal Server Error: {str(exc)}"},
     )
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # ... (Global Exception Handler above) ...
 
@@ -1345,11 +1345,26 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         if not eid:
             continue
         event_ids.append(eid)
+        st = d.get('start_time')
+        # Normalize to ISO string with UTC Z suffix so the frontend renders correct ET.
+        if hasattr(st, 'isoformat'):
+            try:
+                # If tz-aware, convert to UTC and emit Z.
+                if getattr(st, 'tzinfo', None) is not None:
+                    st = st.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+                else:
+                    st = st.isoformat() + 'Z'
+            except Exception:
+                st = st.isoformat()
+        elif isinstance(st, str):
+            if not st.endswith('Z') and '+' not in st:
+                st = st + 'Z'
+
         event_meta[eid] = {
             'id': eid,
             'home_team': d.get('home_team'),
             'away_team': d.get('away_team'),
-            'start_time': d.get('start_time'),
+            'start_time': st,
         }
 
     model = NCAAMMarketFirstModelV2()
