@@ -19,6 +19,9 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncParams, setSyncParams] = useState(null); // { provider: 'DraftKings' } or similar for batch save context
 
+    // On-demand worker UX
+    const [queuedSync, setQueuedSync] = useState(null); // { jobId, provider }
+
     // Core State
     const [sportsbook, setSportsbook] = useState('DK');
     const [rawText, setRawText] = useState('');
@@ -78,6 +81,8 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                 throw new Error('Failed to queue sync job');
             }
 
+            setQueuedSync({ jobId, provider });
+
             // Poll status for up to ~60s
             const start = Date.now();
             while (Date.now() - start < 60000) {
@@ -105,7 +110,7 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                 }
             }
 
-            setError('Sync queued but not finished yet. Check again in a minute.');
+            setError('Sync queued but not finished yet. Run the Mac worker command below, then click Re-check status.');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to sync. Ensure Chrome is installed and you logged in.');
         } finally {
@@ -313,6 +318,74 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                     <div className="flex items-start gap-3 p-4 bg-red-900/20 border border-red-900/50 rounded-lg text-red-200 text-sm">
                         <AlertCircle className="w-5 h-5 shrink-0" />
                         <p>{error}</p>
+                    </div>
+                )}
+
+                {queuedSync && (
+                    <div className="p-4 bg-slate-800/60 border border-slate-700 rounded-lg text-slate-200 text-sm space-y-2">
+                        <div className="text-xs uppercase tracking-wider text-slate-500 font-black">Run Mac worker (on demand)</div>
+                        <div className="text-xs text-slate-400">
+                            A sync job is queued for <span className="text-slate-200 font-bold">{queuedSync.provider}</span> (job #{queuedSync.jobId}).
+                            Run this on the Mac to process it, then click <span className="font-bold">Re-check status</span>.
+                        </div>
+                        <pre className="text-[11px] bg-black/30 border border-slate-700 rounded p-3 overflow-x-auto">cd ~/clawd/repos/basement-bets
+source .venv311/bin/activate
+python scripts/sync_worker.py --once</pre>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        await navigator.clipboard.writeText(`cd ~/clawd/repos/basement-bets\nsource .venv311/bin/activate\npython scripts/sync_worker.py --once\n`);
+                                    } catch (e) {
+                                        // ignore
+                                    }
+                                }}
+                                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold"
+                            >
+                                Copy command
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        const st = await api.get('/api/sync/status');
+                                        const jobs = st.data?.jobs || [];
+                                        const j = jobs.find(x => String(x.id) === String(queuedSync.jobId));
+                                        if (!j) {
+                                            setError('Job not found yet. Try again in a few seconds.');
+                                            return;
+                                        }
+                                        if (j.status === 'DONE') {
+                                            const fetched = j.meta?.bets_fetched ?? null;
+                                            const saved = j.meta?.bets_saved ?? null;
+                                            alert(`Sync complete (${queuedSync.provider}).${saved !== null ? ` Saved ${saved} bets.` : ''}${fetched !== null ? ` Fetched ${fetched}.` : ''}`);
+                                            if (onSaveSuccess) onSaveSuccess();
+                                            onClose();
+                                            return;
+                                        }
+                                        if (j.status === 'NEEDS_LOGIN') {
+                                            setError(`Login required on ${queuedSync.provider}. Open the sportsbook on the Mac worker and log in, then retry.`);
+                                            return;
+                                        }
+                                        if (j.status === 'ERROR') {
+                                            setError(j.error || 'Sync failed');
+                                            return;
+                                        }
+                                        setError(`Job status: ${j.status}`);
+                                    } catch (e) {
+                                        setError('Failed to check sync status.');
+                                    }
+                                }}
+                                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold"
+                            >
+                                Re-check status
+                            </button>
+                            <button
+                                onClick={() => setQueuedSync(null)}
+                                className="ml-auto px-3 py-2 bg-slate-900/40 hover:bg-slate-900 text-slate-200 border border-slate-700 rounded-lg text-xs font-bold"
+                            >
+                                Hide
+                            </button>
+                        </div>
                     </div>
                 )}
 
