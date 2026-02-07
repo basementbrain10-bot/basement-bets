@@ -526,7 +526,20 @@ const Research = ({ onAddBet }) => {
                                 {(() => {
                                     const rows = getProcessedEdges()
                                         .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null }))
-                                        .filter((x) => x.top);
+                                        .filter(({ top }) => {
+                                            if (!top) return false;
+                                            const bt = String(top.bet_type || '').toUpperCase();
+                                            const sel = String(top.selection || '').trim();
+                                            const edgeStr = String(top.edge ?? '').replace('%', '').trim();
+                                            const edgeNum = Number(edgeStr);
+
+                                            // Only show actionable recommendations (hide AUTO/blank/0-EV rows).
+                                            if (!bt || bt === 'AUTO') return false;
+                                            if (!sel || sel === '—') return false;
+                                            if (top.price === null || top.price === undefined) return false;
+                                            if (!Number.isFinite(edgeNum) || edgeNum <= 0) return false;
+                                            return true;
+                                        });
 
                                     if (!rows.length) {
                                         return <div className="text-slate-500">No recommendations available for this window.</div>;
@@ -585,7 +598,7 @@ const Research = ({ onAddBet }) => {
                                                                     </div>
                                                                 </td>
                                                                 <td className="py-2 px-3 text-slate-300 font-mono whitespace-nowrap">{odds}</td>
-                                                                <td className="py-2 px-3 text-green-300 font-mono font-bold whitespace-nowrap">+{top.edge}</td>
+                                                                <td className="py-2 px-3 text-green-300 font-mono font-bold whitespace-nowrap">{String(top.edge || '').startsWith('-') ? top.edge : `+${top.edge}`}</td>
                                                                 <td className="py-2 px-3 text-slate-300 whitespace-nowrap">{top.confidence}</td>
                                                                 <td className="py-2 px-3">
                                                                     <div className="flex justify-end gap-2">
