@@ -390,47 +390,44 @@ class AnalyticsEngine:
         return results
 
             
-    def get_time_series_profit(self, user_id=None):
-        """
-        Returns a day-by-day cumulative profit and balance series including transactions.
-        """
-        from datetime import datetime
-        from src.database import get_db_connection
-        
-        daily_profit = defaultdict(float) # Net bet profit per day
-        daily_deposits = defaultdict(float)
-        daily_withdrawals = defaultdict(float)
-        
-        # 1. Bets
-        bets = self.bets
-        if user_id and user_id != self.user_id:
-             bets = [b for b in self.bets if b.get('user_id') == user_id]
-
+    def _to_day_key(self, s: str):
         import re
         from dateutil.parser import parse as parse_date
 
-        def to_day_key(s: str):
-            if not s:
-                return None
-            # Fast-path: already ISO date
-            if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
-                return s
-            # If it looks like ISO datetime, keep date part
-            if re.match(r"^\d{4}-\d{2}-\d{2}T", s):
-                return s.split('T')[0]
-            # Otherwise try to parse; if it fails, skip (prevents bad curves)
-            try:
-                dt = parse_date(str(s), fuzzy=True)
-                return dt.strftime('%Y-%m-%d')
-            except Exception:
-                return None
+        if not s:
+            return None
+        # Fast-path: already ISO date
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", str(s)):
+            return str(s)
+        # If it looks like ISO datetime, keep date part
+        if re.match(r"^\d{4}-\d{2}-\d{2}T", str(s)):
+            return str(s).split('T')[0]
+        # Otherwise try to parse; if it fails, skip
+        try:
+            dt = parse_date(str(s), fuzzy=True)
+            return dt.strftime('%Y-%m-%d')
+        except Exception:
+            return None
+
+
+    def get_time_series_profit(self, user_id=None):
+        """Legacy time series including cashflows.
+
+        NOTE: This mixes betting performance with deposits/withdrawals.
+        Prefer get_time_series_settled_equity() for drawdown/strategy curves.
+        """
+        from src.database import get_db_connection
+
+        daily_profit = defaultdict(float)  # bankroll impact from bets (pending stake + settled profit)
+        daily_deposits = defaultdict(float)
+        daily_withdrawals = defaultdict(float)
+
+        bets = self.bets
+        if user_id and user_id != self.user_id:
+            bets = [b for b in self.bets if b.get('user_id') == user_id]
 
         for b in bets:
-            date_str = b.get('date', '')
-            if not date_str or date_str == 'Unknown':
-                continue
-
-            day_key = to_day_key(date_str)
+            day_key = self._to_day_key(b.get('date', ''))
             if not day_key:
                 continue
 
@@ -438,55 +435,85 @@ class AnalyticsEngine:
             wager = float(b.get('wager') or 0.0)
             profit = float(b.get('profit') or 0.0)
 
-            # Bankroll impact: pending bets tie up stake; settled bets realize profit/loss.
             if status in ('PENDING', 'OPEN'):
                 daily_profit[day_key] -= wager
             else:
                 daily_profit[day_key] += profit
-            
-        # 2. Transactions (Deposits/Withdrawals) - graceful degradation if table missing
+
+        # Transactions
         query = "SELECT date, type, amount FROM transactions WHERE type IN ('Deposit', 'Withdrawal')"
         try:
             with get_db_connection() as conn:
                 cur = conn.cursor()
                 cur.execute(query)
                 for r in cur.fetchall():
-                    date_str = r['date']
-                    if not date_str:
-                        continue
-                    day_key = to_day_key(date_str)
+                    day_key = self._to_day_key(r['date'])
                     if not day_key:
                         continue
-                    
                     if r['type'] == 'Deposit':
                         daily_deposits[day_key] += abs(float(r['amount']))
                     elif r['type'] == 'Withdrawal':
                         daily_withdrawals[day_key] += abs(float(r['amount']))
         except Exception as e:
-            # Transactions table may not exist yet - degrade gracefully
             print(f"[Analytics] Skipping transactions (table may not exist): {e}")
 
-        # Merge all dates
         all_dates = set(daily_profit.keys()) | set(daily_deposits.keys()) | set(daily_withdrawals.keys())
         sorted_dates = sorted(all_dates)
-        
+
         results = []
-        cumulative_profit = 0.0 # Realized logic
-        cumulative_balance = 0.0 # Total Money In Play logic
-        
+        cumulative_profit = 0.0
+        cumulative_balance = 0.0
+
         for date in sorted_dates:
             profit = daily_profit.get(date, 0)
             dep = daily_deposits.get(date, 0)
             wd = daily_withdrawals.get(date, 0)
-            
+
             cumulative_profit += (wd - dep + profit)
             cumulative_balance += (dep + profit - wd)
-            
+
             results.append({
                 "date": date,
                 "profit": round(profit, 2),
                 "cumulative": round(cumulative_profit, 2),
                 "balance": round(cumulative_balance, 2)
+            })
+        return results
+
+
+    def get_time_series_settled_equity(self, user_id=None):
+        """Settled-only betting equity curve (ignores deposits/withdrawals).
+
+        This is the curve we should use for drawdown (withdrawals are not drawdowns).
+        """
+        daily_profit = defaultdict(float)
+
+        bets = self.bets
+        if user_id and user_id != self.user_id:
+            bets = [b for b in self.bets if b.get('user_id') == user_id]
+
+        for b in bets:
+            status = (b.get('status') or 'PENDING').upper()
+            if status in ('PENDING', 'OPEN'):
+                continue
+
+            day_key = self._to_day_key(b.get('date', ''))
+            if not day_key:
+                continue
+
+            daily_profit[day_key] += float(b.get('profit') or 0.0)
+
+        sorted_dates = sorted(daily_profit.keys())
+        results = []
+        cum = 0.0
+        for d in sorted_dates:
+            p = daily_profit.get(d, 0.0)
+            cum += p
+            results.append({
+                "date": d,
+                "profit": round(p, 2),
+                "cumulative": round(cum, 2),
+                "balance": round(cum, 2),
             })
         return results
 
@@ -507,7 +534,8 @@ class AnalyticsEngine:
         """
         Calculates maximum drawdown from peak.
         """
-        series = self.get_time_series_profit(user_id=user_id)
+        # Drawdown should be strategy drawdown (settled bets only), not cashflow-driven.
+        series = self.get_time_series_settled_equity(user_id=user_id)
         if not series:
             return {"max_drawdown": 0.0, "current_drawdown": 0.0, "peak_profit": 0.0}
             

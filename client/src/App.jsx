@@ -10,7 +10,6 @@ console.log("Basement Bets Frontend v1.2.1 (Profit X-Axis) Loaded at " + new Dat
 import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
-import Dashboard from './pages/Dashboard';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 // import { StagingBanner } from './components/StagingBanner';
 
@@ -77,7 +76,7 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
-    const [view, setView] = useState('dashboard');
+    const [view, setView] = useState('performance');
     const [stats, setStats] = useState(null);
     const [bets, setBets] = useState([]);
     const [sportBreakdown, setSportBreakdown] = useState([]);
@@ -327,14 +326,14 @@ function App() {
                                 <h1 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
                                     Basement Bets
                                 </h1>
-                                <p className="text-gray-400">Your Historical Transaction Ledger</p>
+                                <p className="text-gray-400">Balances, performance, and the board.</p>
                             </div>        </div>
                         <div className="flex gap-2">
                             <button
-                                onClick={() => setView('dashboard')}
-                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'dashboard' ? 'bg-green-500 text-black font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
+                                onClick={() => setView('performance')}
+                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'performance' ? 'bg-blue-500 text-white font-bold shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
                             >
-                                <LayoutDashboard size={18} /> Dashboard
+                                <LayoutDashboard size={18} /> Overview
                             </button>
                             <button
                                 onClick={() => setView('transactions')}
@@ -350,9 +349,10 @@ function App() {
                             </button>
                             <button
                                 onClick={() => setView('performance')}
-                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'performance' ? 'bg-blue-500 text-white font-bold shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
+                                className="hidden"
+                                aria-hidden="true"
                             >
-                                <TrendingUp size={18} /> Performance
+                                Performance
                             </button>
                             <button
                                 onClick={handleSyncResults}
@@ -388,14 +388,12 @@ function App() {
                         </div>
                     )}
 
-                    {view === 'dashboard' ? (
-                        <Dashboard financials={financials} periodStats={periodStats} />
-                    ) : view === 'transactions' ? (
+                    {view === 'transactions' ? (
                         <TransactionView bets={bets} financials={financials} />
-                    ) : view === 'performance' ? (
-                        <PerformanceView timeSeries={timeSeries} drawdown={drawdown} financials={financials} />
-                    ) : (
+                    ) : view === 'research' ? (
                         <Research onAddBet={() => setShowAddBet(true)} />
+                    ) : (
+                        <PerformanceView timeSeries={timeSeries} drawdown={drawdown} financials={financials} periodStats={periodStats} />
                     )}
                 </div>
             </div>
@@ -403,7 +401,7 @@ function App() {
     );
 }
 
-function PerformanceView({ timeSeries, drawdown, financials }) {
+function PerformanceView({ timeSeries, drawdown, financials, periodStats }) {
     // Charts-only view (no daily picks feed here).
     if (!timeSeries || timeSeries.length === 0) {
         return (

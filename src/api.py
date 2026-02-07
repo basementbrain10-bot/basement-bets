@@ -228,7 +228,8 @@ async def get_stats(user: dict = Depends(get_current_user)):
 async def get_analytics_series(user: dict = Depends(get_current_user)):
     user_id = user.get("sub")
     engine = get_analytics_engine(user_id=user_id)
-    return engine.get_time_series_profit(user_id=user_id)
+    # Settled-only equity curve for performance tab.
+    return engine.get_time_series_settled_equity(user_id=user_id)
 
 @app.get("/api/analytics/drawdown")
 async def get_analytics_drawdown(user: dict = Depends(get_current_user)):
