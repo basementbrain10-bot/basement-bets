@@ -1830,32 +1830,23 @@ async def trigger_result_ingestion(league: str, date: Optional[str] = None, auth
 
     This keeps prod usable even when CRON_SECRET env isn't present.
     """
-    job_key = f"ingest_results_{league}"
-    from src.services.job_service import JobContext, JobLockedException
-    from src.parsers.espn_client import EspnClient
-    
+    # NOTE: We intentionally avoid JobContext here because result ingestion can take
+    # long (external API calls) and holding a DB connection open can lead to
+    # "connection already closed" errors in serverless.
     try:
-        with JobContext(job_key) as ctx:
-            client = EspnClient()
-            ingest_date = date if date and date.lower() != 'today' else None
-            
-            print(f"[JOB] Triggering result ingestion for {league} (date: {date or 'today'})")
-            # Fetch and Save
-            from src.services.grading_service import GradingService
-            service = GradingService()
-            # service._ingest_latest_scores calls fetch_scoreboard internally usually, 
-            # or we pass data. GradingService often encapsulates fetch+save.
-            # Assuming _ingest_latest_scores works.
-            service._ingest_latest_scores(league)
-            
-            return {
-                "status": "success",
-                "message": f"Ingested results for {league}",
-                "date": date or "today"
-            }
-            
-    except JobLockedException:
-        return {"status": "skipped", "reason": "Locked"}
+        ingest_date = date if date and date.lower() != 'today' else None
+        print(f"[JOB] Triggering result ingestion for {league} (date: {date or 'today'})")
+
+        from src.services.grading_service import GradingService
+        service = GradingService()
+        service._ingest_latest_scores(league)
+
+        return {
+            "status": "success",
+            "message": f"Ingested results for {league}",
+            "date": ingest_date or "today"
+        }
+
     except Exception as e:
         print(f"[JOB ERROR] Result ingestion failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
