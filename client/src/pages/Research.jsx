@@ -1024,12 +1024,35 @@ const Research = ({ onAddBet }) => {
                                                         </td>
                                                         <td className="py-2 px-4 font-medium text-sm text-slate-200">{item.away_team} @ {item.home_team}</td>
                                                         <td className="py-2 px-4 text-white font-bold">
-                                                            {mainRec.side} {mainRec.line || ''}
+                                                            {(() => {
+                                                                const side = mainRec.side;
+                                                                const line = mainRec.line;
+                                                                if (side && line !== null && line !== undefined && String(line).trim() !== '') {
+                                                                    const num = Number(line);
+                                                                    if (!Number.isNaN(num)) {
+                                                                        const signed = num > 0 ? `+${num}` : `${num}`;
+                                                                        return `${side} ${signed}`;
+                                                                    }
+                                                                }
+                                                                return `${side || ''} ${line || ''}`.trim();
+                                                            })()}
                                                         </td>
                                                         <td className="py-2 px-4 text-slate-400 text-xs">
                                                             <div className="flex flex-col">
-                                                                <span>Mkt: <span className="text-slate-300 font-mono">{mainRec.market_line || '-'}</span></span>
-                                                                <span>Fair: <span className="text-slate-500 font-mono">{mainRec.fair_line || item.bet_line || '-'}</span></span>
+                                                                <span>Mkt: <span className="text-slate-300 font-mono">{(() => {
+                                                                    const v = mainRec.market_line;
+                                                                    if (v === null || v === undefined || v === '') return '-';
+                                                                    const num = Number(v);
+                                                                    if (Number.isNaN(num)) return String(v);
+                                                                    return num > 0 ? `+${num}` : `${num}`;
+                                                                })()}</span></span>
+                                                                <span>Fair: <span className="text-slate-500 font-mono">{(() => {
+                                                                    const v = (mainRec.fair_line || item.bet_line);
+                                                                    if (v === null || v === undefined || v === '') return '-';
+                                                                    const num = Number(v);
+                                                                    if (Number.isNaN(num)) return String(v);
+                                                                    return num > 0 ? `+${num}` : `${num}`;
+                                                                })()}</span></span>
                                                             </div>
                                                         </td>
                                                         <td className={`py-2 px-4 font-bold ${getEdgeColor(item.edge || mainRec.edge, item.league)}`}>
