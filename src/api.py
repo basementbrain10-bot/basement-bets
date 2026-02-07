@@ -326,12 +326,14 @@ async def get_reconciliation(user: dict = Depends(get_current_user)):
 
 
 @app.post("/api/sync/fanduel/token")
-async def sync_fanduel_token(request: Request, user: dict = Depends(get_current_user)):
-    """
-    Syncs FanDuel history using a manually provided cURL or Token.
+async def sync_fanduel_token(request: Request):
+    """Sync FanDuel history using a manually provided cURL or Token.
+
+    Auth: Basement password (X-BASEMENT-KEY). Does NOT require Supabase auth.
     """
     try:
-        user_id = user.get("sub")
+        from src.sync_jobs import DEFAULT_USER_ID
+        user_id = DEFAULT_USER_ID
         data = await request.json()
         raw_input = data.get("curl_or_token", "")
         
@@ -1845,22 +1847,25 @@ async def get_model_health_report(request: Request):
 # --- Sync Endpoints ---
 
 @app.post("/api/sync/request")
-async def sync_request(payload: dict, user: dict = Depends(get_current_user)):
+async def sync_request(payload: dict):
     """Queue a sync job for the local Mac worker.
 
-Payload: {"provider": "draftkings"|"fanduel"}
-"""
-    from src.sync_jobs import create_sync_job
-    user_id = user.get("sub") or '00000000-0000-0000-0000-000000000000'
+    Auth: Basement password (X-BASEMENT-KEY). We intentionally do NOT require Supabase auth
+    because this app primarily uses the Basement key gate.
+
+    Payload: {"provider": "draftkings"|"fanduel"}
+    """
+    from src.sync_jobs import create_sync_job, DEFAULT_USER_ID
+
     provider = (payload or {}).get("provider")
-    job = create_sync_job(provider=provider, user_id=user_id)
+    job = create_sync_job(provider=provider, user_id=DEFAULT_USER_ID)
     return {"status": "queued", "job": job}
 
+
 @app.get("/api/sync/status")
-async def sync_status(user: dict = Depends(get_current_user)):
-    from src.sync_jobs import get_latest_jobs
-    user_id = user.get("sub") or '00000000-0000-0000-0000-000000000000'
-    return {"jobs": get_latest_jobs(user_id=user_id, limit=5)}
+async def sync_status():
+    from src.sync_jobs import get_latest_jobs, DEFAULT_USER_ID
+    return {"jobs": get_latest_jobs(user_id=DEFAULT_USER_ID, limit=10)}
 
 @app.post("/api/sync/draftkings")
 def sync_draftkings(payload: dict):
