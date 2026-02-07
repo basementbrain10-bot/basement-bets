@@ -69,21 +69,43 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
         setParsedData(null);
 
         try {
-            // Determine endpoint based on selected sportsbook
-            // Note: User selects DK/FD in dropdown. We use that.
+            // Background sync (Mac worker). Queue a job and poll status.
             const provider = sportsbook === 'DK' ? 'draftkings' : 'fanduel';
-            const endpoint = `/api/sync/${provider}`;
+            const q = await api.post('/api/sync/request', { provider });
 
-            const response = await api.post(endpoint, {
-                account_name: bankrollAccount
-            });
-
-            if (response.data.status === 'success') {
-                setBatchResults(response.data.bets);
-                setSyncParams({ provider: response.data.source });
-            } else {
-                setError(response.data.message || 'Sync failed');
+            const jobId = q.data?.job?.id;
+            if (!jobId) {
+                throw new Error('Failed to queue sync job');
             }
+
+            // Poll status for up to ~60s
+            const start = Date.now();
+            while (Date.now() - start < 60000) {
+                await new Promise(r => setTimeout(r, 2000));
+                const st = await api.get('/api/sync/status');
+                const jobs = st.data?.jobs || [];
+                const j = jobs.find(x => String(x.id) === String(jobId));
+                if (!j) continue;
+
+                if (j.status === 'DONE') {
+                    const fetched = j.meta?.bets_fetched ?? null;
+                    const saved = j.meta?.bets_saved ?? null;
+                    alert(`Sync complete (${provider}).${saved !== null ? ` Saved ${saved} bets.` : ''}${fetched !== null ? ` Fetched ${fetched}.` : ''}`);
+                    if (onSaveSuccess) onSaveSuccess();
+                    onClose();
+                    return;
+                }
+                if (j.status === 'NEEDS_LOGIN') {
+                    setError(`Login required on ${provider}. Open the sportsbook on the Mac worker and log in, then retry.`);
+                    return;
+                }
+                if (j.status === 'ERROR') {
+                    setError(j.error || 'Sync failed');
+                    return;
+                }
+            }
+
+            setError('Sync queued but not finished yet. Check again in a minute.');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to sync. Ensure Chrome is installed and you logged in.');
         } finally {
