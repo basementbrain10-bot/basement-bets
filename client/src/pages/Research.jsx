@@ -934,7 +934,7 @@ const Research = ({ onAddBet }) => {
 
                         {!loading && history.length === 0 && (
                             <div className="text-center py-10 text-slate-500">
-                                No history yet. Run models to auto-track.
+                                No history yet.
                             </div>
                         )}
 
@@ -1081,7 +1081,7 @@ const Research = ({ onAddBet }) => {
                                         {selectedGame.game}
                                     </h2>
                                     <div className="text-xs text-slate-400 mt-1 flex gap-2">
-                                        <span>{new Date(selectedGame.start_time).toLocaleString()}</span>
+                                        <span>{new Date(selectedGame.start_time).toLocaleString('en-US', { timeZone: 'America/New_York' })} ET</span>
                                         <span>•</span>
                                         <span className="uppercase font-bold">{selectedGame.sport} Analysis</span>
                                     </div>
