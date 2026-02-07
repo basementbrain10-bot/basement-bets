@@ -164,7 +164,13 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                 account_name: bankrollAccount
             });
 
-            setParsedData(response.data);
+            if (response.data?.bets && Array.isArray(response.data.bets)) {
+                setBatchResults(response.data.bets);
+                setSyncParams({ provider: sportsbook === 'DK' ? 'DraftKings' : 'FanDuel' });
+                setParsedData(null);
+            } else {
+                setParsedData(response.data);
+            }
         } catch (err) {
             setError(err.response?.data?.detail || err.response?.data?.message || 'Failed to parse slip. Please check the format.');
         } finally {

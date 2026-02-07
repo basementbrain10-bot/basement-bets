@@ -561,35 +561,54 @@ async def parse_slip(request: Request, user: dict = Depends(get_current_user)):
         raw_text = data.get("raw_text")
         sportsbook = normalize_provider(data.get("sportsbook", "DK"))
         
+        def _to_ui_schema(parsed: dict) -> dict:
+            return {
+                "event_name": parsed.get("description"),
+                "sport": parsed.get("sport"),
+                "market_type": parsed.get("bet_type"),
+                "selection": parsed.get("selection"),
+                "price": {"american": parsed.get("odds"), "decimal": None},
+                "stake": parsed.get("wager"),
+                "status": parsed.get("status", "PENDING"),
+                "placed_at": parsed.get("date"),
+                "confidence": 0.95,  # Fixed confidence for heuristic parsers
+                "is_live": parsed.get("is_live", False),
+                "is_bonus": parsed.get("is_bonus", False),
+                "profit": parsed.get("profit"),
+                "provider": parsed.get("provider", sportsbook),
+                "raw_text": parsed.get("raw_text"),
+            }
+
         if sportsbook == "DraftKings":
             from src.parsers.draftkings_text import DraftKingsTextParser
             parser = DraftKingsTextParser()
             results = parser.parse(raw_text)
-            if results:
-                parsed = results[0]
-                # Transform to frontend-expected schema
-                result = {
-                    "event_name": parsed.get("description"),
-                    "sport": parsed.get("sport"),
-                    "market_type": parsed.get("bet_type"),
-                    "selection": parsed.get("selection"),
-                    "price": {"american": parsed.get("odds"), "decimal": None},
-                    "stake": parsed.get("wager"),
-                    "status": parsed.get("status", "PENDING"),
-                    "placed_at": parsed.get("date"),
-                    "confidence": 0.95,  # Fixed confidence for regex parser
-                    "is_live": parsed.get("is_live", False),
-                    "is_bonus": parsed.get("is_bonus", False),
-                    "profit": parsed.get("profit"),
-                    "provider": parsed.get("provider", "DraftKings"),
-                    "raw_text": parsed.get("raw_text"),
-                }
-            else:
+            if not results:
                 raise Exception("Failed to parse DraftKings slip")
-        else:
-            from src.parsers.llm_parser import LLMSlipParser
-            parser = LLMSlipParser()
-            result = parser.parse(raw_text, sportsbook)
+
+            # If multiple bets were pasted, return a batch.
+            if len(results) > 1:
+                return {"bets": [_to_ui_schema(x) for x in results], "bets_found": len(results)}
+
+            return _to_ui_schema(results[0])
+
+        if sportsbook == "FanDuel":
+            from src.parsers.fanduel import FanDuelParser
+            parser = FanDuelParser()
+            results = parser.parse(raw_text)
+            if not results:
+                raise Exception("Failed to parse FanDuel slip")
+
+            # FanDuel settled-bets paste usually includes many bets.
+            if len(results) > 1:
+                return {"bets": [_to_ui_schema(x) for x in results], "bets_found": len(results)}
+
+            return _to_ui_schema(results[0])
+
+        # Fallback: LLM parser (single-bet)
+        from src.parsers.llm_parser import LLMSlipParser
+        parser = LLMSlipParser()
+        result = parser.parse(raw_text, sportsbook)
         
         # Add duplicate check
         user_id = user.get("sub")
