@@ -1453,12 +1453,77 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
             return x
         return None
 
+    def _normalize_rec(rec: dict) -> dict:
+        """Normalize recommendation objects to a stable UI schema.
+
+        UI expects keys like: bet_type, selection, market_line, price, edge, confidence.
+        """
+        if not rec:
+            return {"bet_type": "AUTO", "selection": "—", "price": None, "edge": "0.00%", "confidence": 0}
+
+        # Newer model format already matches
+        if rec.get('bet_type') is not None:
+            return rec
+
+        # Older/alternate format: {market, side, team, line, price, ev, ...}
+        market = (rec.get('market') or rec.get('market_type') or '').upper()
+        if market in ('SPREAD', 'TOTAL', 'MONEYLINE'):
+            bet_type = market
+        else:
+            bet_type = rec.get('bet_type') or 'AUTO'
+
+        line = rec.get('market_line')
+        if line is None:
+            line = rec.get('line')
+
+        price = rec.get('price')
+        edge = rec.get('edge')
+        if edge is None:
+            ev = rec.get('ev')
+            try:
+                if ev is not None:
+                    edge = f"{float(ev) * 100.0:.2f}%"
+            except Exception:
+                edge = None
+        if edge is None:
+            edge = "0.00%"
+
+        conf = rec.get('confidence')
+        if conf is None:
+            conf = rec.get('confidence_0_100')
+
+        selection = rec.get('selection')
+        if not selection:
+            side = rec.get('side')
+            team = rec.get('team')
+            if bet_type == 'SPREAD' and team is not None and line is not None:
+                try:
+                    n = float(line)
+                    selection = f"{team} {('+' if n > 0 else '')}{n:g}"
+                except Exception:
+                    selection = f"{team} {line}"
+            elif bet_type == 'TOTAL' and line is not None and side is not None:
+                selection = f"{str(side).upper()} {line}"
+            else:
+                selection = team or side or '—'
+
+        out = {
+            'bet_type': bet_type,
+            'selection': selection,
+            'market_line': line,
+            'price': price,
+            'edge': edge,
+            'confidence': conf,
+            'book': rec.get('book')
+        }
+        return out
+
     def _load_locked_pick(conn, eid: str):
         """Load the most recent stored pick for an event (used once game starts)."""
         row = _exec(
             conn,
             """
-            SELECT analyzed_at, outputs_json, selection, price, ev_per_unit, confidence_0_100, market_type
+            SELECT analyzed_at, outputs_json, selection, price, ev_per_unit, confidence_0_100, market_type, bet_line, bet_price
             FROM model_predictions
             WHERE event_id=%s
             ORDER BY analyzed_at DESC
@@ -1481,14 +1546,18 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         if not rec:
             # Fallback: reconstruct a minimal rec
             ev = float(r.get('ev_per_unit') or 0.0)
+            line = r.get('bet_line')
+            price = r.get('bet_price')
             rec = {
-                'bet_type': r.get('market_type') or 'UNKNOWN',
+                'bet_type': r.get('market_type') or 'AUTO',
                 'selection': r.get('selection') or '—',
-                'price': r.get('price'),
+                'market_line': line,
+                'price': price,
                 'edge': f"{(ev * 100.0):.2f}%",
                 'confidence': r.get('confidence_0_100'),
             }
-        return {'rec': rec, 'analyzed_at': r.get('analyzed_at')}
+
+        return {'rec': _normalize_rec(rec), 'analyzed_at': r.get('analyzed_at')}
 
     model = NCAAMMarketFirstModelV2()
     picks = {}
@@ -1518,7 +1587,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                 top = (res.get('recommendations') or [None])[0]
                 if top:
                     picks[eid] = {
-                        "rec": top,
+                        "rec": _normalize_rec(top),
                         "analyzed_at": res.get('analyzed_at'),
                         "event": event_meta.get(eid),
                         'locked': False,
