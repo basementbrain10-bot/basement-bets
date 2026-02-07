@@ -690,6 +690,10 @@ async def save_manual_bet(request: Request, user: dict = Depends(get_current_use
             "description": bet_data.get("event_name"),
             "selection": bet_data.get("selection"),
             "odds": american_odds,
+            # Optional: closing odds (used by DB insert; default None)
+            "closing_odds": (bet_data.get("closing_odds")
+                             or (bet_data.get("closing_price") or {}).get("american")
+                             or None),
             "is_live": bet_data.get("is_live", False),
             "is_bonus": bet_data.get("is_bonus", False),
             "raw_text": bet_data.get("raw_text")
