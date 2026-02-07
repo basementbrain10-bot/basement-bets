@@ -151,8 +151,13 @@ def get_todays_games(sport, dates_or_weeks, headers=None):
                 # EXTENSION: Map Status
                 # Action Network status: 'scheduled', 'inprogress', 'complete', 'closed'
                 raw_status = game.get('status', 'scheduled')
-                event['status'] = raw_status # Keep raw for reference
-                if raw_status in ['complete', 'closed', 'final']:
+                event['status'] = raw_status  # Keep raw for reference
+                try:
+                    st = str(raw_status or '').lower().strip()
+                except Exception:
+                    st = ''
+                # Action Network statuses vary ('complete' vs 'completed').
+                if st in ['complete', 'completed', 'closed', 'final']:
                     event['completed'] = True
                     
                 # EXTENSION: Add flat metrics for CSV script
