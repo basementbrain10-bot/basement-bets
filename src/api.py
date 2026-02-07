@@ -1916,17 +1916,19 @@ async def trigger_settlement_reconcile(request: Request, league: Optional[str] =
 
 @app.post("/api/jobs/grade_predictions")
 async def trigger_prediction_grading():
-    """
-    Cron Job / Manual Trigger: Grades model predictions using local game results.
+    """Cron/manual: grade model_predictions using local game_results.
+
+    NOTE: AutoGrader is legacy and expects old column names (matchup/bet_on/etc).
+    We use GradingService which matches the current model_predictions schema.
     """
     try:
-        from src.models.auto_grader import AutoGrader
-        grader = AutoGrader()
-        results = grader.grade_pending_picks()
+        from src.services.grading_service import GradingService
+        svc = GradingService()
+        res = svc.grade_predictions()
         return {
             "status": "success",
             "message": "Prediction grading completed",
-            "results": results
+            "results": res
         }
     except Exception as e:
         print(f"[JOB ERROR] Prediction grading failed: {e}")
