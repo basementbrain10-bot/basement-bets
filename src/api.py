@@ -1866,12 +1866,14 @@ async def ncaam_performance_report(days: int = 30):
 
 
 @app.get("/api/ncaam/analytics")
-async def get_ncaam_analytics(days: int = 30):
-    """
-    Returns aggregated performance stats (Win Rate, ROI, Edge, etc.)
+async def get_ncaam_analytics(days: int = 30, min_ev_per_unit: float = 0.02):
+    """Aggregated model performance stats for NCAAM.
+
+    IMPORTANT: This is *model* performance, not bankroll.
+    Default filter is "recommended" only via min_ev_per_unit (>= 0.02 => 2% EV/u).
     """
     from src.database import get_db_connection, _exec
-    
+
     query = """
     SELECT 
         COUNT(*) as total_bets,
@@ -1882,31 +1884,98 @@ async def get_ncaam_analytics(days: int = 30):
         AVG(edge_points) FILTER (WHERE outcome NOT IN ('PENDING', 'VOID')) as avg_edge,
         AVG(ev_per_unit) FILTER (WHERE outcome NOT IN ('PENDING', 'VOID')) as avg_ev,
         AVG(clv_points) FILTER (WHERE outcome NOT IN ('PENDING', 'VOID')) as avg_clv
-    FROM model_predictions
-    WHERE analyzed_at > NOW() - (INTERVAL '1 day' * :days)
+    FROM model_predictions m
+    JOIN events e ON m.event_id=e.id
+    WHERE e.league='NCAAM'
+      AND m.analyzed_at > NOW() - (INTERVAL '1 day' * :days)
+      AND COALESCE(m.ev_per_unit, 0) >= :min_ev
     """
-    
+
     try:
         with get_db_connection() as conn:
-            row = _exec(conn, query, {"days": days}).fetchone()
+            row = _exec(conn, query, {"days": days, "min_ev": float(min_ev_per_unit)}).fetchone()
             if not row:
                 return {}
-            
+
             stats = dict(row)
             decided = (stats['wins'] or 0) + (stats['losses'] or 0)
             stats['win_rate'] = (stats['wins'] / decided * 100) if decided > 0 else 0.0
-            
-            if decided > 0:
-                units = (stats['wins'] * 0.909) - stats['losses']
-                stats['roi_est'] = (units / decided) * 100
-            else:
-                stats['roi_est'] = 0.0
-                
+
             return stats
-            
+
     except Exception as e:
         print(f"[Analytics] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ncaam/model-performance/series")
+async def get_ncaam_model_performance_series(days: int = 30, min_ev_per_unit: float = 0.02):
+    """Daily model performance series for *recommended bets only*.
+
+    Returns cumulative units curve based on realized outcomes.
+    """
+    from src.database import get_db_connection, _exec
+
+    def payout_per_unit(price: int) -> float:
+        if price is None:
+            price = -110
+        p = int(price)
+        return (p / 100.0) if p > 0 else (100.0 / abs(p))
+
+    def roi_per_unit(outcome: str, price: int) -> float:
+        o = (outcome or '').upper()
+        if o == 'WON':
+            return payout_per_unit(price)
+        if o == 'LOST':
+            return -1.0
+        if o == 'PUSH':
+            return 0.0
+        return 0.0
+
+    days = max(3, min(int(days or 30), 180))
+
+    with get_db_connection() as conn:
+        rows = _exec(conn, """
+          SELECT
+            (m.analyzed_at AT TIME ZONE 'America/New_York')::date::text as day_et,
+            m.outcome,
+            COALESCE(m.bet_price, -110) as price
+          FROM model_predictions m
+          JOIN events e ON m.event_id=e.id
+          WHERE e.league='NCAAM'
+            AND m.analyzed_at > NOW() - (%(d)s || ' days')::interval
+            AND COALESCE(m.ev_per_unit, 0) >= %(min_ev)s
+            AND (m.outcome IN ('WON','LOST','PUSH'))
+          ORDER BY day_et ASC
+        """, {"d": int(days), "min_ev": float(min_ev_per_unit)}).fetchall()
+
+    by_day = {}
+    for r in rows:
+        day = r['day_et']
+        by_day.setdefault(day, {"day": day, "units": 0.0, "n": 0})
+        by_day[day]["units"] += roi_per_unit(r['outcome'], r['price'])
+        by_day[day]["n"] += 1
+
+    # build ordered series and cumulative
+    series = []
+    cum = 0.0
+    for day in sorted(by_day.keys()):
+        u = float(by_day[day]["units"])
+        cum += u
+        series.append({
+            "day": day,
+            "units": round(u, 3),
+            "n": int(by_day[day]["n"]),
+            "cum_units": round(cum, 3),
+        })
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + 'Z',
+        "league": 'NCAAM',
+        "days": int(days),
+        "min_ev_per_unit": float(min_ev_per_unit),
+        "series": series,
+    }
 
 
 @app.api_route("/api/jobs/ingest_events/{league}", methods=["GET", "POST"])

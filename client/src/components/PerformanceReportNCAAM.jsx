@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { RefreshCw } from 'lucide-react';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
 const fmtPct = (x) => (x === null || x === undefined) ? '—' : `${x >= 0 ? '+' : ''}${Number(x).toFixed(1)}%`;
 const fmtOdds = (p) => (p === null || p === undefined) ? '—' : `${Number(p) > 0 ? '+' : ''}${p}`;
@@ -14,6 +15,7 @@ const fmtNum = (x, d = 2) => (x === null || x === undefined) ? '—' : Number(x)
 
 export default function PerformanceReportNCAAM() {
   const [data, setData] = useState(null);
+  const [series, setSeries] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -21,8 +23,12 @@ export default function PerformanceReportNCAAM() {
     setLoading(true);
     setErr(null);
     try {
-      const res = await api.get('/api/ncaam/performance-report', { params: { days: 30 } });
-      setData(res.data);
+      const [rep, ser] = await Promise.all([
+        api.get('/api/ncaam/performance-report', { params: { days: 30 } }),
+        api.get('/api/ncaam/model-performance/series', { params: { days: 30, min_ev_per_unit: 0.02 } }),
+      ]);
+      setData(rep.data);
+      setSeries(ser.data);
     } catch (e) {
       setErr(e?.response?.data?.detail || e?.message || 'Failed to load report');
     } finally {
@@ -118,8 +124,35 @@ export default function PerformanceReportNCAAM() {
 
           <div className="mt-6">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Daily recommended bets</h3>
-              <div className="text-xs text-slate-500">(table; includes finals when graded)</div>
+              <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Model performance (recommended bets only)</h3>
+              <div className="text-xs text-slate-500">EV gate: ≥2% EV/u • cumulative units</div>
+            </div>
+
+            <div className="bg-slate-800/40 border border-slate-800 rounded-xl p-4">
+              {(!series || !(series.series || []).length) ? (
+                <div className="text-slate-500 text-sm">{loading ? 'Loading…' : 'No graded recommended bets in range yet.'}</div>
+              ) : (
+                <div className="h-[220px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={series.series} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                      <XAxis dataKey="day" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{ background: '#0b1220', border: '1px solid #334155', color: '#e2e8f0' }}
+                        labelStyle={{ color: '#94a3b8' }}
+                        formatter={(v, name) => [v, name === 'cum_units' ? 'Cum Units' : name]}
+                      />
+                      <Line type="monotone" dataKey="cum_units" stroke="#22c55e" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Daily recommended bets (graded)</h3>
+              <div className="text-xs text-slate-500">(table; shows outcome/ROI when finals ingested)</div>
             </div>
 
             <div className="overflow-x-auto border border-slate-800 rounded-xl">
