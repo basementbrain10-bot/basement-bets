@@ -62,7 +62,7 @@ const Research = ({ onAddBet }) => {
                     return { data: {} };
                 }),
                 (leagueFilter === 'NCAAM'
-                    ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 40 } }).catch(() => ({ data: null }))
+                    ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 200 } }).catch(() => ({ data: null }))
                     : Promise.resolve({ data: null })
                 )
             ]);
