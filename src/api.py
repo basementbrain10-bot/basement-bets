@@ -1381,7 +1381,9 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         limit_games = int(limit_games)
     except Exception:
         limit_games = 25
-    limit_games = max(1, min(limit_games, 60))
+    # Allow the UI to request larger slates on busy Saturdays.
+    # Still capped to keep this endpoint from becoming too expensive.
+    limit_games = max(1, min(limit_games, 250))
 
     cache_key = f"{date}:{days}:{limit_games}"
     now = datetime.now()
