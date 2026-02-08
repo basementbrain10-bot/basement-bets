@@ -1939,7 +1939,8 @@ async def get_ncaam_model_performance_series(days: int = 30, min_ev_per_unit: fl
           SELECT
             (m.analyzed_at AT TIME ZONE 'America/New_York')::date::text as day_et,
             m.outcome,
-            COALESCE(m.bet_price, -110) as price
+            COALESCE(m.bet_price, -110) as price,
+            COALESCE(m.confidence_0_100, 0) as c0
           FROM model_predictions m
           JOIN events e ON m.event_id=e.id
           WHERE e.league='NCAAM'
@@ -1949,24 +1950,55 @@ async def get_ncaam_model_performance_series(days: int = 30, min_ev_per_unit: fl
           ORDER BY day_et ASC
         """, {"d": int(days), "min_ev": float(min_ev_per_unit)}).fetchall()
 
+    def bucket(c0: int) -> str:
+        try:
+            n = int(c0 or 0)
+        except Exception:
+            n = 0
+        if n >= 80:
+            return 'high'
+        if n >= 50:
+            return 'medium'
+        return 'low'
+
     by_day = {}
     for r in rows:
         day = r['day_et']
-        by_day.setdefault(day, {"day": day, "units": 0.0, "n": 0})
-        by_day[day]["units"] += roi_per_unit(r['outcome'], r['price'])
+        b = bucket(r.get('c0'))
+        by_day.setdefault(day, {"day": day, "units": 0.0, "n": 0, "units_high": 0.0, "n_high": 0, "units_medium": 0.0, "n_medium": 0, "units_low": 0.0, "n_low": 0})
+        u = roi_per_unit(r['outcome'], r['price'])
+        by_day[day]["units"] += u
         by_day[day]["n"] += 1
+        if b == 'high':
+            by_day[day]["units_high"] += u
+            by_day[day]["n_high"] += 1
+        elif b == 'medium':
+            by_day[day]["units_medium"] += u
+            by_day[day]["n_medium"] += 1
+        else:
+            by_day[day]["units_low"] += u
+            by_day[day]["n_low"] += 1
 
-    # build ordered series and cumulative
+    # build ordered series and cumulative (overall + buckets)
     series = []
-    cum = 0.0
+    cum = cum_h = cum_m = cum_l = 0.0
     for day in sorted(by_day.keys()):
-        u = float(by_day[day]["units"])
-        cum += u
+        d = by_day[day]
+        cum += float(d["units"])
+        cum_h += float(d["units_high"])
+        cum_m += float(d["units_medium"])
+        cum_l += float(d["units_low"])
         series.append({
             "day": day,
-            "units": round(u, 3),
-            "n": int(by_day[day]["n"]),
+            "units": round(float(d["units"]), 3),
+            "n": int(d["n"]),
             "cum_units": round(cum, 3),
+            "cum_units_high": round(cum_h, 3),
+            "cum_units_medium": round(cum_m, 3),
+            "cum_units_low": round(cum_l, 3),
+            "n_high": int(d["n_high"]),
+            "n_medium": int(d["n_medium"]),
+            "n_low": int(d["n_low"]),
         })
 
     return {

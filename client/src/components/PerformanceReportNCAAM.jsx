@@ -143,7 +143,10 @@ export default function PerformanceReportNCAAM() {
                         labelStyle={{ color: '#94a3b8' }}
                         formatter={(v, name) => [v, name === 'cum_units' ? 'Cum Units' : name]}
                       />
-                      <Line type="monotone" dataKey="cum_units" stroke="#22c55e" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="cum_units" stroke="#22c55e" strokeWidth={2} dot={false} name="All" />
+                      <Line type="monotone" dataKey="cum_units_high" stroke="#60a5fa" strokeWidth={2} dot={false} name="High" />
+                      <Line type="monotone" dataKey="cum_units_medium" stroke="#fbbf24" strokeWidth={2} dot={false} name="Medium" />
+                      <Line type="monotone" dataKey="cum_units_low" stroke="#a78bfa" strokeWidth={2} dot={false} name="Low" />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
