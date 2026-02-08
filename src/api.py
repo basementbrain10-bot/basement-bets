@@ -1784,6 +1784,7 @@ async def ncaam_performance_report(days: int = 30):
             m.bet_price,
             m.ev_per_unit,
             m.confidence_0_100,
+            m.clv_points,
             m.outcome,
             gr.home_score,
             gr.away_score,
@@ -1809,6 +1810,10 @@ async def ncaam_performance_report(days: int = 30):
         if hs is not None and aw is not None:
             score = f"{aw}-{hs}"  # away-home
 
+        price = r['bet_price'] if r.get('bet_price') is not None else -110
+        o = (r.get('outcome') or '').upper()
+        roi_u = roi_per_unit(o, price) if o in ('WON','LOST','PUSH') else None
+
         by_day[day].append({
             "event_id": r['event_id'],
             "matchup": f"{r['away_team']} @ {r['home_team']}",
@@ -1819,7 +1824,9 @@ async def ncaam_performance_report(days: int = 30):
             "price": r['bet_price'],
             "ev_per_unit": float(r['ev_per_unit'] or 0.0),
             "confidence_0_100": int(r['confidence_0_100'] or 0),
+            "clv_points": float(r['clv_points']) if r.get('clv_points') is not None else None,
             "outcome": r['outcome'],
+            "roi_per_unit": float(roi_u) if roi_u is not None else None,
             "final": bool(final) if final is not None else None,
             "final_score": score,
         })
@@ -1829,6 +1836,23 @@ async def ncaam_performance_report(days: int = 30):
         for d in sorted(by_day.keys(), reverse=True)
     ]
 
+    # Pending / coverage summary
+    with get_db_connection() as conn:
+        cov = _exec(conn, """
+          SELECT
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE (m.outcome IS NULL OR m.outcome='PENDING')) as pending,
+            COUNT(*) FILTER (WHERE (m.outcome IN ('WON','LOST','PUSH'))) as decided,
+            COUNT(*) FILTER (WHERE (m.outcome IS NULL OR m.outcome='PENDING') AND gr.final=TRUE) as pending_but_final_available
+          FROM model_predictions m
+          JOIN events e ON m.event_id=e.id
+          LEFT JOIN game_results gr ON gr.event_id=m.event_id
+          WHERE e.league='NCAAM'
+            AND m.analyzed_at > NOW() - (%(d)s || ' days')::interval
+            AND m.selection IS NOT NULL AND m.selection <> '' AND m.pick IS NOT NULL AND m.pick <> 'NONE'
+        """, {"d": int(days)}).fetchone()
+    coverage = dict(cov) if cov else {}
+
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "league": "NCAAM",
@@ -1836,6 +1860,7 @@ async def ncaam_performance_report(days: int = 30):
             "7d": window_stats(7),
             "30d": window_stats(30),
         },
+        "coverage": coverage,
         "daily_recommended_bets": daily,
     }
 

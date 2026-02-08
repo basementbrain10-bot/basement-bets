@@ -4,6 +4,13 @@ import { RefreshCw } from 'lucide-react';
 
 const fmtPct = (x) => (x === null || x === undefined) ? '—' : `${x >= 0 ? '+' : ''}${Number(x).toFixed(1)}%`;
 const fmtOdds = (p) => (p === null || p === undefined) ? '—' : `${Number(p) > 0 ? '+' : ''}${p}`;
+const confLabel = (c0) => {
+  const n = Number(c0 || 0);
+  if (n >= 80) return 'High';
+  if (n >= 50) return 'Medium';
+  return 'Low';
+};
+const fmtNum = (x, d = 2) => (x === null || x === undefined) ? '—' : Number(x).toFixed(d);
 
 export default function PerformanceReportNCAAM() {
   const [data, setData] = useState(null);
@@ -82,16 +89,31 @@ export default function PerformanceReportNCAAM() {
                     </div>
                     <div>
                       <div className="text-slate-400 text-xs">Avg EV/u</div>
-                      <div className="text-white font-mono font-bold">{w.avg_ev_per_unit}</div>
+                      <div className="text-white font-mono font-bold">{fmtNum((w.avg_ev_per_unit ?? 0) * 100, 1)}%</div>
                     </div>
                     <div>
-                      <div className="text-slate-400 text-xs">Avg CLV</div>
+                      <div className="text-slate-400 text-xs">Avg CLV (pts)</div>
                       <div className="text-white font-mono font-bold">{w.avg_clv_points ?? '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-xs">+CLV Rate</div>
+                      <div className="text-white font-mono font-bold">{w.pos_clv_rate ?? '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-slate-400 text-xs">Decided</div>
+                      <div className="text-white font-mono font-bold">{w.decided ?? 0}</div>
                     </div>
                   </div>
                 </div>
               );
             })}
+          </div>
+
+          <div className="mt-4 text-xs text-slate-500">
+            Coverage (last 30d): {data?.coverage?.decided ?? 0} decided • {data?.coverage?.pending ?? 0} pending
+            {Number(data?.coverage?.pending_but_final_available || 0) > 0 ? (
+              <span className="text-yellow-300"> • {data.coverage.pending_but_final_available} pending but finals exist (grading lag)</span>
+            ) : null}
           </div>
 
           <div className="mt-6">
@@ -110,13 +132,15 @@ export default function PerformanceReportNCAAM() {
                     <th className="py-2 px-3">Odds</th>
                     <th className="py-2 px-3">EV%</th>
                     <th className="py-2 px-3">Conf</th>
+                    <th className="py-2 px-3">CLV</th>
+                    <th className="py-2 px-3">ROI/u</th>
                     <th className="py-2 px-3">Outcome</th>
                     <th className="py-2 px-3">Final</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {rows.length === 0 ? (
-                    <tr><td className="py-4 px-3 text-slate-500" colSpan={8}>No picks in range.</td></tr>
+                    <tr><td className="py-4 px-3 text-slate-500" colSpan={10}>No picks in range.</td></tr>
                   ) : rows.map((p) => {
                     const evPct = Math.round((p.ev_per_unit || 0) * 1000) / 10;
                     const out = (p.outcome || '').toUpperCase();
@@ -128,7 +152,9 @@ export default function PerformanceReportNCAAM() {
                         <td className="py-2 px-3 text-white font-bold">{p.selection}</td>
                         <td className="py-2 px-3 text-slate-300 font-mono">{fmtOdds(p.price)}</td>
                         <td className="py-2 px-3 text-green-300 font-mono font-bold">{evPct}%</td>
-                        <td className="py-2 px-3 text-slate-400">{p.confidence_0_100}</td>
+                        <td className="py-2 px-3 text-slate-200 font-bold">{confLabel(p.confidence_0_100)}</td>
+                        <td className="py-2 px-3 text-slate-300 font-mono">{p.clv_points === null || p.clv_points === undefined ? '—' : fmtNum(p.clv_points, 2)}</td>
+                        <td className="py-2 px-3 text-slate-300 font-mono">{p.roi_per_unit === null || p.roi_per_unit === undefined ? '—' : fmtNum(p.roi_per_unit, 2)}</td>
                         <td className={`py-2 px-3 font-bold ${outCls}`}>{out || 'PENDING'}</td>
                         <td className="py-2 px-3 text-slate-300 font-mono">{p.final_score || '—'}</td>
                       </tr>
