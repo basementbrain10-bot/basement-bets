@@ -154,6 +154,7 @@ class GradingService:
 
         Bounded for serverless execution.
         """
+        min_ev = float(os.getenv('GRADING_MIN_EV_PER_UNIT', '0.02'))
         query = """
         SELECT m.id, m.event_id, m.market_type, m.pick, m.open_line, m.open_price, e.start_time, e.league
         FROM model_predictions m
@@ -161,12 +162,13 @@ class GradingService:
         WHERE m.close_line IS NULL 
           AND e.start_time < CURRENT_TIMESTAMP
           AND e.start_time > (CURRENT_TIMESTAMP - (%(d)s || ' days')::interval)
+          AND COALESCE(m.ev_per_unit, 0) >= %(min_ev)s
         ORDER BY e.start_time DESC
         LIMIT %(lim)s
         """
         
         with get_db_connection() as conn:
-            rows = _exec(conn, query, {"d": int(lookback_days), "lim": int(max_rows)}).fetchall()
+            rows = _exec(conn, query, {"d": int(lookback_days), "lim": int(max_rows), "min_ev": float(min_ev)}).fetchall()
             
         updates = 0
         now = datetime.now() # naive or tz aware? DB timestamps usually naive UTC or similar in this app
@@ -359,6 +361,7 @@ class GradingService:
 
         Bounded for serverless execution.
         """
+        min_ev = float(os.getenv('GRADING_MIN_EV_PER_UNIT', '0.02'))
         query = """
         SELECT m.id, m.market_type, m.pick, m.bet_line, m.book,
                e.home_team, e.away_team,
@@ -368,12 +371,13 @@ class GradingService:
         JOIN game_results gr ON e.id = gr.event_id
         WHERE (m.outcome = 'PENDING' OR m.outcome IS NULL)
           AND gr.final = TRUE
+          AND COALESCE(m.ev_per_unit, 0) >= %(min_ev)s
         ORDER BY m.analyzed_at DESC
         LIMIT %(lim)s
         """
 
         with get_db_connection() as conn:
-            rows = _exec(conn, query, {"lim": int(max_rows)}).fetchall()
+            rows = _exec(conn, query, {"lim": int(max_rows), "min_ev": float(min_ev)}).fetchall()
             
         print(f"[GRADING] Found {len(rows)} pending bets with final scores.")
         
