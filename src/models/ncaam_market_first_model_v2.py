@@ -1084,39 +1084,54 @@ class NCAAMMarketFirstModelV2(BaseModel):
     def _normal_cdf(self, x, mu, sigma):
         return 0.5 * (1 + math.erf((x - mu) / (sigma * math.sqrt(2))))
 
+    def _sanitize_price(self, price: Any) -> int:
+        """Normalize/validate American odds.
+
+        We occasionally ingest malformed odds like -9 (missing trailing 0) which would
+        produce absurd payouts/EV. If odds are not plausible, default to -110.
+        """
+        try:
+            if price is None:
+                return -110
+            p = int(price)
+        except Exception:
+            return -110
+
+        # Typical American odds are <= -100 or >= +100.
+        # Treat anything in (-100, 100) as malformed and default.
+        if -100 < p < 100:
+            return -110
+        return p
+
+    def _clamp_prob(self, win_prob: Any) -> float:
+        try:
+            p = float(win_prob)
+        except Exception:
+            return 0.5
+        if p < 0.0:
+            return 0.0
+        if p > 1.0:
+            return 1.0
+        return p
+
     def _calculate_ev(self, win_prob, price):
-        """
-        Calculate Estimated Value (ROI)
-        EV = (Win_Prob * Profit) - (Loss_Prob * Wager)
-        Normalized to 1 unit wager.
-        """
-        if price > 0:
-            payout = price / 100.0
-        else:
-            payout = 100.0 / abs(price)
-            
-        ev = (win_prob * payout) - (1.0 - win_prob)
+        """Estimated Value (ROI) per 1u risked."""
+        p = self._clamp_prob(win_prob)
+        price = self._sanitize_price(price)
+
+        payout = (price / 100.0) if price > 0 else (100.0 / abs(price))
+        ev = (p * payout) - (1.0 - p)
         return ev
 
     def _calculate_kelly(self, win_prob, price):
-        """
-        Calculate Kelly Criterion optimal stake fraction.
-        f = (bp - q) / b
-        b = net odds received (decimal - 1)
-        p = win probability
-        q = loss probability
-        """
-        if price > 0:
-            b = price / 100.0
-        else:
-            b = 100.0 / abs(price)
-            
-        p = win_prob
+        """Quarter Kelly stake fraction."""
+        p = self._clamp_prob(win_prob)
+        price = self._sanitize_price(price)
+
+        b = (price / 100.0) if price > 0 else (100.0 / abs(price))
         q = 1.0 - p
-        
         fraction = (b * p - q) / b
-        
-        # Quarter Kelly for safety
+
         return max(0.0, fraction * 0.25)
 
     def _generate_narrative(self, event, snap, torvik, kenpom, news, recs, raw_snaps: Optional[List[Dict]] = None, debug_info: Optional[Dict] = None) -> Dict:
