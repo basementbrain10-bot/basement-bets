@@ -1494,6 +1494,18 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         if conf is None:
             conf = rec.get('confidence_0_100')
 
+        # If still missing, derive a label from EV when available.
+        if conf is None:
+            ev = rec.get('ev')
+            try:
+                ev = float(ev) if ev is not None else None
+            except Exception:
+                ev = None
+            if ev is not None:
+                score = ev * 100.0 * 5.0
+                conf = "High" if score > 80 else "Medium" if score > 50 else "Low"
+            else:
+                conf = "Low"
         selection = rec.get('selection')
         if not selection:
             side = rec.get('side')
