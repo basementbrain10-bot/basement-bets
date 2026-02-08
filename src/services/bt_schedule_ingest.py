@@ -178,8 +178,10 @@ def fetch_bt_schedule_selenium(date_yyyymmdd: str) -> tuple[Optional[Any], Optio
                     }
                 )
 
+            # NOTE: late-night / slate boundary cases can legitimately have 0 rows.
+            # Treat that as a successful fetch (empty slate), not a block.
             if not payload:
-                return None, "Parsed 0 games from schedule table"
+                return [], None
 
             return payload, None
 
@@ -225,5 +227,7 @@ def ingest_daily_schedule(date_yyyymmdd: str, allow_selenium: bool = False) -> d
         record_bt_schedule_raw(date_yyyymmdd, None, status="BLOCKED", error=err)
         return {"status": "blocked", "date": date_yyyymmdd, "error": err}
 
-    record_bt_schedule_raw(date_yyyymmdd, payload, status="OK", error=None)
-    return {"status": "ok", "date": date_yyyymmdd, "games": len(payload) if isinstance(payload, list) else None}
+    # Empty slate is OK (common near midnight ET).
+    status = "OK_EMPTY" if (isinstance(payload, list) and len(payload) == 0) else "OK"
+    record_bt_schedule_raw(date_yyyymmdd, payload, status=status, error=None)
+    return {"status": "ok" if status == "OK" else "ok_empty", "date": date_yyyymmdd, "games": len(payload) if isinstance(payload, list) else None}
