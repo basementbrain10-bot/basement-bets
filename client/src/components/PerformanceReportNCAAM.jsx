@@ -147,7 +147,14 @@ export default function PerformanceReportNCAAM() {
                     const outCls = out === 'WON' ? 'text-green-400' : out === 'LOST' ? 'text-red-400' : out === 'PUSH' ? 'text-yellow-400' : 'text-slate-400';
                     return (
                       <tr key={`${p.day}-${p.event_id}-${p.selection}`} className="hover:bg-slate-800/30">
-                        <td className="py-2 px-3 text-slate-400 font-mono text-xs">{p.day}</td>
+                        <td className="py-2 px-3 text-slate-400 font-mono text-xs">{(() => {
+                          try {
+                            // p.day is YYYY-MM-DD (ET). Show as MM/DD/YYYY.
+                            const [yy, mm, dd] = String(p.day || '').split('-');
+                            if (yy && mm && dd) return `${mm}/${dd}/${yy}`;
+                          } catch (e) {}
+                          return p.day;
+                        })()}</td>
                         <td className="py-2 px-3 text-slate-200">{p.matchup}</td>
                         <td className="py-2 px-3 text-white font-bold">{p.selection}</td>
                         <td className="py-2 px-3 text-slate-300 font-mono">{fmtOdds(p.price)}</td>

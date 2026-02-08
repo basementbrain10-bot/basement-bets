@@ -562,7 +562,7 @@ const Research = ({ onAddBet }) => {
                                                 <tbody className="divide-y divide-slate-700/40">
                                                     {rows.slice(0, 50).map(({ edge, top }) => {
                                                         const date = edge.start_time ? new Date(edge.start_time) : null;
-                                                        const dateStr = date ? date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', timeZone: 'America/New_York' }) : '-';
+                                                        const dateStr = date ? date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', timeZone: 'America/New_York' }) : '-';
                                                         const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
                                                         const odds = (top.price !== null && top.price !== undefined)
                                                             ? fmtSigned(top.price, 0)
@@ -686,7 +686,7 @@ const Research = ({ onAddBet }) => {
                                         ) : (
                                             getProcessedEdges().map((edge, idx) => {
                                                 const date = edge.start_time ? new Date(edge.start_time) : null;
-                                                const dateStr = date ? date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', timeZone: 'America/New_York' }) : '-';
+                                                const dateStr = date ? date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', timeZone: 'America/New_York' }) : '-';
                                                 const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
                                                 const isEdge = edge.is_actionable;
 
@@ -1020,7 +1020,7 @@ const Research = ({ onAddBet }) => {
                                                     <tr key={idx} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
                                                         <td className="py-2 px-4 text-slate-400 text-xs whitespace-nowrap">
                                                             <div className="font-bold text-slate-300">
-                                                                {new Date(item.analyzed_at).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
+                                                                {new Date(item.analyzed_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
                                                             </div>
                                                             <div className="opacity-70">
                                                                 {new Date(item.analyzed_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
