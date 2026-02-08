@@ -20,28 +20,29 @@ class GradingService:
         self.espn_client = EspnClient()
         self.odds_selector = OddsSelectionService()
 
-    def grade_predictions(self):
-        """
-        Main method to Grade 'Pending' predictions.
-        Now includes CLV computation and outcome grading.
+    def grade_predictions(self, *, backfill_days: int = 3, max_clv_rows: int = 250, max_grade_rows: int = 500, skip_clv: bool = False):
+        """Grade pending predictions.
+
+        IMPORTANT: This method can be invoked from a Vercel function (timeout-sensitive).
+        Defaults are intentionally bounded.
         """
         print("[GRADING] Starting grading process...")
-        
-        # 1. Update Game Results (Ingest latest scores)
-        # NOTE: ESPN ingestion has been unreliable (infinite looping / drift errors).
-        # We currently grade NCAAM using Action Network as the source of truth.
-        # If you want other leagues, add them back explicitly once their ingest is stable.
+
+        # 1) Update Game Results (Ingest latest finals)
+        # NOTE: We currently grade NCAAM using Action Network as the source of truth.
         active_leagues = ['NCAAM']
         for league in active_leagues:
             self._ingest_latest_scores(league)
 
-        # 2. Compute CLV for Started Games (that haven't been CLV-graded yet)
-        clv_count = self._compute_clv_for_started_games()
-        
-        # 3. Grade Outcomes for Final Games
-        graded_count = self._evaluate_db_predictions()
-        
-        return {"status": "Success", "graded": graded_count, "clv_updates": clv_count}
+        # 2) Compute CLV for started games (bounded)
+        clv_count = 0
+        if not skip_clv:
+            clv_count = self._compute_clv_for_started_games(max_rows=max_clv_rows, lookback_days=backfill_days)
+
+        # 3) Grade outcomes for finals (bounded)
+        graded_count = self._evaluate_db_predictions(max_rows=max_grade_rows)
+
+        return {"status": "Success", "graded": graded_count, "clv_updates": clv_count, "skip_clv": bool(skip_clv), "backfill_days": backfill_days}
 
     def _ingest_latest_scores(self, league):
         """Fetch scores and upsert to game_results.
@@ -148,10 +149,10 @@ class GradingService:
         # If you need ESPN again, re-enable behind an env flag.
         return
 
-    def _compute_clv_for_started_games(self):
-        """
-        Find predictions where game has started but close_line is NULL.
-        Use OddsSelectionService to find the Closing Line (last snap <= start_time).
+    def _compute_clv_for_started_games(self, *, max_rows: int = 250, lookback_days: int = 3):
+        """Compute CLV for games that have started.
+
+        Bounded for serverless execution.
         """
         query = """
         SELECT m.id, m.event_id, m.market_type, m.pick, m.open_line, m.open_price, e.start_time, e.league
@@ -159,10 +160,13 @@ class GradingService:
         JOIN events e ON m.event_id = e.id
         WHERE m.close_line IS NULL 
           AND e.start_time < CURRENT_TIMESTAMP
+          AND e.start_time > (CURRENT_TIMESTAMP - (%(d)s || ' days')::interval)
+        ORDER BY e.start_time DESC
+        LIMIT %(lim)s
         """
         
         with get_db_connection() as conn:
-            rows = _exec(conn, query).fetchall()
+            rows = _exec(conn, query, {"d": int(lookback_days), "lim": int(max_rows)}).fetchall()
             
         updates = 0
         now = datetime.now() # naive or tz aware? DB timestamps usually naive UTC or similar in this app
@@ -350,11 +354,11 @@ class GradingService:
                             
         return updates
 
-    def _evaluate_db_predictions(self):
+    def _evaluate_db_predictions(self, *, max_rows: int = 500):
+        """Grade outcomes for pending predictions where the game is FINAL.
+
+        Bounded for serverless execution.
         """
-        Query DB for pending predictions where the game is FINAL.
-        """
-        # Join model_predictions -> events -> game_results
         query = """
         SELECT m.id, m.market_type, m.pick, m.bet_line, m.book,
                e.home_team, e.away_team,
@@ -364,10 +368,12 @@ class GradingService:
         JOIN game_results gr ON e.id = gr.event_id
         WHERE (m.outcome = 'PENDING' OR m.outcome IS NULL)
           AND gr.final = TRUE
+        ORDER BY m.analyzed_at DESC
+        LIMIT %(lim)s
         """
-        
+
         with get_db_connection() as conn:
-            rows = _exec(conn, query).fetchall()
+            rows = _exec(conn, query, {"lim": int(max_rows)}).fetchall()
             
         print(f"[GRADING] Found {len(rows)} pending bets with final scores.")
         

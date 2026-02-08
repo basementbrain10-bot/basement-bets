@@ -2023,16 +2023,26 @@ async def trigger_settlement_reconcile(request: Request, league: Optional[str] =
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/jobs/grade_predictions")
-async def trigger_prediction_grading():
+async def trigger_prediction_grading(fast: bool = True, backfill_days: int = 3, max_clv_rows: int = 250, max_grade_rows: int = 500, skip_clv: bool = False):
     """Cron/manual: grade model_predictions using local game_results.
 
-    NOTE: AutoGrader is legacy and expects old column names (matchup/bet_on/etc).
-    We use GradingService which matches the current model_predictions schema.
+    Default mode is **fast/bounded** to avoid Vercel function timeouts.
+
+    Params:
+    - fast: if true, uses bounded defaults
+    - backfill_days: results/CLV lookback window
+    - max_clv_rows: max CLV updates per run
+    - max_grade_rows: max outcome grades per run
+    - skip_clv: skip CLV step (outcome-only)
     """
     try:
         from src.services.grading_service import GradingService
         svc = GradingService()
-        res = svc.grade_predictions()
+        if fast:
+            res = svc.grade_predictions(backfill_days=backfill_days, max_clv_rows=max_clv_rows, max_grade_rows=max_grade_rows, skip_clv=skip_clv)
+        else:
+            # Unbounded legacy behavior (use carefully)
+            res = svc.grade_predictions(backfill_days=10, max_clv_rows=2000, max_grade_rows=5000, skip_clv=skip_clv)
         return {
             "status": "success",
             "message": "Prediction grading completed",
