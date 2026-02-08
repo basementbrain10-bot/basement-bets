@@ -1947,12 +1947,15 @@ async def trigger_result_ingestion(league: str, date: Optional[str] = None, auth
 
         from src.services.grading_service import GradingService
         service = GradingService()
+        # Ingest latest scores/finals into game_results.
+        # (Side-effecting; returns None)
         service._ingest_latest_scores(league)
 
         return {
             "status": "success",
             "message": f"Ingested results for {league}",
-            "date": ingest_date or "today"
+            "date": ingest_date or "today",
+            "note": "NCAAM uses Action Network web/v2 scoreboard (division=D1) for full-slate finals coverage."
         }
 
     except Exception as e:

@@ -56,7 +56,7 @@ class GradingService:
 
         # Backfill window: history tab can include older games; keep this reasonably small
         # to avoid heavy API usage.
-        backfill_days = int(os.getenv('GRADING_FINALS_BACKFILL_DAYS', '10'))
+        backfill_days = int(os.getenv('GRADING_FINALS_BACKFILL_DAYS', '3'))
         dates = [
             (datetime.now() - timedelta(days=d)).strftime("%Y%m%d")
             for d in range(0, backfill_days + 1)
@@ -83,12 +83,35 @@ class GradingService:
             except Exception as e:
                 print(f"[GRADING] Warning: could not prefetch known NCAAM Action event ids: {e}")
 
+            # IMPORTANT: web/v1 scoreboard returns only a small subset of games.
+            # Use web/v2 scoreboard + division=D1 to cover the full slate.
+            import requests
+
+            headers = {
+                'Authority': 'api.actionnetwork.com',
+                'Accept': 'application/json',
+                'Origin': 'https://www.actionnetwork.com',
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36'
+            }
+
+            def fetch_v2(date_str: str):
+                url = "https://api.actionnetwork.com/web/v2/scoreboard/ncaab"
+                params = {
+                    "bookIds": "15,30,79,2988,75,123,71,68,69",
+                    "periods": "event",
+                    "date": date_str,
+                    "division": "D1",
+                }
+                resp = requests.get(url, params=params, headers=headers, timeout=20)
+                resp.raise_for_status()
+                return resp.json()
+
             count = 0
             seen_game_ids = set()
+
             for date_str in dates:
                 try:
-                    # Action Network date param appears to be UTC-based; to reliably capture
-                    # late-night ET games, also query the following UTC day.
+                    # Query both date and next day to catch late-night ET games.
                     try:
                         dt0 = datetime.strptime(date_str, "%Y%m%d")
                         date_next = (dt0 + timedelta(days=1)).strftime("%Y%m%d")
@@ -96,57 +119,49 @@ class GradingService:
                         date_next = None
 
                     query_dates = [date_str] + ([date_next] if date_next else [])
-                    games = get_todays_games('ncaab', query_dates)
-                    for g in games:
-                        if not g.get('completed'):
-                            continue
-                        game_id = g.get('id') or g.get('game_id')
-                        if not game_id:
-                            continue
-                        if game_id in seen_game_ids:
-                            continue
-                        seen_game_ids.add(game_id)
 
-                        # Our internal event ids are namespaced.
-                        event_id = f"action:ncaam:{game_id}"
-                        if known_event_ids and event_id not in known_event_ids:
-                            continue
+                    for qd in query_dates:
+                        data = fetch_v2(qd)
+                        games = data.get('games', []) or []
+                        for g in games:
+                            gid = g.get('id')
+                            if gid is None:
+                                continue
+                            gid = str(gid)
+                            if gid in seen_game_ids:
+                                continue
 
-                        home_score = None
-                        away_score = None
-                        # The helper tries to include scores when available
-                        scores = g.get('scores') or []
-                        if len(scores) >= 2:
-                            # scores are [{name, score}, {name, score}]
-                            # Determine which is home/away using team names
-                            home_team = g.get('home_team')
-                            away_team = g.get('away_team')
-                            for s in scores:
-                                if s.get('name') == home_team:
-                                    home_score = s.get('score')
-                                if s.get('name') == away_team:
-                                    away_score = s.get('score')
+                            status = str(g.get('status') or '').lower().strip()
+                            # v2 uses 'complete' when final
+                            if status not in ('complete', 'completed', 'closed', 'final'):
+                                continue
 
-                        if home_score is None or away_score is None:
-                            continue
+                            box = g.get('boxscore') or {}
+                            home_score = box.get('total_home_points')
+                            away_score = box.get('total_away_points')
+                            if home_score is None or away_score is None:
+                                continue
 
-                        res_data = {
-                            "event_id": event_id,
-                            "home_score": int(home_score),
-                            "away_score": int(away_score),
-                            "final": True,
-                            "period": "FINAL",
-                        }
-                        upsert_game_result(res_data)
-                        count += 1
+                            event_id = f"action:ncaam:{gid}"
+                            if known_event_ids and event_id not in known_event_ids:
+                                continue
+
+                            seen_game_ids.add(gid)
+
+                            upsert_game_result({
+                                "event_id": event_id,
+                                "home_score": int(home_score),
+                                "away_score": int(away_score),
+                                "final": True,
+                                "period": "FINAL",
+                            })
+                            count += 1
                 except Exception as e:
-                    print(f"[GRADING] Action Network error fetching NCAAM {date_str}: {e}")
+                    print(f"[GRADING] Action Network v2 error fetching NCAAM {date_str}: {e}")
 
-            # Note: we also run ESPN fallback below to support legacy espn:ncaam:* event ids.
+            print(f"[GRADING] Upserted {count} NCAAM finals from Action Network v2")
 
         # 2) ESPN fallback (DISABLED)
-        # We intentionally do *not* call ESPN here to avoid hangs/loops in scheduled jobs.
-        # If you need ESPN again, re-enable behind an env flag.
         return
 
     def _compute_clv_for_started_games(self, *, max_rows: int = 250, lookback_days: int = 3):
