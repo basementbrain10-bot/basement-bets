@@ -2176,6 +2176,84 @@ def sync_fanduel(payload: dict):
         return {"status": "error", "message": str(e)}
 
 
+# --- Debug endpoints (results/graded coverage) ---
+
+@app.get("/api/debug/ncaam/results-coverage")
+async def debug_ncaam_results_coverage(date: Optional[str] = None, days: int = 1, authorized: bool = Depends(verify_cron_secret)):
+    """Debug: show how many events have finals in game_results and how many predictions are still pending.
+
+    Date is ET date (YYYY-MM-DD). Uses the same ET window logic as /api/board.
+    """
+    from src.database import get_db_connection, _exec
+
+    if not date:
+        with get_db_connection() as conn:
+            date = _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text").fetchone()[0]
+
+    try:
+        days = int(days)
+    except Exception:
+        days = 1
+    days = max(1, min(days, 7))
+
+    start_date = datetime.strptime(date, "%Y-%m-%d").date()
+    end_date = (start_date + timedelta(days=days - 1))
+
+    with get_db_connection() as conn:
+        ev = _exec(conn, """
+          SELECT e.id, e.start_time,
+                 gr.final as final,
+                 gr.home_score, gr.away_score,
+                 COUNT(m.id) FILTER (WHERE (m.outcome IS NULL OR m.outcome='PENDING') AND COALESCE(m.ev_per_unit,0) >= 0.02) as pending_recs,
+                 COUNT(m.id) FILTER (WHERE (m.outcome IN ('WON','LOST','PUSH')) AND COALESCE(m.ev_per_unit,0) >= 0.02) as decided_recs
+          FROM events e
+          LEFT JOIN game_results gr ON gr.event_id=e.id
+          LEFT JOIN model_predictions m ON m.event_id=e.id
+          WHERE e.league='NCAAM'
+            AND DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN %(start)s AND %(end)s
+          GROUP BY e.id, e.start_time, gr.final, gr.home_score, gr.away_score
+        """, {"start": str(start_date), "end": str(end_date)}).fetchall()
+
+    rows = [dict(r) for r in ev]
+    total_events = len(rows)
+    finals = sum(1 for r in rows if r.get('final') is True)
+    missing_results = sum(1 for r in rows if r.get('final') is None)
+    not_final = sum(1 for r in rows if r.get('final') is False)
+    pending_recs = sum(int(r.get('pending_recs') or 0) for r in rows)
+    decided_recs = sum(int(r.get('decided_recs') or 0) for r in rows)
+
+    sample_missing = [r for r in rows if r.get('final') is None]
+    sample_missing = sorted(sample_missing, key=lambda x: x.get('start_time') or '')[:10]
+
+    return {
+        "date": date,
+        "days": days,
+        "events": {
+            "total": total_events,
+            "final_true": finals,
+            "final_false": not_final,
+            "missing_game_results": missing_results,
+        },
+        "recommended_bets": {
+            "pending": pending_recs,
+            "decided": decided_recs,
+        },
+        "sample_missing_game_results": [{"event_id": r.get('id'), "start_time": r.get('start_time')} for r in sample_missing],
+    }
+
+
+@app.get("/api/debug/event-result/{event_id}")
+async def debug_event_result(event_id: str, authorized: bool = Depends(verify_cron_secret)):
+    from src.database import get_db_connection, _exec
+    with get_db_connection() as conn:
+        e = _exec(conn, "SELECT id, league, start_time, home_team, away_team FROM events WHERE id=%s", (event_id,)).fetchone()
+        gr = _exec(conn, "SELECT event_id, home_score, away_score, final, period, updated_at FROM game_results WHERE event_id=%s", (event_id,)).fetchone()
+        return {
+            "event": dict(e) if e else None,
+            "game_results": dict(gr) if gr else None,
+        }
+
+
 @app.get("/api/ncaam/correlations/summary")
 def get_correlation_summary(season: str = "2025-2026"):
     """
