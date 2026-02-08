@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { RefreshCw, Activity, TrendingUp } from 'lucide-react';
+import PerformanceReportNCAAM from '../components/PerformanceReportNCAAM';
 
 const formatCurrency = (val) => {
   try {
@@ -109,6 +110,9 @@ export default function Dashboard({ financials, periodStats }) {
           </div>
         )}
       </div>
+
+      {/* Full daily graded picks table */}
+      <PerformanceReportNCAAM />
     </div>
   );
 }
