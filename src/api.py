@@ -1737,7 +1737,9 @@ async def ncaam_performance_report(days: int = 30):
               JOIN events e ON m.event_id=e.id
               WHERE e.league='NCAAM'
                 AND m.analyzed_at > NOW() - (%(d)s || ' days')::interval
-                AND m.selection IS NOT NULL AND m.selection <> '' AND m.pick IS NOT NULL AND m.pick <> 'NONE'
+                AND m.market_type IS NOT NULL AND m.market_type <> 'AUTO'
+                AND m.selection IS NOT NULL AND m.selection <> '' AND m.selection <> '—'
+                AND m.pick IS NOT NULL AND m.pick <> 'NONE'
             """, {"d": int(window_days)}).fetchall()
 
         decided = [r for r in rows if (r['outcome'] or '').upper() in ('WON','LOST','PUSH')]
@@ -1794,7 +1796,9 @@ async def ncaam_performance_report(days: int = 30):
           LEFT JOIN game_results gr ON gr.event_id=m.event_id
           WHERE e.league='NCAAM'
             AND m.analyzed_at > NOW() - (%(d)s || ' days')::interval
-            AND m.selection IS NOT NULL AND m.selection <> '' AND m.pick IS NOT NULL AND m.pick <> 'NONE'
+            AND m.market_type IS NOT NULL AND m.market_type <> 'AUTO'
+            AND m.selection IS NOT NULL AND m.selection <> '' AND m.selection <> '—'
+            AND m.pick IS NOT NULL AND m.pick <> 'NONE'
           ORDER BY m.analyzed_at DESC
           LIMIT 1000
         """, {"d": int(days)}).fetchall()
@@ -1849,9 +1853,63 @@ async def ncaam_performance_report(days: int = 30):
           LEFT JOIN game_results gr ON gr.event_id=m.event_id
           WHERE e.league='NCAAM'
             AND m.analyzed_at > NOW() - (%(d)s || ' days')::interval
-            AND m.selection IS NOT NULL AND m.selection <> '' AND m.pick IS NOT NULL AND m.pick <> 'NONE'
+            AND m.market_type IS NOT NULL AND m.market_type <> 'AUTO'
+            AND m.selection IS NOT NULL AND m.selection <> '' AND m.selection <> '—'
+            AND m.pick IS NOT NULL AND m.pick <> 'NONE'
         """, {"d": int(days)}).fetchone()
     coverage = dict(cov) if cov else {}
+
+    def conf_bucket(c0: int) -> str:
+        try:
+            n = int(c0 or 0)
+        except Exception:
+            n = 0
+        if n >= 80:
+            return 'High'
+        if n >= 50:
+            return 'Medium'
+        return 'Low'
+
+    # Confidence breakdown (decided only)
+    conf_rows = []
+    with get_db_connection() as conn:
+        conf_rows = _exec(conn, """
+          SELECT m.outcome, m.confidence_0_100
+          FROM model_predictions m
+          JOIN events e ON m.event_id=e.id
+          WHERE e.league='NCAAM'
+            AND m.analyzed_at > NOW() - (%(d)s || ' days')::interval
+            AND m.market_type IS NOT NULL AND m.market_type <> 'AUTO'
+            AND m.selection IS NOT NULL AND m.selection <> '' AND m.selection <> '—'
+            AND m.pick IS NOT NULL AND m.pick <> 'NONE'
+            AND (m.outcome IN ('WON','LOST','PUSH'))
+        """, {"d": int(days)}).fetchall()
+
+    by_conf = {"High": {"won": 0, "lost": 0, "push": 0}, "Medium": {"won": 0, "lost": 0, "push": 0}, "Low": {"won": 0, "lost": 0, "push": 0}}
+    for r in conf_rows:
+        b = conf_bucket(r.get('confidence_0_100'))
+        o = (r.get('outcome') or '').upper()
+        if o == 'WON':
+            by_conf[b]['won'] += 1
+        elif o == 'LOST':
+            by_conf[b]['lost'] += 1
+        elif o == 'PUSH':
+            by_conf[b]['push'] += 1
+
+    conf_breakdown = []
+    for b in ("High", "Medium", "Low"):
+        won = by_conf[b]['won']
+        lost = by_conf[b]['lost']
+        push = by_conf[b]['push']
+        decided = won + lost + push
+        wl = won + lost
+        win_rate = (won / wl * 100.0) if wl else 0.0
+        conf_breakdown.append({
+            "bucket": b,
+            "record": {"won": won, "lost": lost, "push": push},
+            "decided": decided,
+            "win_rate": round(win_rate, 2),
+        })
 
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -1861,6 +1919,7 @@ async def ncaam_performance_report(days: int = 30):
             "30d": window_stats(30),
         },
         "coverage": coverage,
+        "confidence_breakdown": conf_breakdown,
         "daily_recommended_bets": daily,
     }
 

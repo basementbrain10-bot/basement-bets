@@ -122,6 +122,18 @@ export default function PerformanceReportNCAAM() {
             ) : null}
           </div>
 
+          {(data?.confidence_breakdown || []).length > 0 && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+              {data.confidence_breakdown.map((b) => (
+                <div key={b.bucket} className="bg-slate-950/30 border border-slate-800 rounded-xl p-4">
+                  <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{b.bucket} confidence</div>
+                  <div className="mt-1 text-white font-black text-lg">{b.record.won}-{b.record.lost}-{b.record.push}</div>
+                  <div className="mt-1 text-slate-400 text-xs">Win% (W/L only): <span className="text-slate-200 font-bold">{b.win_rate}%</span> • N={b.decided}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="mt-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Model performance (recommended bets only)</h3>
