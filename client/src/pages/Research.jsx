@@ -331,7 +331,22 @@ const Research = ({ onAddBet }) => {
         }
     };
 
-    const getRecommendedHistory = () => getSortedHistory().filter(isRecommendedHistoryItem);
+    const isTodayET = (ts) => {
+        if (!ts) return false;
+        try {
+            const d = new Date(ts);
+            const day = d.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+            const today = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+            return day === today;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    // History tab is only historical results (exclude today's bets).
+    const getRecommendedHistory = () => getSortedHistory()
+        .filter(isRecommendedHistoryItem)
+        .filter(h => !isTodayET(h?.analyzed_at || h?.created_at));
 
 
     const SortIcon = ({ column }) => {

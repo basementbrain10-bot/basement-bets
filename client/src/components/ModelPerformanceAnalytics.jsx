@@ -78,6 +78,51 @@ const ModelPerformanceAnalytics = ({ history }) => {
         return { market, count: filtered.length, wins: w, losses: l, winRate: wr, roi: r };
     });
 
+    // Performance by confidence level
+    const getConfidenceLabel = (h) => {
+        // prefer explicit label fields
+        const explicit = h?.confidence_label || h?.confidenceLevel || h?.confidence_level;
+        if (explicit) return String(explicit);
+
+        // try outputs_json
+        try {
+            if (h?.outputs_json) {
+                const out = JSON.parse(h.outputs_json);
+                const c = out?.confidence_label || out?.confidenceLevel || out?.confidence;
+                if (c !== undefined && c !== null && c !== '') {
+                    // if numeric, bucket below
+                    if (typeof c === 'string' && isNaN(Number(c))) return String(c);
+                    const n = Number(c);
+                    if (Number.isFinite(n)) {
+                        if (n >= 0.75) return 'High';
+                        if (n >= 0.6) return 'Medium';
+                        return 'Low';
+                    }
+                    return String(c);
+                }
+            }
+        } catch (e) {}
+
+        const n = Number(h?.confidence);
+        if (Number.isFinite(n)) {
+            if (n >= 0.75) return 'High';
+            if (n >= 0.6) return 'Medium';
+            return 'Low';
+        }
+
+        return '—';
+    };
+
+    const confidenceLevels = ['High', 'Medium', 'Low'];
+    const confidencePerformance = confidenceLevels.map(level => {
+        const filtered = graded.filter(h => getConfidenceLabel(h) === level);
+        const w = filtered.filter(h => getResult(h) === 'WON' || getResult(h) === 'Win').length;
+        const l = filtered.filter(h => getResult(h) === 'LOST' || getResult(h) === 'Loss').length;
+        const wr = filtered.length > 0 ? (w / (w + l) * 100) : 0;
+        const r = filtered.length > 0 ? ((w * 9.09 - l * 10) / (filtered.length * 10) * 100) : 0;
+        return { level, count: filtered.length, wins: w, losses: l, winRate: wr, roi: r };
+    }).filter(x => x.count > 0);
+
     if (graded.length === 0) return null;
 
     return (
@@ -154,6 +199,30 @@ const ModelPerformanceAnalytics = ({ history }) => {
                         <div className="text-[10px] text-slate-500 mt-2">
                             *CLV = Closing Line Value (Pts vs Market Close)
                         </div>
+                    </div>
+                </div>
+
+                {/* Performance by Confidence */}
+                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">By Confidence</h4>
+                    <div className="space-y-2 text-xs">
+                        {confidencePerformance.length === 0 && (
+                            <div className="text-slate-500">No confidence labels found.</div>
+                        )}
+                        {confidencePerformance.map(c => (
+                            <div key={c.level} className="flex justify-between items-center">
+                                <span className="text-slate-400">{c.level}:</span>
+                                <div className="flex items-center space-x-2">
+                                    <span className="text-slate-500">{c.wins}-{c.losses}</span>
+                                    <span className={`font-bold ${c.winRate >= 55 ? 'text-green-400' : c.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                        {c.winRate.toFixed(0)}%
+                                    </span>
+                                    <span className={`text-xs ${c.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        ({c.roi >= 0 ? '+' : ''}{c.roi.toFixed(0)}%)
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
 
