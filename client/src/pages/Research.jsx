@@ -910,16 +910,40 @@ const Research = ({ onAddBet }) => {
                                     return s;
                                 };
 
-                                const graded = history.filter(h => ['WON', 'LOST', 'PUSH'].includes(normOutcome(h)));
+                                // Show only model-recommended bets in History (proxy: EV gate >= 2% EV/u)
+                                const isRecommended = (h) => {
+                                    try {
+                                        const mt = String(h?.market_type || h?.market || '').toUpperCase();
+                                        const sel = String(h?.selection || '').trim();
+                                        const pick = String(h?.pick || '').toUpperCase();
+                                        const ev = Number(h?.ev_per_unit ?? h?.ev ?? 0);
+                                        if (!mt || mt === 'AUTO') return false;
+                                        if (!sel || sel === '—') return false;
+                                        if (!pick || pick === 'NONE') return false;
+                                        if (!Number.isFinite(ev) || ev < 0.02) return false;
+                                        return true;
+                                    } catch (e) {
+                                        return false;
+                                    }
+                                };
+
+                                const recHist = history.filter(isRecommended);
+
+                                const graded = recHist.filter(h => ['WON', 'LOST', 'PUSH'].includes(normOutcome(h)));
                                 const w = graded.filter(x => normOutcome(x) === 'WON').length;
                                 const l = graded.filter(x => normOutcome(x) === 'LOST').length;
                                 const p = graded.filter(x => normOutcome(x) === 'PUSH').length;
 
                                 const stats = [
                                     {
-                                        label: 'Graded Bets',
-                                        value: graded.length,
+                                        label: 'Rec Bets (total)',
+                                        value: recHist.length,
                                         icon: <CheckCircle size={14} className="text-blue-400" />
+                                    },
+                                    {
+                                        label: 'Rec Bets (graded)',
+                                        value: graded.length,
+                                        icon: <CheckCircle size={14} className="text-indigo-400" />
                                     },
                                     {
                                         label: 'Record',
@@ -928,18 +952,8 @@ const Research = ({ onAddBet }) => {
                                     },
                                     {
                                         label: 'Win Rate',
-                                        value: graded.length > 0 ? `${((w / graded.length) * 100).toFixed(1)}%` : '0.0%',
+                                        value: (w + l) > 0 ? `${((w / (w + l)) * 100).toFixed(1)}%` : '0.0%',
                                         icon: <CheckCircle size={14} className="text-purple-400" />
-                                    },
-                                    {
-                                        label: 'Est. Return ($10/bet)',
-                                        value: `$${graded.reduce((acc, h) => {
-                                            const o = normOutcome(h);
-                                            if (o === 'WON') return acc + 9.09;
-                                            if (o === 'LOST') return acc - 10.0;
-                                            return acc;
-                                        }, 0).toFixed(2)}`,
-                                        icon: <RefreshCw size={14} className="text-emerald-400" />
                                     }
                                 ];
 
@@ -992,7 +1006,24 @@ const Research = ({ onAddBet }) => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {getSortedHistory().map((item, idx) => {
+                                            {(() => {
+                                                const isRecommended = (h) => {
+                                                    try {
+                                                        const mt = String(h?.market_type || h?.market || '').toUpperCase();
+                                                        const sel = String(h?.selection || '').trim();
+                                                        const pick = String(h?.pick || '').toUpperCase();
+                                                        const ev = Number(h?.ev_per_unit ?? h?.ev ?? 0);
+                                                        if (!mt || mt === 'AUTO') return false;
+                                                        if (!sel || sel === '—') return false;
+                                                        if (!pick || pick === 'NONE') return false;
+                                                        if (!Number.isFinite(ev) || ev < 0.02) return false;
+                                                        return true;
+                                                    } catch (e) {
+                                                        return false;
+                                                    }
+                                                };
+                                                return getSortedHistory().filter(isRecommended);
+                                            })().map((item, idx) => {
                                                 // Robust Recommendation Parsing
                                                 let recs = [];
                                                 try {
