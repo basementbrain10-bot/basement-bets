@@ -313,6 +313,26 @@ const Research = ({ onAddBet }) => {
         });
     };
 
+    // History should reflect only *recommended* model bets.
+    // Proxy gate (matches backend + cron): EV/u >= 2% and has a concrete market/selection/pick.
+    const isRecommendedHistoryItem = (h) => {
+        try {
+            const mt = String(h?.market_type || h?.market || '').toUpperCase();
+            const sel = String(h?.selection || '').trim();
+            const pick = String(h?.pick || '').toUpperCase();
+            const ev = Number(h?.ev_per_unit ?? h?.ev ?? 0);
+            if (!mt || mt === 'AUTO') return false;
+            if (!sel || sel === '—') return false;
+            if (!pick || pick === 'NONE') return false;
+            if (!Number.isFinite(ev) || ev < 0.02) return false;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const getRecommendedHistory = () => getSortedHistory().filter(isRecommendedHistoryItem);
+
 
     const SortIcon = ({ column }) => {
         if (sortConfig.key !== column) return <ArrowUpDown size={12} className="ml-1 opacity-20" />;
@@ -910,24 +930,7 @@ const Research = ({ onAddBet }) => {
                                     return s;
                                 };
 
-                                // Show only model-recommended bets in History (proxy: EV gate >= 2% EV/u)
-                                const isRecommended = (h) => {
-                                    try {
-                                        const mt = String(h?.market_type || h?.market || '').toUpperCase();
-                                        const sel = String(h?.selection || '').trim();
-                                        const pick = String(h?.pick || '').toUpperCase();
-                                        const ev = Number(h?.ev_per_unit ?? h?.ev ?? 0);
-                                        if (!mt || mt === 'AUTO') return false;
-                                        if (!sel || sel === '—') return false;
-                                        if (!pick || pick === 'NONE') return false;
-                                        if (!Number.isFinite(ev) || ev < 0.02) return false;
-                                        return true;
-                                    } catch (e) {
-                                        return false;
-                                    }
-                                };
-
-                                const recHist = history.filter(isRecommended);
+                                const recHist = getRecommendedHistory();
 
                                 const graded = recHist.filter(h => ['WON', 'LOST', 'PUSH'].includes(normOutcome(h)));
                                 const w = graded.filter(x => normOutcome(x) === 'WON').length;
@@ -969,15 +972,15 @@ const Research = ({ onAddBet }) => {
                             ))}
                         </div>
 
-                        {!loading && history.length === 0 && (
+                        {!loading && getRecommendedHistory().length === 0 && (
                             <div className="text-center py-10 text-slate-500">
-                                No history yet.
+                                No recommended-bet history yet.
                             </div>
                         )}
 
-                        {!loading && history.length > 0 && (
+                        {!loading && getRecommendedHistory().length > 0 && (
                             <>
-                                <ModelPerformanceAnalytics history={history} />
+                                <ModelPerformanceAnalytics history={getRecommendedHistory()} />
 
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left border-collapse">
@@ -1006,24 +1009,7 @@ const Research = ({ onAddBet }) => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {(() => {
-                                                const isRecommended = (h) => {
-                                                    try {
-                                                        const mt = String(h?.market_type || h?.market || '').toUpperCase();
-                                                        const sel = String(h?.selection || '').trim();
-                                                        const pick = String(h?.pick || '').toUpperCase();
-                                                        const ev = Number(h?.ev_per_unit ?? h?.ev ?? 0);
-                                                        if (!mt || mt === 'AUTO') return false;
-                                                        if (!sel || sel === '—') return false;
-                                                        if (!pick || pick === 'NONE') return false;
-                                                        if (!Number.isFinite(ev) || ev < 0.02) return false;
-                                                        return true;
-                                                    } catch (e) {
-                                                        return false;
-                                                    }
-                                                };
-                                                return getSortedHistory().filter(isRecommended);
-                                            })().map((item, idx) => {
+                                            {getRecommendedHistory().map((item, idx) => {
                                                 // Robust Recommendation Parsing
                                                 let recs = [];
                                                 try {

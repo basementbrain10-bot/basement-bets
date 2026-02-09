@@ -19,9 +19,34 @@ const ModelPerformanceAnalytics = ({ history }) => {
     const posClvRate = clvData.length > 0 ? (posClv / clvData.length * 100) : 0;
 
     // Performance by edge threshold
-    const edgeThresholds = [0.5, 1.0, 2.0, 3.0, 5.0];
+    // Data has evolved over time; edge can be stored as:
+    // - h.edge (points or % depending on sport/model)
+    // - h.edge_points
+    // - h.ev_per_unit (decimal EV, e.g. 0.04 = 4%)
+    const getEdge = (h) => {
+        const raw = h?.edge ?? h?.edge_points;
+        const n = Number(raw);
+        if (Number.isFinite(n)) return n;
+        const ev = Number(h?.ev_per_unit ?? h?.ev);
+        if (Number.isFinite(ev)) return ev; // keep in decimal units
+        return null;
+    };
+
+    const edgeVals = graded.map(getEdge).filter(v => v !== null && v !== undefined && Number.isFinite(v));
+    const maxAbs = edgeVals.length ? Math.max(...edgeVals.map(v => Math.abs(v))) : 0;
+
+    // Heuristic: if edges are mostly in [0,1], treat as EV decimals; else treat as point edges.
+    const edgeMode = maxAbs <= 1.0 ? 'ev' : 'points';
+    const edgeThresholds = edgeMode === 'ev'
+        ? [0.01, 0.02, 0.03, 0.05, 0.08]
+        : [0.5, 1.0, 2.0, 3.0, 5.0];
+
     const edgePerformance = edgeThresholds.map(threshold => {
-        const filtered = graded.filter(h => (h.edge || 0) >= threshold);
+        const filtered = graded.filter(h => {
+            const e = getEdge(h);
+            if (!Number.isFinite(e)) return false;
+            return e >= threshold;
+        });
         const w = filtered.filter(h => getResult(h) === 'WON' || getResult(h) === 'Win').length;
         const l = filtered.filter(h => getResult(h) === 'LOST' || getResult(h) === 'Loss').length;
         const wr = filtered.length > 0 ? (w / (w + l) * 100) : 0;
@@ -30,9 +55,10 @@ const ModelPerformanceAnalytics = ({ history }) => {
     }).filter(e => e.count > 0);
 
     // Performance by sport
-    const sports = [...new Set(graded.map(h => h.sport))];
+    const getSport = (h) => h?.sport || h?.league;
+    const sports = [...new Set(graded.map(getSport).filter(Boolean))];
     const sportPerformance = sports.map(sport => {
-        const filtered = graded.filter(h => h.sport === sport);
+        const filtered = graded.filter(h => getSport(h) === sport);
         const w = filtered.filter(h => getResult(h) === 'WON' || getResult(h) === 'Win').length;
         const l = filtered.filter(h => getResult(h) === 'LOST' || getResult(h) === 'Loss').length;
         const wr = filtered.length > 0 ? (w / (w + l) * 100) : 0;
@@ -41,9 +67,10 @@ const ModelPerformanceAnalytics = ({ history }) => {
     });
 
     // Performance by market type
-    const markets = [...new Set(graded.map(h => h.market))];
+    const getMarket = (h) => h?.market || h?.market_type;
+    const markets = [...new Set(graded.map(getMarket).filter(Boolean))];
     const marketPerformance = markets.map(market => {
-        const filtered = graded.filter(h => h.market === market);
+        const filtered = graded.filter(h => getMarket(h) === market);
         const w = filtered.filter(h => getResult(h) === 'WON' || getResult(h) === 'Win').length;
         const l = filtered.filter(h => getResult(h) === 'LOST' || getResult(h) === 'Loss').length;
         const wr = filtered.length > 0 ? (w / (w + l) * 100) : 0;
@@ -93,7 +120,9 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     <div className="space-y-2 text-xs">
                         {edgePerformance.map(edge => (
                             <div key={edge.threshold} className="flex justify-between items-center">
-                                <span className="text-slate-400">Edge ≥ {edge.threshold} pts:</span>
+                                <span className="text-slate-400">
+                                    Edge ≥ {edgeMode === 'ev' ? `${(edge.threshold * 100).toFixed(0)}%` : `${edge.threshold} pts`}:
+                                </span>
                                 <div className="flex items-center space-x-2">
                                     <span className="text-slate-500">{edge.wins}-{edge.losses}</span>
                                     <span className={`font-bold ${edge.winRate >= 55 ? 'text-green-400' : edge.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
