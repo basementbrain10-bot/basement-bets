@@ -789,6 +789,21 @@ class NCAAMMarketFirstModelV2(BaseModel):
         should_persist = should_persist and str(res.get('pick') or '').upper() not in ('', 'NONE')
         should_persist = should_persist and (res.get('selection') is not None and str(res.get('selection')).strip() not in ('', '—'))
 
+        # Lock window: do not persist new/updated picks inside 10 minutes to tip.
+        try:
+            from datetime import timezone
+            st = event.get('start_time')
+            if st is not None:
+                if isinstance(st, str):
+                    st = datetime.fromisoformat(st.replace('Z', '+00:00'))
+                if getattr(st, 'tzinfo', None) is None:
+                    st = st.replace(tzinfo=timezone.utc)
+                now_dt = datetime.now(timezone.utc)
+                if now_dt >= (st - timedelta(minutes=10)):
+                    should_persist = False
+        except Exception:
+            pass
+
         if should_persist:
             insert_model_prediction(res)
 

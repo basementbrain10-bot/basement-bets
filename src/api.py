@@ -1553,10 +1553,11 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
               AND market_type IS NOT NULL AND UPPER(market_type) <> 'AUTO'
               AND pick IS NOT NULL AND UPPER(pick) <> 'NONE'
               AND selection IS NOT NULL AND TRIM(selection) <> '' AND selection <> '—'
+              AND analyzed_at <= (SELECT start_time FROM events WHERE id=%s) - INTERVAL '10 minutes'
             ORDER BY analyzed_at DESC
             LIMIT 1
             """,
-            (eid,),
+            (eid, eid),
         ).fetchone()
         if not row:
             return None
