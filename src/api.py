@@ -1361,7 +1361,7 @@ async def get_ncaam_board(date: Optional[str] = None, days: int = 1):
 
 
 @app.get("/api/ncaam/top-picks")
-async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_games: int = 25):
+async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_games: int = 25, compute_missing: bool = False):
     """Return top model pick per game for the NCAAM board window.
 
     Goal: allow UI to render a 'Top pick' badge without firing /analyze for every row.
@@ -1546,9 +1546,13 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         row = _exec(
             conn,
             """
-            SELECT analyzed_at, outputs_json, selection, price, ev_per_unit, confidence_0_100, market_type, bet_line, bet_price
+            SELECT analyzed_at, outputs_json, selection, price, ev_per_unit, confidence_0_100, market_type, bet_line, bet_price, pick
             FROM model_predictions
             WHERE event_id=%s
+              AND COALESCE(ev_per_unit,0) >= 0.02
+              AND market_type IS NOT NULL AND UPPER(market_type) <> 'AUTO'
+              AND pick IS NOT NULL AND UPPER(pick) <> 'NONE'
+              AND selection IS NOT NULL AND TRIM(selection) <> '' AND selection <> '—'
             ORDER BY analyzed_at DESC
             LIMIT 1
             """,
@@ -1570,7 +1574,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
             # Fallback: reconstruct a minimal rec
             ev = float(r.get('ev_per_unit') or 0.0)
             line = r.get('bet_line')
-            price = r.get('bet_price')
+            price = r.get('price') if r.get('price') is not None else r.get('bet_price')
             rec = {
                 'bet_type': r.get('market_type') or 'AUTO',
                 'selection': r.get('selection') or '—',
@@ -1587,25 +1591,30 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
 
     with get_db_connection() as conn:
         now_dt = datetime.now(timezone.utc)
+
+        # Fast path (default): use stored recommended picks only.
+        # This avoids expensive server-side analysis which can time out on Vercel.
         for eid in event_ids:
             try:
                 st = _dt((event_meta.get(eid) or {}).get('start_time'))
                 if st and st.tzinfo is None:
-                    # assume UTC if naive
                     st = st.replace(tzinfo=timezone.utc)
 
-                # Lock recommendation once game starts: return stored pick and do NOT re-analyze.
-                if st and st <= now_dt:
-                    locked = _load_locked_pick(conn, eid)
-                    if locked and locked.get('rec'):
-                        picks[eid] = {
-                            'rec': locked['rec'],
-                            'analyzed_at': locked.get('analyzed_at'),
-                            'event': event_meta.get(eid),
-                            'locked': True,
-                        }
-                        continue
+                locked = _load_locked_pick(conn, eid)
+                if locked and locked.get('rec'):
+                    picks[eid] = {
+                        'rec': locked['rec'],
+                        'analyzed_at': locked.get('analyzed_at'),
+                        'event': event_meta.get(eid),
+                        'locked': bool(st and st <= now_dt),
+                        'source': 'stored',
+                    }
+                    continue
 
+                if not compute_missing:
+                    continue
+
+                # Optional slow path: compute missing picks on-demand.
                 res = model.analyze(eid)
                 top = (res.get('recommendations') or [None])[0]
                 if top:
@@ -1614,9 +1623,9 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                         "analyzed_at": res.get('analyzed_at'),
                         "event": event_meta.get(eid),
                         'locked': False,
+                        'source': 'computed',
                     }
             except Exception as e:
-                # keep going; missing odds / missing torvik etc.
                 print(f"[top-picks] analyze failed for {eid}: {e}")
 
     data = {
