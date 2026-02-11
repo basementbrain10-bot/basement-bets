@@ -210,6 +210,20 @@ const ModelPerformanceAnalytics = ({ history }) => {
     const trend7 = confidenceTrend((h) => isWithinDays(h, 7));
     const trend30 = confidenceTrend((h) => isWithinDays(h, 30));
 
+    const sum = (xs) => (xs || []).reduce((a, b) => a + (Number(b) || 0), 0);
+
+    // Sanity checks: these should add up to graded.length.
+    const confidenceCountSum = sum(confidencePerformance.map(x => x.count));
+    const sportCountSum = sum(sportPerformance.map(x => x.count));
+    const marketCountSum = sum(marketPerformance.map(x => x.count));
+
+    const sanity = {
+        graded: graded.length,
+        confidence: confidenceCountSum,
+        sport: sportCountSum,
+        market: marketCountSum,
+    };
+
     if (graded.length === 0) return null;
 
     return (
@@ -249,23 +263,40 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {/* Performance by Edge */}
                 <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
                     <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Performance by Edge</h4>
-                    <div className="space-y-2 text-xs">
-                        {edgePerformance.map(edge => (
-                            <div key={edge.threshold} className="flex justify-between items-center">
-                                <span className="text-slate-400">
-                                    Edge ≥ {edgeMode === 'ev' ? `${(edge.threshold * 100).toFixed(0)}%` : `${edge.threshold} pts`}:
-                                </span>
-                                <div className="flex items-center space-x-2">
-                                    <span className="text-slate-500">{edge.wins}-{edge.losses}</span>
-                                    <span className={`font-bold ${edge.winRate >= 55 ? 'text-green-400' : edge.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                        {edge.winRate.toFixed(0)}%
-                                    </span>
-                                    <span className={`text-xs ${edge.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                        ({edge.roi >= 0 ? '+' : ''}{edge.roi.toFixed(0)}%)
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
+
+                    <div className="text-[10px] text-slate-500 mb-2">
+                        Thresholds are {edgeMode === 'ev' ? 'EV%' : 'edge points'}. Rows are cumulative (Edge ≥ threshold).
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700">
+                                    <th className="py-1 pr-2 text-left">Edge ≥</th>
+                                    <th className="py-1 px-2 text-right">N</th>
+                                    <th className="py-1 px-2 text-right">W-L</th>
+                                    <th className="py-1 px-2 text-right">Win%</th>
+                                    <th className="py-1 pl-2 text-right">ROI</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {edgePerformance.map(edge => (
+                                    <tr key={edge.threshold} className="border-b border-slate-800/60 last:border-0">
+                                        <td className="py-1 pr-2 text-slate-300">
+                                            {edgeMode === 'ev' ? `${(edge.threshold * 100).toFixed(0)}%` : `${edge.threshold} pts`}
+                                        </td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{edge.count}</td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{edge.wins}-{edge.losses}</td>
+                                        <td className={`py-1 px-2 text-right font-bold ${edge.winRate >= 55 ? 'text-green-400' : edge.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                            {edge.winRate.toFixed(0)}%
+                                        </td>
+                                        <td className={`py-1 pl-2 text-right font-mono ${edge.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {edge.roi >= 0 ? '+' : ''}{edge.roi.toFixed(0)}%
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
@@ -292,22 +323,41 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {/* Performance by Confidence */}
                 <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
                     <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">By Confidence</h4>
-                    <div className="space-y-2 text-xs">
-                        {confidencePerformance.map(c => (
-                            <div key={c.level} className="flex justify-between items-center">
-                                <span className="text-slate-400">{c.level}:</span>
-                                <div className="flex items-center space-x-2">
-                                    <span className="text-slate-500">{c.count}</span>
-                                    <span className="text-slate-500">{c.wins}-{c.losses}</span>
-                                    <span className={`font-bold ${c.winRate >= 55 ? 'text-green-400' : c.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                        {c.winRate.toFixed(0)}%
-                                    </span>
-                                    <span className={`text-xs ${c.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                        ({c.roi >= 0 ? '+' : ''}{c.roi.toFixed(0)}%)
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700">
+                                    <th className="py-1 pr-2 text-left">Level</th>
+                                    <th className="py-1 px-2 text-right">N</th>
+                                    <th className="py-1 px-2 text-right">W-L</th>
+                                    <th className="py-1 px-2 text-right">Win%</th>
+                                    <th className="py-1 pl-2 text-right">ROI</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {confidencePerformance.map(c => (
+                                    <tr key={c.level} className="border-b border-slate-800/60 last:border-0">
+                                        <td className="py-1 pr-2 text-slate-300 font-bold">{c.level}</td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{c.count}</td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{c.wins}-{c.losses}</td>
+                                        <td className={`py-1 px-2 text-right font-bold ${c.winRate >= 55 ? 'text-green-400' : c.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                            {c.winRate.toFixed(0)}%
+                                        </td>
+                                        <td className={`py-1 pl-2 text-right font-mono ${c.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {c.roi >= 0 ? '+' : ''}{c.roi.toFixed(0)}%
+                                        </td>
+                                    </tr>
+                                ))}
+                                <tr className="border-t border-slate-700">
+                                    <td className="py-1 pr-2 text-slate-500 font-black">TOTAL</td>
+                                    <td className="py-1 px-2 text-right text-slate-200 font-black font-mono">{confidenceCountSum}</td>
+                                    <td className="py-1 px-2"></td>
+                                    <td className="py-1 px-2"></td>
+                                    <td className="py-1 pl-2"></td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-slate-700">
@@ -356,34 +406,86 @@ const ModelPerformanceAnalytics = ({ history }) => {
 
                 {/* Performance by Sport & Market */}
                 <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
-                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">By Sport & Market</h4>
-                    <div className="space-y-3">
-                        {sportPerformance.map(sport => (
-                            <div key={sport.sport} className="text-xs">
-                                <div className="flex justify-between items-center mb-1">
-                                    <span className="text-white font-bold">{sport.sport}</span>
-                                    <span className={`font-bold ${sport.winRate >= 55 ? 'text-green-400' : sport.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                        {sport.winRate.toFixed(0)}%
-                                    </span>
-                                </div>
-                                <div className="text-slate-500">{sport.wins}-{sport.losses} ({sport.roi >= 0 ? '+' : ''}{sport.roi.toFixed(1)}% ROI)</div>
-                            </div>
-                        ))}
-                        {marketPerformance.length > 0 && (
-                            <>
-                                <div className="border-t border-slate-700 pt-2 mt-2"></div>
-                                {marketPerformance.map(market => (
-                                    <div key={market.market} className="text-xs">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-slate-400">{market.market}:</span>
-                                            <span className={`font-bold ${market.winRate >= 55 ? 'text-green-400' : market.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                                {market.wins}-{market.losses} ({market.winRate.toFixed(0)}%)
-                                            </span>
-                                        </div>
-                                    </div>
+                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">By Sport</h4>
+                    <div className="overflow-x-auto mb-4">
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700">
+                                    <th className="py-1 pr-2 text-left">Sport</th>
+                                    <th className="py-1 px-2 text-right">N</th>
+                                    <th className="py-1 px-2 text-right">W-L</th>
+                                    <th className="py-1 px-2 text-right">Win%</th>
+                                    <th className="py-1 pl-2 text-right">ROI</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {sportPerformance.map(s => (
+                                    <tr key={s.sport} className="border-b border-slate-800/60 last:border-0">
+                                        <td className="py-1 pr-2 text-slate-300 font-bold">{s.sport}</td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{s.count}</td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{s.wins}-{s.losses}</td>
+                                        <td className={`py-1 px-2 text-right font-bold ${s.winRate >= 55 ? 'text-green-400' : s.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                            {s.winRate.toFixed(0)}%
+                                        </td>
+                                        <td className={`py-1 pl-2 text-right font-mono ${s.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {s.roi >= 0 ? '+' : ''}{s.roi.toFixed(0)}%
+                                        </td>
+                                    </tr>
                                 ))}
-                            </>
-                        )}
+                                <tr className="border-t border-slate-700">
+                                    <td className="py-1 pr-2 text-slate-500 font-black">TOTAL</td>
+                                    <td className="py-1 px-2 text-right text-slate-200 font-black font-mono">{sportCountSum}</td>
+                                    <td className="py-1 px-2"></td>
+                                    <td className="py-1 px-2"></td>
+                                    <td className="py-1 pl-2"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">By Market</h4>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700">
+                                    <th className="py-1 pr-2 text-left">Market</th>
+                                    <th className="py-1 px-2 text-right">N</th>
+                                    <th className="py-1 px-2 text-right">W-L</th>
+                                    <th className="py-1 px-2 text-right">Win%</th>
+                                    <th className="py-1 pl-2 text-right">ROI</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {marketPerformance.map(m => (
+                                    <tr key={m.market} className="border-b border-slate-800/60 last:border-0">
+                                        <td className="py-1 pr-2 text-slate-300 font-bold">{m.market}</td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{m.count}</td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{m.wins}-{m.losses}</td>
+                                        <td className={`py-1 px-2 text-right font-bold ${m.winRate >= 55 ? 'text-green-400' : m.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                            {m.winRate.toFixed(0)}%
+                                        </td>
+                                        <td className={`py-1 pl-2 text-right font-mono ${m.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {m.roi >= 0 ? '+' : ''}{m.roi.toFixed(0)}%
+                                        </td>
+                                    </tr>
+                                ))}
+                                <tr className="border-t border-slate-700">
+                                    <td className="py-1 pr-2 text-slate-500 font-black">TOTAL</td>
+                                    <td className="py-1 px-2 text-right text-slate-200 font-black font-mono">{marketCountSum}</td>
+                                    <td className="py-1 px-2"></td>
+                                    <td className="py-1 px-2"></td>
+                                    <td className="py-1 pl-2"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Sanity check */}
+                    <div className="mt-4 text-[10px] text-slate-500">
+                        Sanity: graded={sanity.graded} • by confidence={sanity.confidence} • by sport={sanity.sport} • by market={sanity.market}
+                        {(sanity.confidence !== sanity.graded || sanity.sport !== sanity.graded || sanity.market !== sanity.graded) ? (
+                            <span className="text-amber-300"> (mismatch: some rows missing labels)</span>
+                        ) : null}
                     </div>
                 </div>
             </div>
