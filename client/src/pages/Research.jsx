@@ -1028,8 +1028,7 @@ const Research = ({ onAddBet }) => {
                                     return s;
                                 };
 
-                                const dayHist = getRecommendedHistory().filter(h => isSameEtDay(h?.analyzed_at || h?.created_at, selectedDate));
-                                const recHist = dayHist;
+                                const recHist = getRecommendedHistory();
 
                                 const graded = recHist.filter(h => ['WON', 'LOST', 'PUSH'].includes(normOutcome(h)));
                                 const w = graded.filter(x => normOutcome(x) === 'WON').length;
@@ -1082,21 +1081,15 @@ const Research = ({ onAddBet }) => {
                             </div>
                         )}
 
-                        {(() => {
-                            const dayHist = getRecommendedHistory().filter(h => isSameEtDay(h?.analyzed_at || h?.created_at, selectedDate));
+                        {!loading && getRecommendedHistory().length === 0 && (
+                            <div className="text-center py-10 text-slate-500">
+                                No recommended-bet history yet.
+                            </div>
+                        )}
 
-                            if (!loading && dayHist.length === 0) {
-                                return (
-                                    <div className="text-center py-10 text-slate-500">
-                                        No graded history for {selectedDate}.
-                                    </div>
-                                );
-                            }
-
-                            if (!loading && dayHist.length > 0) {
-                                return (
-                                    <>
-                                        <ModelPerformanceAnalytics history={dayHist} />
+                        {!loading && getRecommendedHistory().length > 0 && (
+                            <>
+                                <ModelPerformanceAnalytics history={getRecommendedHistory()} />
 
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left border-collapse">
@@ -1125,7 +1118,7 @@ const Research = ({ onAddBet }) => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {dayHist.map((item, idx) => {
+                                            {getRecommendedHistory().map((item, idx) => {
                                                 // Robust Recommendation Parsing
                                                 let recs = [];
                                                 try {
@@ -1260,12 +1253,8 @@ const Research = ({ onAddBet }) => {
                                         </tbody>
                                     </table>
                                 </div>
-                                    </>
-                                );
-                            }
-
-                            return null;
-                        })()}
+                            </>
+                        )}
 
                         <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">

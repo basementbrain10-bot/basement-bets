@@ -220,12 +220,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
         return { level, count: filtered.length, wins: w, losses: l, pushes: p, winRate: wr };
     });
 
-    const trendYday = confidenceTrend((h) => isYesterdayET(h));
-    const trend3 = confidenceTrend((h) => isWithinDays(h, 3));
-    const trend7 = confidenceTrend((h) => isWithinDays(h, 7));
-    const trend30 = confidenceTrend((h) => isWithinDays(h, 30));
-
-    // --- Top 6 (by EV) performance by day ---
+    // --- Top 6 (by EV) subset (used for daily tracking) ---
     const topN = 6;
     const getEv = (h) => {
         const ev = Number(h?.ev_per_unit ?? h?.ev);
@@ -243,7 +238,6 @@ const ModelPerformanceAnalytics = ({ history }) => {
         }
 
         const days = Object.keys(groups).sort((a, b) => {
-            // sort by actual date value
             const da = new Date(a).getTime();
             const db = new Date(b).getTime();
             if (Number.isFinite(da) && Number.isFinite(db)) return db - da;
@@ -270,12 +264,37 @@ const ModelPerformanceAnalytics = ({ history }) => {
             const wr = decided > 0 ? (w / decided * 100) : 0;
             const roi = bets.length > 0 ? ((w * 9.09 - l * 10) / (bets.length * 10) * 100) : 0;
 
-            out.push({ day, count: bets.length, wins: w, losses: l, pushes: p, winRate: wr, roi });
+            out.push({ day, bets, count: bets.length, wins: w, losses: l, pushes: p, winRate: wr, roi });
         }
         return out;
     })();
 
     const dailyTopN7 = dailyTopN.slice(0, 7);
+
+    // Trends by confidence should reflect the Top 6 set (not the whole board window).
+    const topNBetsFlat = dailyTopN.flatMap(d => d.bets || []);
+    const confidenceTrendTopN = (predicateFn) => confidenceLevels.map(level => {
+        const filtered = topNBetsFlat
+            .filter(h => getConfidenceLabel(h) === level)
+            .filter(predicateFn);
+        const w = filtered.filter(h => {
+            const s = String(getResult(h)).toUpperCase();
+            return s === 'WON' || s === 'WIN';
+        }).length;
+        const l = filtered.filter(h => {
+            const s = String(getResult(h)).toUpperCase();
+            return s === 'LOST' || s === 'LOSS';
+        }).length;
+        const p = filtered.filter(h => String(getResult(h)).toUpperCase() === 'PUSH').length;
+        const decided = w + l;
+        const wr = decided > 0 ? (w / decided * 100) : 0;
+        return { level, count: filtered.length, wins: w, losses: l, pushes: p, winRate: wr };
+    });
+
+    const trendYday = confidenceTrendTopN((h) => isYesterdayET(h));
+    const trend3 = confidenceTrendTopN((h) => isWithinDays(h, 3));
+    const trend7 = confidenceTrendTopN((h) => isWithinDays(h, 7));
+    const trend30 = confidenceTrendTopN((h) => isWithinDays(h, 30));
 
     const sum = (xs) => (xs || []).reduce((a, b) => a + (Number(b) || 0), 0);
 
@@ -428,7 +447,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-slate-700">
-                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Trend by confidence</div>
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Trend by confidence (Top 6 only)</div>
                         <div className="grid grid-cols-2 gap-3 text-[11px]">
                             <div className="bg-slate-950/30 rounded-md p-2 border border-slate-800">
                                 <div className="text-[10px] text-slate-500 font-bold mb-1">Yesterday</div>
