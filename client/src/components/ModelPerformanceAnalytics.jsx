@@ -109,11 +109,13 @@ const ModelPerformanceAnalytics = ({ history }) => {
     };
 
     const inferConfidenceFromEv = (h) => {
-        // Fallback (should be rare): bucket by EV/u.
+        // Bucket by EV/u using the SAME thresholds as the model UI labels:
+        // confidence = High if ev*100*5 > 80  => ev > 0.16
+        // confidence = Medium if ev*100*5 > 50 => ev > 0.10
         const ev = Number(h?.ev_per_unit ?? h?.ev);
         if (!Number.isFinite(ev)) return 'Low';
-        if (ev >= 0.08) return 'High';
-        if (ev >= 0.04) return 'Medium';
+        if (ev >= 0.16) return 'High';
+        if (ev >= 0.10) return 'Medium';
         return 'Low';
     };
 
