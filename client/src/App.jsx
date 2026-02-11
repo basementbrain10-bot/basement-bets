@@ -4,14 +4,13 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell,
     ScatterChart, Scatter, ZAxis, ReferenceLine
 } from 'recharts';
-import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, PieChart, BarChart2, BarChart3, Calendar, Layout, LayoutDashboard, Search, Menu, X, PlusCircle, Trash, Trash2, CheckCircle, Clock, Percent, List, FileText, Info, Settings, User, RefreshCw, AlertTriangle, AlertCircle, Filter, ChevronDown, ChevronRight, MessageSquare, BookOpen, ExternalLink, ArrowRight, Table } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, BarChart3, LayoutDashboard, Search, X, PlusCircle, Trash, RefreshCw, AlertCircle, Filter, Table } from 'lucide-react';
 
-console.log("Basement Bets Frontend v1.6.2 Loaded at " + new Date().toISOString());
-import axios from 'axios';
-import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 // import { StagingBanner } from './components/StagingBanner';
+
+console.log("Basement Bets Frontend v1.6.3 Loaded at " + new Date().toISOString());
 
 // --- Login Modal Component ---
 const LoginModal = ({ onSubmit }) => {
@@ -2295,7 +2294,7 @@ const FinancialHeader = ({ financials, mode = 'all' }) => {
     if (!financials) return null;
     return (
         <div className="flex flex-wrap gap-4 mb-8">
-            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.6.2</div>
+            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.6.3</div>
 
             {mode !== 'performance' && (
                 <FinancialCard
