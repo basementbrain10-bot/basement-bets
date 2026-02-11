@@ -399,7 +399,7 @@ function PerformanceView({ timeSeries, drawdown, financials, periodStats }) {
 
     useEffect(() => {
         // Trend of Total In Play from balance snapshots
-        api.get('/api/financials/inplay/series', { params: { days: 90 } })
+        api.get('/api/financials/inplay/series', { params: { days: 30 } })
             .then(r => setInPlaySeries(r.data?.series || []))
             .catch(() => {});
     }, []);
@@ -415,10 +415,7 @@ function PerformanceView({ timeSeries, drawdown, financials, periodStats }) {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Financial Overview */}
-            <div className="flex flex-wrap gap-4 items-stretch">
-                <FinancialHeader financials={financials} mode="performance" />
-            </div>
+            {/* Financial Overview tiles removed for Performance tab (focus on betting performance) */}
 
             {/* Sportsbook Balance Summary Tiles */}
             {financials?.breakdown && (
@@ -503,25 +500,7 @@ function PerformanceView({ timeSeries, drawdown, financials, periodStats }) {
                 )
             }
 
-            {/* Drawdown & Peak Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl backdrop-blur-sm">
-                    <div className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Max Drawdown</div>
-                    <div className="text-2xl font-bold text-red-400">{formatCurrency(drawdown?.max_drawdown || 0)}</div>
-                </div>
-                <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl backdrop-blur-sm">
-                    <div className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Current Drawdown</div>
-                    <div className="text-2xl font-bold text-orange-400">{formatCurrency(drawdown?.current_drawdown || 0)}</div>
-                </div>
-                <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl backdrop-blur-sm">
-                    <div className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Peak Profit</div>
-                    <div className="text-2xl font-bold text-green-400">{formatCurrency(drawdown?.peak_profit || 0)}</div>
-                </div>
-                <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl backdrop-blur-sm">
-                    <div className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Recovery</div>
-                    <div className="text-2xl font-bold text-blue-400">{drawdown?.recovery_pct || 0}%</div>
-                </div>
-            </div>
+            {/* Drawdown tiles removed (keep Performance tab focused on betting performance + curves) */}
 
             {/* Total In Play Trend */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl backdrop-blur-sm">
@@ -529,9 +508,37 @@ function PerformanceView({ timeSeries, drawdown, financials, periodStats }) {
                     <Activity className="text-green-400" /> Total In Play Trend
                 </h3>
                 {(!inPlaySeries || inPlaySeries.length === 0) ? (
-                    <div className="text-gray-500 text-sm">No balance snapshot history yet.</div>
+                    <div className="text-gray-500 text-sm">No balance snapshot history yet (need daily balance snapshots to see a 30d trend).</div>
                 ) : (
                     <>
+                        {(() => {
+                            const s = inPlaySeries || [];
+                            const last = s[s.length - 1];
+                            const lastVal = Number(last?.total_in_play || 0);
+                            const dayAgo = (k) => s.length > k ? Number(s[s.length - 1 - k]?.total_in_play || 0) : null;
+                            const v7 = dayAgo(7);
+                            const v30 = dayAgo(30);
+                            const d7 = (v7 === null) ? null : (lastVal - v7);
+                            const d30 = (v30 === null) ? null : (lastVal - v30);
+                            const cls = (x) => x === null ? 'text-slate-300' : x >= 0 ? 'text-green-400' : 'text-red-400';
+                            const fmt = (x) => x === null ? '—' : formatCurrency(x);
+                            return (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                                    <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Total in play (latest)</div>
+                                        <div className="mt-1 text-white font-black text-2xl">{formatCurrency(lastVal)}</div>
+                                    </div>
+                                    <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Change (7d)</div>
+                                        <div className={`mt-1 font-black text-2xl ${cls(d7)}`}>{fmt(d7)}</div>
+                                    </div>
+                                    <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Change (30d)</div>
+                                        <div className={`mt-1 font-black text-2xl ${cls(d30)}`}>{fmt(d30)}</div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
                         <div className="h-[260px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={inPlaySeries}>
@@ -548,7 +555,7 @@ function PerformanceView({ timeSeries, drawdown, financials, periodStats }) {
                             </ResponsiveContainer>
                         </div>
                         <div className="mt-4 text-center text-xs text-gray-500">
-                            Total of latest per-book balance snapshots each day (ET).
+                            Last 30 days (ET). Each day uses the latest per-book snapshot.
                         </div>
                     </>
                 )}
