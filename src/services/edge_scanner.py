@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from src.database import get_db_connection, _exec
 from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
+from sqlalchemy.ext.asyncio import AsyncSession
 
 class EdgeScanner:
     """
@@ -15,7 +16,7 @@ class EdgeScanner:
     def __init__(self, model=None):
         self.model = model or NCAAMMarketFirstModelV2()
         
-    def find_edges(self, days_ahead: int = 3, max_plays: int = 3, force_refresh: bool = False) -> List[Dict]:
+    async def find_edges(self, db: AsyncSession, days_ahead: int = 3, max_plays: int = 3, force_refresh: bool = False) -> List[Dict]:
         """Scan upcoming games and return list of publishable opportunities.
 
         Rules:
@@ -70,7 +71,7 @@ class EdgeScanner:
                 try:
                     # Run Analysis
                     # analyze() handles fetching market snapshots, signals, logic, and persistence.
-                    res = self.model.analyze(ev['id'])
+                    res = await self.model.analyze(ev['id'], db)
                     
                     if not res or 'error' in res:
                         continue

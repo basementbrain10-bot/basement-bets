@@ -6,7 +6,8 @@ from fastapi.security.api_key import APIKeyHeader
 import os
 
 from src.models.odds_client import OddsAPIClient
-from src.database import fetch_all_bets, insert_model_prediction, fetch_model_history, init_db
+from src.database import fetch_all_bets, insert_model_prediction, fetch_model_history, init_db, get_async_db
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
 app = FastAPI()
@@ -1460,7 +1461,7 @@ async def get_ncaam_board(date: Optional[str] = None, days: int = 1):
 
 
 @app.get("/api/ncaam/top-picks")
-async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_games: int = 25, compute_missing: bool = False):
+async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_games: int = 25, compute_missing: bool = False, db: AsyncSession = Depends(get_async_db)):
     """Return top model pick per game for the NCAAM board window.
 
     Goal: allow UI to render a 'Top pick' badge without firing /analyze for every row.
@@ -1715,7 +1716,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                     continue
 
                 # Optional slow path: compute missing picks on-demand.
-                res = model.analyze(eid)
+                res = await model.analyze(eid, db)
                 top = (res.get('recommendations') or [None])[0]
                 if top:
                     picks[eid] = {
@@ -2427,7 +2428,7 @@ async def trigger_prediction_grading(fast: bool = True, backfill_days: int = 3, 
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/reports/model-health")
-async def get_model_health_report(request: Request):
+async def get_model_health_report(request: Request, db: AsyncSession = Depends(get_async_db)):
     """
     Returns the markdown report for the Model Health Dashboard.
     """
@@ -2461,7 +2462,7 @@ async def get_model_health_report(request: Request):
         # 3. Live Opps
         report.append("\n## 3. Top Opportunities (Live)")
         scanner = EdgeScanner()
-        edges = scanner.find_edges(days_ahead=3, max_plays=3)
+        edges = await scanner.find_edges(db, days_ahead=3, max_plays=3)
         if not edges:
              report.append("_No edges found currently._")
         else:

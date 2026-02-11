@@ -1198,3 +1198,507 @@ OSError: [Errno 9] Bad file descriptor
 
 Current thread 0x000000020a37ec40 (most recent call first):
   <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/policy_engine.py', 'src/services/torvik_projection.py', 'scripts/backfill_missing_odds.py', 'src/scripts/build_action_network_archetype_stats.py', 'src/services/edge_scanner.py', 'src/models/ncaam_market_first_model_v2.py', 'scripts/correlation_analysis.py', 'scripts/predict_today_v2.py', 'src/api.py', 'scripts/backtest_recent_v2.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/check_data_correlation.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/check_data_correlation.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/check_data_correlation.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/correlation/ncaam_correlation_engine.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/build_ncaam_correlation_cache.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/correlation/ncaam_correlation_engine.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/debug_correlation_query.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_missing_odds.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/odds_adapter.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_missing_odds.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_missing_odds.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_missing_odds.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_missing_odds.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/test_correlation_api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/action_network.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_missing_odds.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/debug_backfill_state.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/debug_backfill_state.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/debug_action_scores.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/action_network.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/correlation/ncaam_correlation_engine.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/correlation/ncaam_correlation_engine.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/correlation/ncaam_correlation_engine.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/correlation/ncaam_correlation_engine.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/debug_backfill_details.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/correlation/ncaam_correlation_engine.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/debug_full_query.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/debug_action_scores.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/debug_check_specific_game.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/debug_action_scores.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_single_day.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_single_day.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_single_day.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_single_day.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_single_day.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_single_day.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_single_day.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/test_parsing.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/odds_adapter.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/action_network.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/debug_action_scores.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/debug_check_specific_game.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/correlation/ncaam_correlation_engine.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/odds_adapter.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/odds_adapter.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/backfill_missing_odds.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/odds_adapter.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/odds_adapter.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/services/odds_adapter.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/test_correlation_api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/test_correlation_api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/verify_backfill_counts.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/verify_backfill_counts.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/test_correlation_api.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/schemas/ncaam.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/database.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'src/models/ncaam_market_first_model_v2.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
+WARNING:  WatchFiles detected changes in 'scripts/test_async_model.py'. Reloading...
+Fatal Python error: init_sys_streams: can't initialize sys standard streams
+Python runtime state: core initialized
+OSError: [Errno 9] Bad file descriptor
+
+Current thread 0x000000020a37ec40 (most recent call first):
+  <no Python frame>
