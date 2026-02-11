@@ -46,22 +46,55 @@ const ModelPerformanceAnalytics = ({ history }) => {
 
     // Heuristic: if edges are mostly in [0,1], treat as EV decimals; else treat as point edges.
     const edgeMode = maxAbs <= 1.0 ? 'ev' : 'points';
-    const edgeThresholds = edgeMode === 'ev'
-        ? [0.01, 0.02, 0.03, 0.05, 0.08]
-        : [0.5, 1.0, 2.0, 3.0, 5.0];
 
-    const edgePerformance = edgeThresholds.map(threshold => {
-        const filtered = graded.filter(h => {
-            const e = getEdge(h);
-            if (!Number.isFinite(e)) return false;
-            return e >= threshold;
-        });
-        const w = filtered.filter(h => getResult(h) === 'WON' || getResult(h) === 'Win').length;
-        const l = filtered.filter(h => getResult(h) === 'LOST' || getResult(h) === 'Loss').length;
-        const wr = filtered.length > 0 ? (w / (w + l) * 100) : 0;
-        const r = filtered.length > 0 ? ((w * 9.09 - l * 10) / (filtered.length * 10) * 100) : 0;
-        return { threshold, count: filtered.length, wins: w, losses: l, winRate: wr, roi: r };
-    }).filter(e => e.count > 0);
+    // Show edge performance in *bands* (ranges), not cumulative thresholds.
+    // This is easier to interpret and lets us show the right tail.
+    const edgeBands = edgeMode === 'ev'
+        ? [
+            { lo: 0.00, hi: 0.05, label: '0–5%' },
+            { lo: 0.05, hi: 0.10, label: '5–10%' },
+            { lo: 0.10, hi: 0.15, label: '10–15%' },
+            { lo: 0.15, hi: 0.20, label: '15–20%' },
+            { lo: 0.20, hi: 0.25, label: '20–25%' },
+            { lo: 0.25, hi: null, label: '25%+' },
+        ]
+        : [
+            { lo: 0.0, hi: 1.0, label: '0–1 pts' },
+            { lo: 1.0, hi: 2.0, label: '1–2 pts' },
+            { lo: 2.0, hi: 3.0, label: '2–3 pts' },
+            { lo: 3.0, hi: 4.0, label: '3–4 pts' },
+            { lo: 4.0, hi: 5.0, label: '4–5 pts' },
+            { lo: 5.0, hi: null, label: '5+ pts' },
+        ];
+
+    const inBand = (e, b) => {
+        if (!Number.isFinite(e)) return false;
+        if (b.hi === null || b.hi === undefined) return e >= b.lo;
+        return e >= b.lo && e < b.hi;
+    };
+
+    const edgeBandPerformance = edgeBands.map((band) => {
+        const filtered = graded.filter(h => inBand(getEdge(h), band));
+        const w = filtered.filter(h => {
+            const s = String(getResult(h)).toUpperCase();
+            return s === 'WON' || s === 'WIN';
+        }).length;
+        const l = filtered.filter(h => {
+            const s = String(getResult(h)).toUpperCase();
+            return s === 'LOST' || s === 'LOSS';
+        }).length;
+        const decided = w + l;
+        const wr = decided > 0 ? (w / decided * 100) : 0;
+        const roiPct = filtered.length > 0 ? ((w * 9.09 - l * 10) / (filtered.length * 10) * 100) : 0;
+        return {
+            label: band.label,
+            count: filtered.length,
+            wins: w,
+            losses: l,
+            winRate: wr,
+            roi: roiPct,
+        };
+    }).filter(x => x.count > 0);
 
     // Performance by sport
     const getSport = (h) => h?.sport || h?.league;
@@ -279,6 +312,122 @@ const ModelPerformanceAnalytics = ({ history }) => {
     const trend7 = confidenceTrend((h) => isWithinDays(h, 7));
     const trend30 = confidenceTrend((h) => isWithinDays(h, 30));
 
+    // Daily win% line series by confidence band (last N days)
+    const dailyWinSeries = (() => {
+        const days = 14;
+        const now = new Date();
+        // build ET date keys for last N days (oldest -> newest)
+        const dayKeys = [];
+        for (let i = days - 1; i >= 0; i--) {
+            const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+            const key = d.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+            dayKeys.push(key);
+        }
+
+        const byDay = {};
+        for (const h of graded) {
+            const key = toEtDay(h?.analyzed_at || h?.created_at);
+            if (!key) continue;
+            if (!byDay[key]) byDay[key] = [];
+            byDay[key].push(h);
+        }
+
+        const bands = ['High', 'Medium', 'Low'];
+        const series = {};
+        for (const b of bands) series[b] = [];
+
+        for (const key of dayKeys) {
+            const rows = byDay[key] || [];
+            for (const b of bands) {
+                const xs = rows.filter(r => getConfidenceLabel(r) === b);
+                const w = xs.filter(r => {
+                    const s = String(getResult(r)).toUpperCase();
+                    return s === 'WON' || s === 'WIN';
+                }).length;
+                const l = xs.filter(r => {
+                    const s = String(getResult(r)).toUpperCase();
+                    return s === 'LOST' || s === 'LOSS';
+                }).length;
+                const decided = w + l;
+                const wr = decided > 0 ? (w / decided * 100) : null;
+                series[b].push(wr);
+            }
+        }
+
+        return { dayKeys, series };
+    })();
+
+    const renderLineChart = () => {
+        const { dayKeys, series } = dailyWinSeries;
+        const bands = [
+            { k: 'High', color: '#34d399' },
+            { k: 'Medium', color: '#60a5fa' },
+            { k: 'Low', color: '#f59e0b' },
+        ];
+
+        const width = 520;
+        const height = 140;
+        const padL = 30;
+        const padR = 10;
+        const padT = 10;
+        const padB = 24;
+
+        const n = dayKeys.length;
+        const xAt = (i) => {
+            if (n <= 1) return padL;
+            return padL + (i * (width - padL - padR)) / (n - 1);
+        };
+        const yAt = (pct) => {
+            const v = (pct === null || pct === undefined) ? 50 : pct;
+            const clamped = Math.max(0, Math.min(100, Number(v)));
+            return padT + ((100 - clamped) * (height - padT - padB)) / 100.0;
+        };
+
+        const pathFor = (arr) => {
+            let d = '';
+            for (let i = 0; i < arr.length; i++) {
+                const x = xAt(i);
+                const y = yAt(arr[i]);
+                d += (i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
+            }
+            return d;
+        };
+
+        const tickIdx = [0, Math.floor((n - 1) / 2), n - 1].filter((v, i, a) => a.indexOf(v) === i);
+
+        return (
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-36">
+                {/* grid */}
+                {[0, 25, 50, 75, 100].map((p) => (
+                    <g key={p}>
+                        <line x1={padL} x2={width - padR} y1={yAt(p)} y2={yAt(p)} stroke="rgba(148,163,184,0.15)" strokeWidth="1" />
+                        <text x={2} y={yAt(p) + 3} fontSize="9" fill="rgba(148,163,184,0.7)">{p}%</text>
+                    </g>
+                ))}
+
+                {/* series */}
+                {bands.map((b) => (
+                    <path key={b.k} d={pathFor(series[b.k] || [])} fill="none" stroke={b.color} strokeWidth="2" />
+                ))}
+
+                {/* x labels (sparse) */}
+                {tickIdx.map((i) => (
+                    <text key={i} x={xAt(i)} y={height - 6} fontSize="9" fill="rgba(148,163,184,0.7)" textAnchor="middle">
+                        {(() => {
+                            const parts = String(dayKeys[i] || '').split('/');
+                            if (parts.length >= 2) {
+                                const mm = String(parts[0]).padStart(2, '0');
+                                const dd = String(parts[1]).padStart(2, '0');
+                                return `${mm}/${dd}`;
+                            }
+                            return dayKeys[i] || '';
+                        })()}
+                    </text>
+                ))}
+            </svg>
+        );
+    };
+
     const sum = (xs) => (xs || []).reduce((a, b) => a + (Number(b) || 0), 0);
 
     // Sanity checks: these should add up to graded.length.
@@ -334,14 +483,14 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Performance by Edge</h4>
 
                     <div className="text-[10px] text-slate-500 mb-2">
-                        Thresholds are {edgeMode === 'ev' ? 'EV%' : 'edge points'}. Rows are cumulative (Edge ≥ threshold).
+                        Bands are {edgeMode === 'ev' ? 'EV%' : 'edge points'} ranges (not cumulative). Includes the right tail.
                     </div>
 
                     <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                             <thead>
                                 <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700">
-                                    <th className="py-1 pr-2 text-left">Edge ≥</th>
+                                    <th className="py-1 pr-2 text-left">Edge band</th>
                                     <th className="py-1 px-2 text-right">N</th>
                                     <th className="py-1 px-2 text-right">W-L</th>
                                     <th className="py-1 px-2 text-right">Win%</th>
@@ -349,18 +498,16 @@ const ModelPerformanceAnalytics = ({ history }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {edgePerformance.map(edge => (
-                                    <tr key={edge.threshold} className="border-b border-slate-800/60 last:border-0">
-                                        <td className="py-1 pr-2 text-slate-300">
-                                            {edgeMode === 'ev' ? `${(edge.threshold * 100).toFixed(0)}%` : `${edge.threshold} pts`}
+                                {edgeBandPerformance.map((b) => (
+                                    <tr key={b.label} className="border-b border-slate-800/60 last:border-0">
+                                        <td className="py-1 pr-2 text-slate-300 font-bold">{b.label}</td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{b.count}</td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{b.wins}-{b.losses}</td>
+                                        <td className={`py-1 px-2 text-right font-bold ${b.winRate >= 55 ? 'text-green-400' : b.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                            {b.winRate.toFixed(0)}%
                                         </td>
-                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{edge.count}</td>
-                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{edge.wins}-{edge.losses}</td>
-                                        <td className={`py-1 px-2 text-right font-bold ${edge.winRate >= 55 ? 'text-green-400' : edge.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                            {edge.winRate.toFixed(0)}%
-                                        </td>
-                                        <td className={`py-1 pl-2 text-right font-mono ${edge.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {edge.roi >= 0 ? '+' : ''}{edge.roi.toFixed(0)}%
+                                        <td className={`py-1 pl-2 text-right font-mono ${b.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {b.roi >= 0 ? '+' : ''}{b.roi.toFixed(0)}%
                                         </td>
                                     </tr>
                                 ))}
@@ -473,37 +620,17 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     </div>
                 </div>
 
-                {/* Top 6 performance by day */}
+                {/* Daily win% by confidence */}
                 <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
-                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Top 6 (by EV) — Daily performance</h4>
-                    <div className="text-[10px] text-slate-500 mb-2">Each day: take the 6 highest-EV recommended bets and grade their results.</div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                            <thead>
-                                <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700">
-                                    <th className="py-1 pr-2 text-left">Day</th>
-                                    <th className="py-1 px-2 text-right">N</th>
-                                    <th className="py-1 px-2 text-right">W-L-P</th>
-                                    <th className="py-1 px-2 text-right">Win%</th>
-                                    <th className="py-1 pl-2 text-right">ROI</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {dailyTopN7.map(d => (
-                                    <tr key={d.day} className="border-b border-slate-800/60 last:border-0">
-                                        <td className="py-1 pr-2 text-slate-300 font-bold">{fmtEtDayShort(d.day)}</td>
-                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{d.count}</td>
-                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{d.wins}-{d.losses}{d.pushes ? `-${d.pushes}` : ''}</td>
-                                        <td className={`py-1 px-2 text-right font-bold ${d.winRate >= 55 ? 'text-green-400' : d.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                            {d.winRate.toFixed(0)}%
-                                        </td>
-                                        <td className={`py-1 pl-2 text-right font-mono ${d.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {d.roi >= 0 ? '+' : ''}{d.roi.toFixed(0)}%
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Daily Win% by Confidence</h4>
+                    <div className="text-[10px] text-slate-500 mb-2">Last 14 days • Win% computed on decided bets (W/L) per confidence band.</div>
+                    <div className="rounded-lg border border-slate-800 bg-slate-950/20 p-2">
+                        {renderLineChart()}
+                    </div>
+                    <div className="mt-2 flex items-center gap-4 text-[11px] text-slate-400">
+                        <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#34d399' }}></span>High</div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#60a5fa' }}></span>Medium</div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#f59e0b' }}></span>Low</div>
                     </div>
                 </div>
 
