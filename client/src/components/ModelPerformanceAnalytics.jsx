@@ -2,13 +2,22 @@ const ModelPerformanceAnalytics = ({ history }) => {
     // Schema Migration: use graded_result (new) or outcome or result
     const getResult = (h) => h.graded_result || h.outcome || h.result;
 
-    const graded = history.filter(h => {
-        const res = getResult(h);
-        return res && res !== 'PENDING' && res !== 'Pending';
-    });
-    const wins = graded.filter(h => getResult(h) === 'WON' || getResult(h) === 'Win').length;
-    const losses = graded.filter(h => getResult(h) === 'LOST' || getResult(h) === 'Loss').length;
-    const pushes = graded.filter(h => getResult(h) === 'PUSH' || getResult(h) === 'Push').length;
+    const isGradedResult = (res) => {
+        if (!res) return false;
+        const s = String(res).toUpperCase();
+        return s === 'WON' || s === 'WIN' || s === 'LOST' || s === 'LOSS' || s === 'PUSH';
+    };
+
+    const graded = history.filter(h => isGradedResult(getResult(h)));
+    const wins = graded.filter(h => {
+        const s = String(getResult(h)).toUpperCase();
+        return s === 'WON' || s === 'WIN';
+    }).length;
+    const losses = graded.filter(h => {
+        const s = String(getResult(h)).toUpperCase();
+        return s === 'LOST' || s === 'LOSS';
+    }).length;
+    const pushes = graded.filter(h => String(getResult(h)).toUpperCase() === 'PUSH').length;
     const winRate = graded.length > 0 ? (wins / (wins + losses) * 100) : 0;
     const roi = graded.length > 0 ? ((wins * 9.09 - losses * 10) / (graded.length * 10) * 100) : 0;
 

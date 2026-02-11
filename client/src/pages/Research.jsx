@@ -343,6 +343,10 @@ const Research = ({ onAddBet }) => {
         }
     };
 
+    const getTodayRecommended = () => getSortedHistory()
+        .filter(isRecommendedHistoryItem)
+        .filter(h => isTodayET(h?.analyzed_at || h?.created_at));
+
     // History tab is only historical results (exclude today's bets).
     const getRecommendedHistory = () => getSortedHistory()
         .filter(isRecommendedHistoryItem)
@@ -986,6 +990,17 @@ const Research = ({ onAddBet }) => {
                                 </div>
                             ))}
                         </div>
+
+                        {/* Today's recommended bets (separate from historical results) */}
+                        {!loading && getTodayRecommended().length > 0 && (
+                            <div className="px-6 py-4 bg-slate-900/30 border-b border-slate-700">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="text-sm font-black text-slate-200 uppercase tracking-widest">Today (Recommended)</div>
+                                    <div className="text-xs text-slate-500">{getTodayRecommended().length} bet{getTodayRecommended().length === 1 ? '' : 's'}</div>
+                                </div>
+                                <div className="text-xs text-slate-400">These are today’s recommended bets. Results will appear in History after the games finish.</div>
+                            </div>
+                        )}
 
                         {!loading && getRecommendedHistory().length === 0 && (
                             <div className="text-center py-10 text-slate-500">
