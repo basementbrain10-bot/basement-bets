@@ -778,7 +778,7 @@ function SummaryView({ stats, sportBreakdown, playerBreakdown, monthlyBreakdown,
             <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-xl backdrop-blur-sm mt-8">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                     <h3 className="text-xl font-bold flex items-center gap-2">
-                        <BarChart3 className="text-blue-400" /> Integrated Edge Analysis
+                        <BarChart3 className="text-blue-400" /> Win% vs ROI (by sport + bet type)
                     </h3>
 
                     {edgeBreakdown.length > 0 && (
@@ -826,14 +826,14 @@ function SummaryView({ stats, sportBreakdown, playerBreakdown, monthlyBreakdown,
                             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                             <XAxis
                                 type="number"
-                                dataKey="profit"
-                                name="Profit"
-                                unit="$"
+                                dataKey="roi"
+                                name="ROI"
+                                unit="%"
                                 stroke="#94a3b8"
                                 fontSize={10}
                                 domain={['auto', 'auto']}
-                                label={{ value: 'Profit', position: 'bottom', fill: '#64748b', fontSize: 10 }}
-                                tickFormatter={(val) => `$${val}`}
+                                label={{ value: 'ROI (%)', position: 'bottom', fill: '#64748b', fontSize: 10 }}
+                                tickFormatter={(val) => `${val}%`}
                             />
                             <YAxis
                                 type="number"
@@ -859,6 +859,7 @@ function SummaryView({ stats, sportBreakdown, playerBreakdown, monthlyBreakdown,
                                                 <div className="grid grid-cols-2 gap-x-4 text-[10px]">
                                                     <span className="text-slate-400">Bets:</span> <span className="text-white text-right">{data.bets}</span>
                                                     <span className="text-slate-400">Profit:</span> <span className={data.profit >= 0 ? 'text-green-400 text-right' : 'text-red-400 text-right'}>{formatCurrency(data.profit)}</span>
+                                                    <span className="text-slate-400">ROI:</span> <span className="text-white text-right">{data.roi}%</span>
                                                     <span className="text-slate-400">Actual WR:</span> <span className="text-white text-right">{data.actual_win_rate}%</span>
                                                     <span className="text-slate-400">Implied WR:</span> <span className="text-white text-right">{data.implied_win_rate}%</span>
                                                     <span className="text-slate-400">Edge:</span> <span className={data.edge >= 0 ? 'text-green-400 text-right' : 'text-red-400 text-right'}>{data.edge > 0 ? '+' : ''}{data.edge}%</span>
@@ -869,7 +870,7 @@ function SummaryView({ stats, sportBreakdown, playerBreakdown, monthlyBreakdown,
                                     return null;
                                 }}
                             />
-                            {/* Profit/Loss Reference Line */}
+                            {/* Breakeven ROI Reference Line */}
                             <ReferenceLine x={0} stroke="#475569" strokeWidth={1} />
 
                             <Scatter name="Segments" data={edgeBreakdown}>
@@ -880,7 +881,7 @@ function SummaryView({ stats, sportBreakdown, playerBreakdown, monthlyBreakdown,
                         </ScatterChart>
                     </ResponsiveContainer>
                     <div className="text-[10px] text-slate-500 text-center mt-2 italic">
-                        Segments plotted by Profit (X) and Actual Win Rate (Y). Bubble size represents bet volume.
+                        Segments plotted by ROI (X) and Actual Win Rate (Y). Bubble size represents bet volume.
                     </div>
                 </div>
 
