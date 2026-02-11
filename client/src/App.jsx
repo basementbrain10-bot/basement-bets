@@ -395,6 +395,15 @@ function App() {
 }
 
 function PerformanceView({ timeSeries, drawdown, financials, periodStats }) {
+    const [inPlaySeries, setInPlaySeries] = useState([]);
+
+    useEffect(() => {
+        // Trend of Total In Play from balance snapshots
+        api.get('/api/financials/inplay/series', { params: { days: 90 } })
+            .then(r => setInPlaySeries(r.data?.series || []))
+            .catch(() => {});
+    }, []);
+
     // Charts-only view (no daily picks feed here).
     if (!timeSeries || timeSeries.length === 0) {
         return (
@@ -514,10 +523,41 @@ function PerformanceView({ timeSeries, drawdown, financials, periodStats }) {
                 </div>
             </div>
 
+            {/* Total In Play Trend */}
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl backdrop-blur-sm">
+                <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                    <Activity className="text-green-400" /> Total In Play Trend
+                </h3>
+                {(!inPlaySeries || inPlaySeries.length === 0) ? (
+                    <div className="text-gray-500 text-sm">No balance snapshot history yet.</div>
+                ) : (
+                    <>
+                        <div className="h-[260px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={inPlaySeries}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                                    <XAxis dataKey="day" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val}`} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+                                        itemStyle={{ color: '#22c55e', fontWeight: 'bold' }}
+                                        formatter={(val) => [formatCurrency(val), 'Total In Play']}
+                                    />
+                                    <Line type="monotone" dataKey="total_in_play" stroke="#22c55e" strokeWidth={3} dot={false} animationDuration={1200} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="mt-4 text-center text-xs text-gray-500">
+                            Total of latest per-book balance snapshots each day (ET).
+                        </div>
+                    </>
+                )}
+            </div>
+
             {/* Equity Curve Chart */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl backdrop-blur-sm">
                 <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-                    <TrendingUp className="text-green-400" /> Bankroll Curve
+                    <TrendingUp className="text-green-400" /> Equity Curve (Settled)
                 </h3>
                 <div className="h-[400px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
@@ -555,7 +595,7 @@ function PerformanceView({ timeSeries, drawdown, financials, periodStats }) {
                     </ResponsiveContainer>
                 </div>
                 <div className="mt-4 text-center text-xs text-gray-500">
-                    Cumulative net balance over time including all bets and transactions.
+                    Settled-only equity curve (from bet results + ledger).
                 </div>
             </div>
         </div>

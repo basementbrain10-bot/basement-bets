@@ -358,6 +358,57 @@ async def get_reconciliation(user: dict = Depends(get_current_user)):
     return engine.get_reconciliation_view(user_id=user_id)
 
 
+@app.get("/api/financials/inplay/series")
+async def get_inplay_series(days: int = 90, user: dict = Depends(get_current_user)):
+    """Daily total-in-play balance trend from balance_snapshots.
+
+    Returns one point per ET day using the *latest* snapshot per provider per day.
+    """
+    from src.database import get_db_connection, _exec
+
+    user_id = user.get("sub")
+    try:
+        days = int(days)
+    except Exception:
+        days = 90
+    days = max(7, min(days, 365))
+
+    with get_db_connection() as conn:
+        rows = _exec(conn, """
+          WITH snaps AS (
+            SELECT
+              provider,
+              (captured_at AT TIME ZONE 'America/New_York')::date::text AS day_et,
+              balance,
+              captured_at
+            FROM balance_snapshots
+            WHERE (%(user_id)s IS NULL OR user_id = %(user_id)s)
+              AND captured_at > NOW() - (%(d)s || ' days')::interval
+          ), latest_per_provider_day AS (
+            SELECT DISTINCT ON (provider, day_et)
+              provider,
+              day_et,
+              balance
+            FROM snaps
+            ORDER BY provider, day_et, captured_at DESC
+          )
+          SELECT
+            day_et AS day,
+            SUM(balance)::float AS total_in_play
+          FROM latest_per_provider_day
+          GROUP BY day_et
+          ORDER BY day_et ASC
+        """, {"user_id": str(user_id) if user_id else None, "d": int(days)}).fetchall()
+
+    series = [{"day": r.get('day'), "total_in_play": float(r.get('total_in_play') or 0)} for r in rows]
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + 'Z',
+        "days": int(days),
+        "series": series,
+    }
+
+
 @app.post("/api/sync/fanduel/token")
 async def sync_fanduel_token(request: Request):
     """Sync FanDuel history using a manually provided cURL or Token.
