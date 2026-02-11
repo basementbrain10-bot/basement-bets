@@ -1691,6 +1691,58 @@ const Research = ({ onAddBet }) => {
                                                     </span>
                                                 </h3>
                                                 <div className="grid grid-cols-2 gap-4">
+                                                    {/* Model Inputs (Torvik team metrics used in narrative) */}
+                                                    <div className="col-span-2 bg-slate-900/30 p-3 rounded-lg border border-slate-700/50">
+                                                        <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2">Model Inputs (Team Stats)</div>
+                                                        {(() => {
+                                                            const ts = analysisResult.torvik_team_stats || {};
+                                                            const h = ts.home || {};
+                                                            const a = ts.away || {};
+                                                            const tempo = ts.game_tempo;
+
+                                                            const fmt = (v, d = 1) => {
+                                                                const n = Number(v);
+                                                                if (!Number.isFinite(n)) return '—';
+                                                                return n.toFixed(d);
+                                                            };
+
+                                                            const rows = [
+                                                                { k: 'AdjO', a: (a.adj_off ?? a.adjO), h: (h.adj_off ?? h.adjO), tip: 'Adjusted Offensive Efficiency (pts / 100 poss)' },
+                                                                { k: 'AdjD', a: (a.adj_def ?? a.adjD), h: (h.adj_def ?? h.adjD), tip: 'Adjusted Defensive Efficiency (pts allowed / 100 poss; lower is better)' },
+                                                                { k: 'Tempo', a: (a.tempo ?? a.adj_tempo), h: (h.tempo ?? h.adj_tempo), tip: 'Adjusted tempo (possessions / 40)' },
+                                                                { k: 'Luck', a: a.luck, h: h.luck, tip: 'Torvik luck factor' },
+                                                                { k: 'Continuity', a: a.continuity, h: h.continuity, tip: 'Roster continuity factor' },
+                                                            ];
+
+                                                            const awayName = selectedGame?.away_team || analysisResult.away_team || 'Away';
+                                                            const homeName = selectedGame?.home_team || analysisResult.home_team || 'Home';
+
+                                                            return (
+                                                                <>
+                                                                    <div className="grid grid-cols-3 gap-2 text-[11px]">
+                                                                        <div className="text-slate-500 font-black">Metric</div>
+                                                                        <div className="text-slate-400 font-black truncate">{awayName}</div>
+                                                                        <div className="text-slate-400 font-black truncate">{homeName}</div>
+
+                                                                        {rows.map((r) => {
+                                                                            const dec = (r.k === 'Luck' || r.k === 'Continuity') ? 2 : 1;
+                                                                            return (
+                                                                                <React.Fragment key={r.k}>
+                                                                                    <div className="text-slate-500" title={r.tip}>{r.k}</div>
+                                                                                    <div className="text-slate-200 font-mono font-bold">{fmt(r.a, dec)}</div>
+                                                                                    <div className="text-slate-200 font-mono font-bold">{fmt(r.h, dec)}</div>
+                                                                                </React.Fragment>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+
+                                                                    <div className="mt-2 text-[10px] text-slate-500">
+                                                                        Avg possessions (game tempo): <span className="text-slate-200 font-mono font-bold">{tempo !== undefined && tempo !== null ? fmt(tempo, 1) : '—'}</span>
+                                                                    </div>
+                                                                </>
+                                                            );
+                                                        })()}
+                                                    </div>
                                                     <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 cursor-help" title="Projected final score computed from Torvik efficiency ratings (AdjO, AdjD) and tempo">
                                                         <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Projected Score</div>
                                                         {(() => {
