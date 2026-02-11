@@ -1509,8 +1509,18 @@ def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None, upd
     """
     params.extend([int(bet_id), user_id, user_id])
 
+    def _ensure_audit_cols(conn):
+        # These are safe to run repeatedly.
+        try:
+            _exec(conn, "ALTER TABLE bets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;")
+            _exec(conn, "ALTER TABLE bets ADD COLUMN IF NOT EXISTS updated_by TEXT;")
+            _exec(conn, "ALTER TABLE bets ADD COLUMN IF NOT EXISTS update_note TEXT;")
+        except Exception:
+            pass
+
     try:
         with get_db_connection() as conn:
+            _ensure_audit_cols(conn)
             cur = _exec(conn, q, tuple(params))
             conn.commit()
             return bool(cur.rowcount and cur.rowcount > 0)
