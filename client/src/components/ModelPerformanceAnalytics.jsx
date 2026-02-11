@@ -310,11 +310,15 @@ const ModelPerformanceAnalytics = ({ history }) => {
     const dailyWinSeries = (() => {
         const days = 14;
         const now = new Date();
-        // build ET date keys for last N days (oldest -> newest)
+        const etToday = now.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+
+        // Build ET date keys for last N days (oldest -> newest), EXCLUDING today
+        // because today's slate may be ungraded until the next day.
         const dayKeys = [];
-        for (let i = days - 1; i >= 0; i--) {
+        for (let i = days; i >= 1; i--) {
             const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
             const key = d.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+            if (key === etToday) continue;
             dayKeys.push(key);
         }
 
@@ -359,12 +363,12 @@ const ModelPerformanceAnalytics = ({ history }) => {
             { k: 'Low', color: '#f59e0b' },
         ];
 
-        const width = 520;
-        const height = 140;
-        const padL = 30;
-        const padR = 10;
-        const padT = 10;
-        const padB = 24;
+        const width = 720;
+        const height = 220;
+        const padL = 34;
+        const padR = 12;
+        const padT = 12;
+        const padB = 28;
 
         const n = dayKeys.length;
         const xAt = (i) => {
@@ -390,7 +394,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
         const tickIdx = [0, Math.floor((n - 1) / 2), n - 1].filter((v, i, a) => a.indexOf(v) === i);
 
         return (
-            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-36">
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56">
                 {/* grid */}
                 {[0, 25, 50, 75, 100].map((p) => (
                     <g key={p}>
@@ -444,8 +448,8 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 📊 Model Performance Analytics
             </h3>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Overall Stats */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Overall Stats + CLV */}
                 <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
                     <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Overall Performance</h4>
                     <div className="space-y-2">
@@ -468,6 +472,25 @@ const ModelPerformanceAnalytics = ({ history }) => {
                         <div className="flex justify-between">
                             <span className="text-slate-400">Total Bets:</span>
                             <span className="text-white font-bold">{graded.length}</span>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-700">
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">CLV</div>
+                        <div className="space-y-2">
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Avg CLV:</span>
+                                <span className={`font-bold ${avgClv > 0 ? 'text-green-400' : avgClv < 0 ? 'text-red-400' : 'text-slate-200'}`}>
+                                    {avgClv > 0 ? '+' : ''}{avgClv.toFixed(2)} pts
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Positive CLV %:</span>
+                                <span className="text-white font-bold">{posClvRate.toFixed(1)}%</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-2">
+                                *CLV = Closing Line Value (Pts vs Market Close)
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -510,25 +533,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     </div>
                 </div>
 
-                {/* CLV Stats */}
-                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
-                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">CLV Analysis</h4>
-                    <div className="space-y-2">
-                        <div className="flex justify-between">
-                            <span className="text-slate-400">Avg CLV:</span>
-                            <span className={`font-bold ${avgClv > 0 ? 'text-green-400' : avgClv < 0 ? 'text-red-400' : 'text-slate-200'}`}>
-                                {avgClv > 0 ? '+' : ''}{avgClv.toFixed(2)} pts
-                            </span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-slate-400">Positive CLV %:</span>
-                            <span className="text-white font-bold">{posClvRate.toFixed(1)}%</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500 mt-2">
-                            *CLV = Closing Line Value (Pts vs Market Close)
-                        </div>
-                    </div>
-                </div>
+                {/* CLV Stats merged into Overall Performance */}
 
                 {/* Performance by Confidence */}
                 <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
