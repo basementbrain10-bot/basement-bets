@@ -1070,7 +1070,17 @@ const Research = ({ onAddBet }) => {
                                                         <td className="py-2 px-4 font-medium text-sm text-slate-200">{item.away_team} @ {item.home_team}</td>
                                                         <td className="py-2 px-4 text-white font-bold">
                                                             {(() => {
-                                                                const side = mainRec.side;
+                                                                const rawSide = mainRec.side;
+                                                                const sideStr = String(rawSide || '').trim();
+                                                                const sideKey = sideStr.toLowerCase();
+
+                                                                // Map HOME/AWAY to actual team names for readability.
+                                                                const side = (sideKey === 'home' || sideKey === 'h')
+                                                                    ? item.home_team
+                                                                    : (sideKey === 'away' || sideKey === 'a')
+                                                                        ? item.away_team
+                                                                        : sideStr;
+
                                                                 const line = mainRec.line;
                                                                 if (side && line !== null && line !== undefined && String(line).trim() !== '') {
                                                                     const num = Number(line);
@@ -1100,8 +1110,14 @@ const Research = ({ onAddBet }) => {
                                                                 })()}</span></span>
                                                             </div>
                                                         </td>
-                                                        <td className={`py-2 px-4 font-bold ${getEdgeColor(item.edge || mainRec.edge, item.league)}`}>
-                                                            {item.edge || mainRec.edge}
+                                                        <td className={`py-2 px-4 font-bold ${getEdgeColor(item.edge ?? mainRec.edge ?? item.ev_per_unit, item.league)}`}>
+                                                            {(() => {
+                                                                const v = item.edge ?? mainRec.edge;
+                                                                if (v !== null && v !== undefined && v !== '') return v;
+                                                                const ev = Number(item.ev_per_unit ?? mainRec.ev_per_unit ?? item.ev);
+                                                                if (Number.isFinite(ev)) return `${(ev * 100).toFixed(2)}%`;
+                                                                return '—';
+                                                            })()}
                                                         </td>
                                                         <td className="py-2 px-4 text-right sm:text-left">
                                                             <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest
@@ -1113,12 +1129,29 @@ const Research = ({ onAddBet }) => {
                                                             </span>
                                                         </td>
                                                         <td className="py-2 px-4 text-slate-300 font-mono text-xs">
-                                                            {item.final_score_home !== null && item.final_score_home !== undefined ? (
-                                                                <div className="flex flex-col">
-                                                                    <span className="text-white font-bold">{item.final_score_home}-{item.final_score_away}</span>
-                                                                    <span className="text-[10px] text-slate-500">T: {item.final_score_home + item.final_score_away}</span>
-                                                                </div>
-                                                            ) : '-'}
+                                                            {(() => {
+                                                                const hs = item.final_score_home ?? item.home_score ?? item.score_home ?? item.home_points;
+                                                                const as = item.final_score_away ?? item.away_score ?? item.score_away ?? item.away_points;
+
+                                                                // If backend ever sends a single string like "72-68".
+                                                                const fs = item.final_score || item.score_final;
+                                                                if ((hs === null || hs === undefined) && (as === null || as === undefined) && fs) {
+                                                                    return <span className="text-white font-bold">{String(fs)}</span>;
+                                                                }
+
+                                                                const hsn = Number(hs);
+                                                                const asn = Number(as);
+                                                                if (Number.isFinite(hsn) && Number.isFinite(asn)) {
+                                                                    return (
+                                                                        <div className="flex flex-col">
+                                                                            <span className="text-white font-bold">{hsn}-{asn}</span>
+                                                                            <span className="text-[10px] text-slate-500">T: {hsn + asn}</span>
+                                                                        </div>
+                                                                    );
+                                                                }
+
+                                                                return '-';
+                                                            })()}
                                                         </td>
                                                     </tr>
                                                 );
