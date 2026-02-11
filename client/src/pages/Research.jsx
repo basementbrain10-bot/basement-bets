@@ -1054,13 +1054,20 @@ const Research = ({ onAddBet }) => {
                                             </div>
 
                                             <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                                                {[{k:'High', s:hi, cls:'text-green-300'},{k:'Medium', s:md, cls:'text-amber-300'},{k:'Low', s:lo, cls:'text-purple-300'}].map(({k,s,cls}) => (
-                                                    <div key={k} className="bg-slate-950/30 border border-slate-800 rounded-xl p-4">
-                                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{k} confidence</div>
-                                                        <div className={`mt-1 font-black text-lg ${cls}`}>{s.w}-{s.l}{s.p ? `-${s.p}` : ''}</div>
-                                                        <div className="text-xs text-slate-500">Win%: <span className="text-slate-200 font-bold">{s.wr === null ? '—' : `${s.wr.toFixed(1)}%`}</span> • N={(s.w+s.l+s.p)}</div>
-                                                    </div>
-                                                ))}
+                                                {(() => {
+                                                    const tiles = [
+                                                        { label: 'High', s: hi, cls: 'text-green-300' },
+                                                        { label: 'Medium', s: md, cls: 'text-amber-300' },
+                                                        { label: 'Low', s: lo, cls: 'text-purple-300' },
+                                                    ];
+                                                    return tiles.map(({ label, s, cls }) => (
+                                                        <div key={label} className="bg-slate-950/30 border border-slate-800 rounded-xl p-4">
+                                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{label} confidence</div>
+                                                            <div className={`mt-1 font-black text-lg ${cls}`}>{s.w}-{s.l}{s.p ? `-${s.p}` : ''}</div>
+                                                            <div className="text-xs text-slate-500">Win%: <span className="text-slate-200 font-bold">{s.wr === null ? '—' : `${s.wr.toFixed(1)}%`}</span> • N={(s.w + s.l + s.p)}</div>
+                                                        </div>
+                                                    ));
+                                                })()}
                                             </div>
                                         );
                                     })()}
