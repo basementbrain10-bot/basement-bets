@@ -384,7 +384,7 @@ class GradingService:
         FROM model_predictions m
         JOIN events e ON m.event_id = e.id
         JOIN game_results gr ON e.id = gr.event_id
-        WHERE (m.outcome = 'PENDING' OR m.outcome IS NULL)
+        WHERE (m.outcome = 'PENDING' OR m.outcome IS NULL OR m.outcome = 'VOID')
           AND gr.final = TRUE
           AND e.start_time < CURRENT_TIMESTAMP
           AND COALESCE(m.ev_per_unit, 0) >= %(min_ev)s

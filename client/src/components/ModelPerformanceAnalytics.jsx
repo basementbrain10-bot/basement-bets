@@ -145,10 +145,38 @@ const ModelPerformanceAnalytics = ({ history }) => {
         const filtered = graded.filter(h => getConfidenceLabel(h) === level);
         const w = filtered.filter(h => getResult(h) === 'WON' || getResult(h) === 'Win').length;
         const l = filtered.filter(h => getResult(h) === 'LOST' || getResult(h) === 'Loss').length;
-        const wr = filtered.length > 0 ? (w / (w + l) * 100) : 0;
+        const wr = (w + l) > 0 ? (w / (w + l) * 100) : 0;
         const r = filtered.length > 0 ? ((w * 9.09 - l * 10) / (filtered.length * 10) * 100) : 0;
         return { level, count: filtered.length, wins: w, losses: l, winRate: wr, roi: r };
     });
+
+    const isWithinDays = (h, days) => {
+        const ts = h?.analyzed_at || h?.created_at;
+        if (!ts) return false;
+        try {
+            const t = new Date(ts).getTime();
+            if (!Number.isFinite(t)) return false;
+            const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
+            return t >= cutoff;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    const confidenceTrend = (days) => confidenceLevels.map(level => {
+        const filtered = graded
+            .filter(h => getConfidenceLabel(h) === level)
+            .filter(h => isWithinDays(h, days));
+        const w = filtered.filter(h => getResult(h) === 'WON' || getResult(h) === 'Win').length;
+        const l = filtered.filter(h => getResult(h) === 'LOST' || getResult(h) === 'Loss').length;
+        const p = filtered.filter(h => getResult(h) === 'PUSH' || getResult(h) === 'Push').length;
+        const decided = w + l;
+        const wr = decided > 0 ? (w / decided * 100) : 0;
+        return { level, count: filtered.length, wins: w, losses: l, pushes: p, winRate: wr };
+    });
+
+    const trend7 = confidenceTrend(7);
+    const trend30 = confidenceTrend(30);
 
     if (graded.length === 0) return null;
 
@@ -248,9 +276,31 @@ const ModelPerformanceAnalytics = ({ history }) => {
                                 </div>
                             </div>
                         ))}
-                        <div className="text-[10px] text-slate-500 mt-2">
-                            *Counts are for graded bets only.
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-700">
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Trend by confidence</div>
+                        <div className="grid grid-cols-2 gap-3 text-[11px]">
+                            <div className="bg-slate-950/30 rounded-md p-2 border border-slate-800">
+                                <div className="text-[10px] text-slate-500 font-bold mb-1">Last 7 days</div>
+                                {trend7.map(t => (
+                                    <div key={t.level} className="flex justify-between">
+                                        <span className="text-slate-400">{t.level}</span>
+                                        <span className="text-slate-300">{t.wins}-{t.losses}{t.pushes ? `-${t.pushes}` : ''} ({t.winRate.toFixed(0)}%)</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="bg-slate-950/30 rounded-md p-2 border border-slate-800">
+                                <div className="text-[10px] text-slate-500 font-bold mb-1">Last 30 days</div>
+                                {trend30.map(t => (
+                                    <div key={t.level} className="flex justify-between">
+                                        <span className="text-slate-400">{t.level}</span>
+                                        <span className="text-slate-300">{t.wins}-{t.losses}{t.pushes ? `-${t.pushes}` : ''} ({t.winRate.toFixed(0)}%)</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
+                        <div className="text-[10px] text-slate-500 mt-2">*Trends include graded bets only.</div>
                     </div>
                 </div>
 
