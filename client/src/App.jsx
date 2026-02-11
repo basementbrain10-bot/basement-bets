@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, PieChart, BarChart2, BarChart3, Calendar, Layout, LayoutDashboard, Search, Menu, X, PlusCircle, Trash, Trash2, CheckCircle, Clock, Percent, List, FileText, Info, Settings, User, RefreshCw, AlertTriangle, AlertCircle, Filter, ChevronDown, ChevronRight, MessageSquare, BookOpen, ExternalLink, ArrowRight, Table } from 'lucide-react';
 
-console.log("Basement Bets Frontend v1.3.0 Loaded at " + new Date().toISOString());
+console.log("Basement Bets Frontend v1.3.1 Loaded at " + new Date().toISOString());
 import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
@@ -410,7 +410,7 @@ function App() {
                     ) : view === 'research' ? (
                         <Research onAddBet={() => setShowAddBet(true)} />
                     ) : (
-                        <PerformanceView timeSeries={timeSeries} financials={financials} periodStats={periodStats} edgeBreakdown={edgeBreakdown} />
+                        <PerformanceView timeSeries={timeSeries} financials={financials} periodStats={periodStats} edgeBreakdown={edgeBreakdown} bets={bets} />
                     )}
                 </div>
             </div>
@@ -418,8 +418,121 @@ function App() {
     );
 }
 
-function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown }) {
+function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, bets }) {
     // Performance tab is focused on actual betting performance + breakdowns.
+
+    // Scatter / drivers controls
+    const [minSegmentBets, setMinSegmentBets] = useState(5);
+    const [segmentWindow, setSegmentWindow] = useState('30d'); // 30d | 90d | all
+
+    const settledBets = React.useMemo(() => {
+        const xs = (bets || []);
+        return xs.filter(b => {
+            const prov = (b.provider || '').toLowerCase();
+            if (!(prov.includes('fanduel') || prov.includes('draftkings'))) return false;
+            const st = (b.status || '').toUpperCase();
+            if (!['WON', 'LOST', 'PUSH'].includes(st)) return false;
+            if (b.category && String(b.category).toLowerCase() === 'transaction') return false;
+            // Guard: ignore rows that look like deposits/withdrawals in bet table
+            const bt = (b.bet_type || '').toLowerCase();
+            if (bt === 'deposit' || bt === 'withdrawal') return false;
+            return true;
+        });
+    }, [bets]);
+
+    const parseBetDate = (b) => {
+        const s = b?.sort_date || b?.date;
+        if (!s) return null;
+        const d = new Date(String(s));
+        return isNaN(d.getTime()) ? null : d;
+    };
+
+    const segmentAgg = React.useMemo(() => {
+        const now = new Date();
+        const msDay = 24 * 60 * 60 * 1000;
+        const cutoff = segmentWindow === '30d' ? new Date(now.getTime() - 30 * msDay)
+            : segmentWindow === '90d' ? new Date(now.getTime() - 90 * msDay)
+            : null;
+
+        const inWindow = (b) => {
+            if (!cutoff) return true;
+            const d = parseBetDate(b);
+            if (!d) return false;
+            return d >= cutoff;
+        };
+
+        const add = (map, b) => {
+            const sport = (b.sport || 'Unknown').toUpperCase();
+            const bt = (b.bet_type || 'Unknown');
+            const key = `${sport}|||${bt}`;
+            if (!map[key]) map[key] = { sport, bet_type: bt, bets: 0, wins: 0, losses: 0, push: 0, wager: 0, profit: 0 };
+            const r = map[key];
+            const st = (b.status || '').toUpperCase();
+            r.bets += 1;
+            if (st === 'WON') r.wins += 1;
+            else if (st === 'LOST') r.losses += 1;
+            else r.push += 1;
+            r.wager += Number(b.wager || 0);
+            r.profit += Number(b.profit || 0);
+        };
+
+        const all = {};
+        const w = {};
+        settledBets.filter(inWindow).forEach(b => add(all, b));
+
+        // driver deltas: last 30d vs prior 30d (always computed off settled bets)
+        const last30Cutoff = new Date(now.getTime() - 30 * msDay);
+        const prev30Cutoff = new Date(now.getTime() - 60 * msDay);
+        const inLast30 = (b) => {
+            const d = parseBetDate(b);
+            return d && d >= last30Cutoff;
+        };
+        const inPrev30 = (b) => {
+            const d = parseBetDate(b);
+            return d && d >= prev30Cutoff && d < last30Cutoff;
+        };
+        const last30 = {};
+        const prev30 = {};
+        settledBets.filter(inLast30).forEach(b => add(last30, b));
+        settledBets.filter(inPrev30).forEach(b => add(prev30, b));
+
+        const toRows = (map) => Object.values(map).map(r => {
+            const decided = r.wins + r.losses;
+            const winp = decided > 0 ? (r.wins / decided * 100) : 0;
+            const roi = r.wager > 0 ? (r.profit / r.wager * 100) : 0;
+            return { ...r, actual_win_rate: Number(winp.toFixed(1)), roi: Number(roi.toFixed(1)), profit: Number(r.profit.toFixed(2)) };
+        });
+
+        const rows = toRows(all).filter(r => r.bets >= minSegmentBets);
+        const rowsLast30 = toRows(last30);
+        const rowsPrev30 = toRows(prev30);
+
+        const lookup = (rows) => {
+            const m = {};
+            rows.forEach(r => { m[`${r.sport}|||${r.bet_type}`] = r; });
+            return m;
+        };
+
+        const m30 = lookup(rowsLast30);
+        const mp30 = lookup(rowsPrev30);
+
+        const driving = rows.map(r => {
+            const key = `${r.sport}|||${r.bet_type}`;
+            const a = m30[key];
+            const p = mp30[key];
+            const roi30 = a ? a.roi : null;
+            const roiPrev = p ? p.roi : null;
+            const profit30 = a ? a.profit : null;
+            const profitPrev = p ? p.profit : null;
+            const roiDelta = (roi30 === null || roiPrev === null) ? null : Number((roi30 - roiPrev).toFixed(1));
+            return { ...r, roi_30d: roi30, roi_prev30d: roiPrev, roi_delta: roiDelta, profit_30d: profit30, profit_prev30d: profitPrev, bets_30d: a ? a.bets : 0 };
+        });
+
+        return {
+            rows,
+            driving
+        };
+    }, [settledBets, minSegmentBets, segmentWindow]);
 
     // Charts-only view (no daily picks feed here).
     if (!timeSeries || timeSeries.length === 0) {
@@ -569,10 +682,34 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown })
                     <div className="text-xs text-slate-500">Each dot = (sport, bet type) • bubble size = volume</div>
                 </div>
 
-                {(edgeBreakdown || []).length === 0 ? (
-                    <div className="text-slate-500 text-sm">No settled bet data yet.</div>
+                <div className="flex flex-wrap items-center gap-3 mb-3">
+                    <div className="text-xs text-slate-500">Window</div>
+                    <select
+                        className="bg-slate-950/40 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                        value={segmentWindow}
+                        onChange={(e) => setSegmentWindow(e.target.value)}
+                    >
+                        <option value="30d">Last 30 days</option>
+                        <option value="90d">Last 90 days</option>
+                        <option value="all">All-time</option>
+                    </select>
+
+                    <div className="ml-2 text-xs text-slate-500">Min bets per dot</div>
+                    <input
+                        type="number"
+                        min={1}
+                        max={999}
+                        value={minSegmentBets}
+                        onChange={(e) => setMinSegmentBets(Math.max(1, parseInt(e.target.value || '1', 10)))}
+                        className="w-20 bg-slate-950/40 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                    />
+                    <div className="text-xs text-slate-600">(recommended: 5–10)</div>
+                </div>
+
+                {(segmentAgg.rows || []).length === 0 ? (
+                    <div className="text-slate-500 text-sm">No segments meet the filter yet (try lowering min bets).</div>
                 ) : (
-                    <div className="h-[420px] bg-slate-800/20 rounded-xl border border-slate-800/50 p-4">
+                    <div className="h-[440px] bg-slate-800/20 rounded-xl border border-slate-800/50 p-4">
                         <ResponsiveContainer width="100%" height="100%">
                             <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -597,7 +734,7 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown })
                                     domain={[0, 100]}
                                     label={{ value: 'Win% (settled)', angle: -90, position: 'left', fill: '#64748b', fontSize: 10 }}
                                 />
-                                <ZAxis type="number" dataKey="bets" range={[50, 400]} name="Volume" />
+                                <ZAxis type="number" dataKey="bets" range={[60, 360]} name="Volume" />
                                 <Tooltip
                                     cursor={{ strokeDasharray: '3 3' }}
                                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '8px' }}
@@ -610,7 +747,9 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown })
                                                     <p className="font-bold text-blue-400 mb-1">{d.sport} - {d.bet_type}</p>
                                                     <div className="grid grid-cols-2 gap-x-4 text-[10px]">
                                                         <span className="text-slate-400">Bets:</span> <span className="text-white text-right">{d.bets}</span>
+                                                        <span className="text-slate-400">Record:</span> <span className="text-white text-right">{d.wins}-{d.losses}{d.push ? `-${d.push}` : ''}</span>
                                                         <span className="text-slate-400">Net P/L:</span> <span className={d.profit >= 0 ? 'text-green-400 text-right' : 'text-red-400 text-right'}>{formatCurrency(d.profit)}</span>
+                                                        <span className="text-slate-400">Wager:</span> <span className="text-white text-right">{formatCurrency(d.wager)}</span>
                                                         <span className="text-slate-400">ROI:</span> <span className="text-white text-right">{d.roi}%</span>
                                                         <span className="text-slate-400">Win%:</span> <span className="text-white text-right">{d.actual_win_rate}%</span>
                                                     </div>
@@ -623,8 +762,8 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown })
                                 <ReferenceLine x={0} stroke="#475569" strokeWidth={1} />
                                 <ReferenceLine y={50} stroke="#1f2937" strokeWidth={1} strokeDasharray="4 4" />
 
-                                <Scatter name="Segments" data={(edgeBreakdown || []).filter(x => (x.bets || 0) >= 3)}>
-                                    {(edgeBreakdown || []).filter(x => (x.bets || 0) >= 3).map((entry, index) => (
+                                <Scatter name="Segments" data={segmentAgg.rows}>
+                                    {(segmentAgg.rows || []).map((entry, index) => (
                                         <Cell
                                             key={`cell-${index}`}
                                             fill={entry.profit >= 0 ? '#10b981' : '#ef4444'}
@@ -640,6 +779,55 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown })
 
                 <div className="text-[10px] text-slate-500 text-center mt-2 italic">
                     Breakeven line at ROI=0%. Dotted line at Win%=50% (context only).
+                </div>
+
+                {/* What's driving results */}
+                <div className="mt-6">
+                    <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-black text-slate-200 uppercase tracking-widest">What’s driving results (last 30d vs prior 30d)</h4>
+                        <div className="text-xs text-slate-500">Sorted by last 30d net P/L</div>
+                    </div>
+
+                    <div className="overflow-x-auto border border-slate-800 rounded-xl">
+                        <table className="min-w-full text-left text-sm">
+                            <thead className="bg-slate-900/60 border-b border-slate-800">
+                                <tr className="text-[10px] uppercase tracking-wider text-slate-500">
+                                    <th className="py-2 px-3">Segment</th>
+                                    <th className="py-2 px-3 text-right">Bets (all)</th>
+                                    <th className="py-2 px-3 text-right">ROI (all)</th>
+                                    <th className="py-2 px-3 text-right">Win% (all)</th>
+                                    <th className="py-2 px-3 text-right">P/L (30d)</th>
+                                    <th className="py-2 px-3 text-right">ROI (30d)</th>
+                                    <th className="py-2 px-3 text-right">ROI Δ</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800/60">
+                                {(segmentAgg.driving || [])
+                                    .slice()
+                                    .sort((a, b) => (Number(b.profit_30d || 0) - Number(a.profit_30d || 0)))
+                                    .slice(0, 25)
+                                    .map((r, i) => {
+                                        const roiDelta = r.roi_delta;
+                                        const roiDeltaCls = roiDelta === null ? 'text-slate-500' : roiDelta >= 0 ? 'text-green-400' : 'text-red-400';
+                                        return (
+                                            <tr key={i} className="hover:bg-slate-800/30">
+                                                <td className="py-2 px-3 text-slate-200 font-bold">{r.sport} — <span className="text-slate-400 font-normal">{r.bet_type}</span></td>
+                                                <td className="py-2 px-3 text-right text-slate-300 font-mono">{r.bets}</td>
+                                                <td className={`py-2 px-3 text-right font-mono ${Number(r.roi || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{r.roi.toFixed(1)}%</td>
+                                                <td className="py-2 px-3 text-right text-slate-300 font-mono">{Number(r.actual_win_rate || 0).toFixed(1)}%</td>
+                                                <td className={`py-2 px-3 text-right font-mono ${Number(r.profit_30d || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{r.profit_30d === null ? '—' : formatCurrency(r.profit_30d)}</td>
+                                                <td className="py-2 px-3 text-right text-slate-300 font-mono">{r.roi_30d === null ? '—' : `${Number(r.roi_30d).toFixed(1)}%`}</td>
+                                                <td className={`py-2 px-3 text-right font-mono ${roiDeltaCls}`}>{roiDelta === null ? '—' : `${roiDelta >= 0 ? '+' : ''}${roiDelta.toFixed(1)}%`}</td>
+                                            </tr>
+                                        );
+                                    })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="mt-2 text-[10px] text-slate-600">
+                        ROI Δ compares last 30d ROI to prior 30d ROI for the same (sport, bet type) segment.
+                    </div>
                 </div>
             </div>
         </div>
@@ -1724,7 +1912,7 @@ const FinancialHeader = ({ financials, mode = 'all' }) => {
     if (!financials) return null;
     return (
         <div className="flex flex-wrap gap-4 mb-8">
-            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.3.0</div>
+            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.3.1</div>
 
             {mode !== 'performance' && (
                 <FinancialCard
