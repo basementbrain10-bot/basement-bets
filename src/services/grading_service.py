@@ -415,6 +415,15 @@ class GradingService:
         pick = row['pick']
         line = float(row['bet_line']) if row['bet_line'] is not None else 0.0
 
+        # Normalize spread picks that are stored as HOME/AWAY to actual team names
+        # so we don't incorrectly mark them VOID.
+        if market == 'SPREAD' and pick is not None:
+            p = str(pick).strip().upper()
+            if p in ('HOME', 'H'):
+                pick = row.get('home_team')
+            elif p in ('AWAY', 'A'):
+                pick = row.get('away_team')
+
         # Guardrails: ignore placeholder/auto predictions so they don't clog Pending.
         if not pick or str(pick).upper() == 'NONE':
             return 'VOID'
