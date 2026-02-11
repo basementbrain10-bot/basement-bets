@@ -1498,26 +1498,26 @@ const Research = ({ onAddBet }) => {
                                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                                                         <div className="bg-slate-900/30 p-3 rounded-lg border border-slate-700/50">
                                                             <div className="text-[10px] text-slate-500 uppercase font-black mb-1">The bet</div>
-                                                            <div className="text-slate-200 font-black">{rec.selection}</div>
-                                                            <div className="mt-1 text-[11px] text-slate-400">
+                                                            <div className="text-slate-200 font-black break-words">{rec.selection}</div>
+                                                            <div className="mt-1 text-[11px] text-slate-400 break-words">
                                                                 {rec.bet_type} • EV {rec.edge ? `+${rec.edge}` : '—'} • {rec.confidence || '—'} confidence
                                                             </div>
                                                         </div>
                                                         <div className="bg-slate-900/30 p-3 rounded-lg border border-slate-700/50">
                                                             <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Why</div>
                                                             {ms ? (
-                                                                <div className="text-slate-300 text-xs leading-snug">{ms}</div>
+                                                                <div className="text-slate-300 text-xs leading-snug whitespace-pre-wrap break-words">{ms}</div>
                                                             ) : (
-                                                                <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
-                                                                    {kf.slice(0, 3).map((x, i) => <li key={`qk-${i}`}>{x}</li>)}
+                                                                <ul className="list-disc list-inside text-xs text-slate-300 space-y-1 break-words">
+                                                                    {kf.slice(0, 3).map((x, i) => <li key={`qk-${i}`} className="break-words">{x}</li>)}
                                                                 </ul>
                                                             )}
                                                         </div>
                                                         <div className="bg-slate-900/30 p-3 rounded-lg border border-slate-700/50">
                                                             <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Risks</div>
                                                             {rk.length ? (
-                                                                <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
-                                                                    {rk.slice(0, 3).map((x, i) => <li key={`qr-${i}`}>{x}</li>)}
+                                                                <ul className="list-disc list-inside text-xs text-slate-300 space-y-1 break-words">
+                                                                    {rk.slice(0, 3).map((x, i) => <li key={`qr-${i}`} className="break-words">{x}</li>)}
                                                                 </ul>
                                                             ) : (
                                                                 <div className="text-xs text-slate-500">No major risks flagged.</div>
@@ -1531,7 +1531,7 @@ const Research = ({ onAddBet }) => {
                                         {/* Market Lines (clarify who is favored) */}
                                         <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
                                             <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2">Market Lines</div>
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                                                 <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
                                                     <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Spread (team / line / odds)</div>
                                                     {(selectedGame.home_spread !== null && selectedGame.home_spread !== undefined) || (selectedGame.away_spread !== null && selectedGame.away_spread !== undefined) ? (() => {
@@ -1541,12 +1541,12 @@ const Research = ({ onAddBet }) => {
                                                         return (
                                                             <div className="space-y-1 text-xs">
                                                                 <div className="flex justify-between gap-2">
-                                                                    <span className="text-slate-400 truncate">{selectedGame.away_team}</span>
+                                                                    <span className="text-slate-400 break-words">{selectedGame.away_team}</span>
                                                                     <span className="text-slate-200 font-mono font-bold">{fmtSigned(as, 1)}</span>
                                                                     <span className="text-slate-500 font-mono">{fmtSigned(selectedGame.spread_away_odds)}</span>
                                                                 </div>
                                                                 <div className="flex justify-between gap-2">
-                                                                    <span className="text-slate-400 truncate">{selectedGame.home_team}</span>
+                                                                    <span className="text-slate-400 break-words">{selectedGame.home_team}</span>
                                                                     <span className="text-slate-200 font-mono font-bold">{fmtSigned(hs, 1)}</span>
                                                                     <span className="text-slate-500 font-mono">{fmtSigned(selectedGame.spread_home_odds ?? selectedGame.moneyline_home)}</span>
                                                                 </div>
@@ -1573,13 +1573,7 @@ const Research = ({ onAddBet }) => {
                                                     ) : <div className="text-slate-500">No total found</div>}
                                                     <div className="text-[10px] text-slate-500 mt-1">Market total (O/U)</div>
                                                 </div>
-                                                <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
-                                                    <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Model Summary</div>
-                                                    <div className="text-slate-300 text-xs leading-snug">
-                                                        {(analysisResult.narrative?.market_summary || '').slice(0, 220) || '—'}
-                                                    </div>
-                                                    <div className="text-[10px] text-slate-600 mt-1">(Full narrative shown above)</div>
-                                                </div>
+                                                {/* Model Summary removed (shown in Quick Read / Why the model likes it) */}
                                             </div>
                                         </div>
 
