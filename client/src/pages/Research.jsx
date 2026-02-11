@@ -1015,60 +1015,7 @@ const Research = ({ onAddBet }) => {
                             </div>
                         </div>
 
-                        {/* Model Performance Summary */}
-                        <div className="px-6 py-6 bg-slate-800/30 border-b border-slate-700 grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            {(() => {
-                                const normOutcome = (x) => {
-                                    const o = (x?.graded_result || x?.outcome || x?.result || 'Pending');
-                                    const s = String(o).toUpperCase();
-                                    if (s === 'WON' || s === 'WIN') return 'WON';
-                                    if (s === 'LOST' || s === 'LOSS') return 'LOST';
-                                    if (s === 'PUSH') return 'PUSH';
-                                    if (s === 'PENDING' || s === 'ANALYZED') return 'PENDING';
-                                    return s;
-                                };
-
-                                const recHist = getRecommendedHistory();
-
-                                const graded = recHist.filter(h => ['WON', 'LOST', 'PUSH'].includes(normOutcome(h)));
-                                const w = graded.filter(x => normOutcome(x) === 'WON').length;
-                                const l = graded.filter(x => normOutcome(x) === 'LOST').length;
-                                const p = graded.filter(x => normOutcome(x) === 'PUSH').length;
-
-                                const stats = [
-                                    {
-                                        label: 'Rec Bets (total)',
-                                        value: recHist.length,
-                                        icon: <CheckCircle size={14} className="text-blue-400" />
-                                    },
-                                    {
-                                        label: 'Rec Bets (graded)',
-                                        value: graded.length,
-                                        icon: <CheckCircle size={14} className="text-indigo-400" />
-                                    },
-                                    {
-                                        label: 'Record',
-                                        value: `${w}-${l}${p > 0 ? `-${p}` : ''}`,
-                                        icon: <ArrowUpDown size={14} className="text-green-400" />
-                                    },
-                                    {
-                                        label: 'Win Rate',
-                                        value: (w + l) > 0 ? `${((w / (w + l)) * 100).toFixed(1)}%` : '0.0%',
-                                        icon: <CheckCircle size={14} className="text-purple-400" />
-                                    }
-                                ];
-
-                                return stats;
-                            })().map((stat, i) => (
-                                <div key={i} className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/50 shadow-sm relative overflow-hidden group">
-                                    <div className="absolute top-0 right-0 p-2 opacity-20 group-hover:opacity-100 transition-opacity">
-                                        {stat.icon}
-                                    </div>
-                                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{stat.label}</div>
-                                    <div className="text-xl font-bold text-white">{stat.value}</div>
-                                </div>
-                            ))}
-                        </div>
+                        {/* Model Performance Summary removed (covered by analytics below) */}
 
                         {/* Today's recommended bets (separate from historical results) */}
                         {!loading && getTodayRecommended().length > 0 && (
