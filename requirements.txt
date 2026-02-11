@@ -14,6 +14,3 @@ openai
 # Selenium + undetected-chromedriver are used for local ingestion only.
 # Install them via requirements-worker.txt (or your local venv) instead.
 
-pandas
-sqlalchemy==2.0.25
-asyncpg==0.29.0
