@@ -1185,7 +1185,7 @@ const Research = ({ onAddBet }) => {
                                                                 const v = item.edge ?? mainRec.edge;
                                                                 if (v !== null && v !== undefined && v !== '') return v;
                                                                 const ev = Number(item.ev_per_unit ?? mainRec.ev_per_unit ?? item.ev);
-                                                                if (Number.isFinite(ev)) return `${(ev * 100).toFixed(2)}%`;
+                                                                if (Number.isFinite(ev)) return `${(ev * 100).toFixed(1)}%`;
                                                                 return '—';
                                                             })()}
                                                         </td>

@@ -1493,7 +1493,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
             ev = rec.get('ev')
             try:
                 if ev is not None:
-                    edge = f"{float(ev) * 100.0:.2f}%"
+                    edge = f"{float(ev) * 100.0:.1f}%"
             except Exception:
                 edge = None
         if edge is None:
@@ -1580,7 +1580,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                 'selection': r.get('selection') or '—',
                 'market_line': line,
                 'price': price,
-                'edge': f"{(ev * 100.0):.2f}%",
+                'edge': f"{(ev * 100.0):.1f}%",
                 'confidence': r.get('confidence_0_100'),
             }
 

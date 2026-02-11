@@ -723,7 +723,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "bet_type": r['market'],
                 "selection": sel,
                 # Keep legacy key name for UI, but this is EV% not points.
-                "edge": f"{(r['ev']*100):.2f}%",
+                "edge": f"{(r['ev']*100):.1f}%",
                 "win_prob": round(float(win_prob), 3) if win_prob is not None else None,
                 "market_line": (round(float(market_line_side), 1) if market_line_side is not None else None),
                 "fair_line": (round(float(fair_line_side), 1) if fair_line_side is not None else None),
