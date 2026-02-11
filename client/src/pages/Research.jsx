@@ -616,17 +616,17 @@ const Research = ({ onAddBet }) => {
                                         return pickText;
                                     };
 
-                                    const top5 = rows.slice(0, 5);
+                                    const top6 = rows.slice(0, 6);
 
                                     return (
                                         <>
                                             <div className="mb-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-[10px] uppercase tracking-widest text-emerald-300 font-black">Top 5 plays today</div>
+                                                    <div className="text-[10px] uppercase tracking-widest text-emerald-300 font-black">Top 6 plays today</div>
                                                     <div className="text-[10px] text-slate-500">Sorted by EV</div>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                    {top5.map(({ edge, top }, i) => (
+                                                    {top6.map(({ edge, top }, i) => (
                                                         <div key={edge.id} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-900/30 border border-slate-700/50">
                                                             <div className="min-w-0">
                                                                 <div className="text-xs text-slate-200 font-black truncate">{i + 1}. {edge.away_team} @ {edge.home_team}</div>
@@ -664,7 +664,7 @@ const Research = ({ onAddBet }) => {
                                                                 : '—';
 
                                                             const pickText = fmtPick(edge, top);
-                                                            const isTop = idx < 5;
+                                                            const isTop = idx < 6;
 
                                                             return (
                                                                 <tr key={edge.id} className={isTop ? "bg-emerald-500/5 hover:bg-emerald-500/10" : "hover:bg-slate-700/20"}>
@@ -680,7 +680,7 @@ const Research = ({ onAddBet }) => {
                                                                             </span>
                                                                             <span className="text-white font-black break-words">{pickText}</span>
                                                                             {isTop ? (
-                                                                                <span className="ml-1 px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/25 text-[10px] font-black text-emerald-200 uppercase tracking-wider">Top 5</span>
+                                                                                <span className="ml-1 px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/25 text-[10px] font-black text-emerald-200 uppercase tracking-wider">Top 6</span>
                                                                             ) : null}
                                                                         </div>
                                                                     </td>

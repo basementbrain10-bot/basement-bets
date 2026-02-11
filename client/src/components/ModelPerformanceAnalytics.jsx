@@ -170,6 +170,21 @@ const ModelPerformanceAnalytics = ({ history }) => {
         }
     };
 
+    const fmtEtDayShort = (ts) => {
+        const day = toEtDay(ts);
+        if (!day) return '—';
+        // day is like M/D/YYYY
+        try {
+            const parts = day.split('/');
+            if (parts.length === 3) {
+                const mm = String(parts[0]).padStart(2, '0');
+                const dd = String(parts[1]).padStart(2, '0');
+                return `${mm}/${dd}`;
+            }
+        } catch (e) {}
+        return day;
+    };
+
     const isWithinDays = (h, days) => {
         const ts = h?.analyzed_at || h?.created_at;
         if (!ts) return false;
@@ -209,6 +224,58 @@ const ModelPerformanceAnalytics = ({ history }) => {
     const trend3 = confidenceTrend((h) => isWithinDays(h, 3));
     const trend7 = confidenceTrend((h) => isWithinDays(h, 7));
     const trend30 = confidenceTrend((h) => isWithinDays(h, 30));
+
+    // --- Top 6 (by EV) performance by day ---
+    const topN = 6;
+    const getEv = (h) => {
+        const ev = Number(h?.ev_per_unit ?? h?.ev);
+        return Number.isFinite(ev) ? ev : 0;
+    };
+
+    const dailyTopN = (() => {
+        // Group all recommended+graded bets by ET day of analyzed_at.
+        const groups = {};
+        for (const h of graded) {
+            const day = toEtDay(h?.analyzed_at || h?.created_at);
+            if (!day) continue;
+            if (!groups[day]) groups[day] = [];
+            groups[day].push(h);
+        }
+
+        const days = Object.keys(groups).sort((a, b) => {
+            // sort by actual date value
+            const da = new Date(a).getTime();
+            const db = new Date(b).getTime();
+            if (Number.isFinite(da) && Number.isFinite(db)) return db - da;
+            return String(b).localeCompare(String(a));
+        });
+
+        const out = [];
+        for (const day of days) {
+            const bets = (groups[day] || [])
+                .slice()
+                .sort((x, y) => getEv(y) - getEv(x))
+                .slice(0, topN);
+
+            const w = bets.filter(h => {
+                const s = String(getResult(h)).toUpperCase();
+                return s === 'WON' || s === 'WIN';
+            }).length;
+            const l = bets.filter(h => {
+                const s = String(getResult(h)).toUpperCase();
+                return s === 'LOST' || s === 'LOSS';
+            }).length;
+            const p = bets.filter(h => String(getResult(h)).toUpperCase() === 'PUSH').length;
+            const decided = w + l;
+            const wr = decided > 0 ? (w / decided * 100) : 0;
+            const roi = bets.length > 0 ? ((w * 9.09 - l * 10) / (bets.length * 10) * 100) : 0;
+
+            out.push({ day, count: bets.length, wins: w, losses: l, pushes: p, winRate: wr, roi });
+        }
+        return out;
+    })();
+
+    const dailyTopN7 = dailyTopN.slice(0, 7);
 
     const sum = (xs) => (xs || []).reduce((a, b) => a + (Number(b) || 0), 0);
 
@@ -401,6 +468,40 @@ const ModelPerformanceAnalytics = ({ history }) => {
                             </div>
                         </div>
                         <div className="text-[10px] text-slate-500 mt-2">*Trends include graded bets only.</div>
+                    </div>
+                </div>
+
+                {/* Top 6 performance by day */}
+                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Top 6 (by EV) — Daily performance</h4>
+                    <div className="text-[10px] text-slate-500 mb-2">Each day: take the 6 highest-EV recommended bets and grade their results.</div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-700">
+                                    <th className="py-1 pr-2 text-left">Day</th>
+                                    <th className="py-1 px-2 text-right">N</th>
+                                    <th className="py-1 px-2 text-right">W-L-P</th>
+                                    <th className="py-1 px-2 text-right">Win%</th>
+                                    <th className="py-1 pl-2 text-right">ROI</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {dailyTopN7.map(d => (
+                                    <tr key={d.day} className="border-b border-slate-800/60 last:border-0">
+                                        <td className="py-1 pr-2 text-slate-300 font-bold">{fmtEtDayShort(d.day)}</td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{d.count}</td>
+                                        <td className="py-1 px-2 text-right text-slate-400 font-mono">{d.wins}-{d.losses}{d.pushes ? `-${d.pushes}` : ''}</td>
+                                        <td className={`py-1 px-2 text-right font-bold ${d.winRate >= 55 ? 'text-green-400' : d.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                            {d.winRate.toFixed(0)}%
+                                        </td>
+                                        <td className={`py-1 pl-2 text-right font-mono ${d.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {d.roi >= 0 ? '+' : ''}{d.roi.toFixed(0)}%
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
