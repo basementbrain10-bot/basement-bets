@@ -593,97 +593,131 @@ const Research = ({ onAddBet }) => {
                                             if (!sel || sel === '—') return false;
                                             if (!Number.isFinite(edgeNum) || edgeNum <= 0) return false;
                                             return true;
+                                        })
+                                        .sort((a, b) => {
+                                            const aEv = Number(String(a.top?.edge ?? '').replace('%', '').trim()) || 0;
+                                            const bEv = Number(String(b.top?.edge ?? '').replace('%', '').trim()) || 0;
+                                            return bEv - aEv;
                                         });
 
                                     if (!rows.length) {
                                         return <div className="text-slate-500">No recommendations available for this window.</div>;
                                     }
 
+                                    const fmtPick = (edge, top) => {
+                                        let pickText = String(top.selection || '').trim();
+                                        try {
+                                            if (top.bet_type === 'SPREAD') {
+                                                if (/^home\b/i.test(pickText)) pickText = pickText.replace(/^home\b/i, edge.home_team);
+                                                if (/^away\b/i.test(pickText)) pickText = pickText.replace(/^away\b/i, edge.away_team);
+                                            }
+                                            if (top.bet_type === 'TOTAL') pickText = pickText.toUpperCase();
+                                        } catch (e) { }
+                                        return pickText;
+                                    };
+
+                                    const top5 = rows.slice(0, 5);
+
                                     return (
-                                        <div className="overflow-x-auto border border-slate-700/60 rounded-xl">
-                                            <table className="min-w-full text-left text-sm">
-                                                <thead className="bg-slate-900/40 border-b border-slate-700/60">
-                                                    <tr className="text-[10px] uppercase tracking-wider text-slate-500">
-                                                        <th className="py-2 px-3">Time</th>
-                                                        <th className="py-2 px-3">Matchup</th>
-                                                        <th className="py-2 px-3">Pick</th>
-                                                        <th className="py-2 px-3">Odds</th>
-                                                        <th className="py-2 px-3">EV</th>
-                                                        <th className="py-2 px-3">Conf</th>
-                                                        <th className="py-2 px-3 text-right">Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-700/40">
-                                                    {rows.slice(0, 50).map(({ edge, top }) => {
-                                                        const date = edge.start_time ? new Date(edge.start_time) : null;
-                                                        const dateStr = date ? date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', timeZone: 'America/New_York' }) : '-';
-                                                        const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
-                                                        const odds = (top.price !== null && top.price !== undefined)
-                                                            ? fmtSigned(top.price, 0)
-                                                            : '—';
+                                        <>
+                                            <div className="mb-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="text-[10px] uppercase tracking-widest text-emerald-300 font-black">Top 5 plays today</div>
+                                                    <div className="text-[10px] text-slate-500">Sorted by EV</div>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    {top5.map(({ edge, top }, i) => (
+                                                        <div key={edge.id} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-900/30 border border-slate-700/50">
+                                                            <div className="min-w-0">
+                                                                <div className="text-xs text-slate-200 font-black truncate">{i + 1}. {edge.away_team} @ {edge.home_team}</div>
+                                                                <div className="text-xs text-slate-400 truncate">{top.bet_type} • {fmtPick(edge, top)} • {top.confidence || '—'}</div>
+                                                            </div>
+                                                            <div className="text-right shrink-0">
+                                                                <div className="text-xs font-mono font-black text-emerald-300">{String(top.edge || '').startsWith('-') ? top.edge : `+${top.edge}`}</div>
+                                                                <div className="text-[10px] text-slate-500 font-mono">{(top.price !== null && top.price !== undefined) ? fmtSigned(top.price, 0) : '—'}</div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
 
-                                                        // Normalize pick text so it's always human-readable.
-                                                        let pickText = String(top.selection || '').trim();
-                                                        try {
-                                                            if (top.bet_type === 'SPREAD') {
-                                                                // If legacy selection is "home/away +/-x", map to team names.
-                                                                if (/^home\b/i.test(pickText)) pickText = pickText.replace(/^home\b/i, edge.home_team);
-                                                                if (/^away\b/i.test(pickText)) pickText = pickText.replace(/^away\b/i, edge.away_team);
-                                                            }
-                                                            if (top.bet_type === 'TOTAL') {
-                                                                // Ensure TOTAL is formatted as OVER/UNDER.
-                                                                pickText = pickText.toUpperCase();
-                                                            }
-                                                        } catch (e) { }
+                                            <div className="overflow-x-auto border border-slate-700/60 rounded-xl">
+                                                <table className="min-w-full text-left text-sm">
+                                                    <thead className="bg-slate-900/40 border-b border-slate-700/60">
+                                                        <tr className="text-[10px] uppercase tracking-wider text-slate-500">
+                                                            <th className="py-2 px-3">Time</th>
+                                                            <th className="py-2 px-3">Matchup</th>
+                                                            <th className="py-2 px-3">Pick</th>
+                                                            <th className="py-2 px-3">Odds</th>
+                                                            <th className="py-2 px-3">EV</th>
+                                                            <th className="py-2 px-3">Conf</th>
+                                                            <th className="py-2 px-3 text-right">Action</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-700/40">
+                                                        {rows.slice(0, 50).map(({ edge, top }, idx) => {
+                                                            const date = edge.start_time ? new Date(edge.start_time) : null;
+                                                            const dateStr = date ? date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', timeZone: 'America/New_York' }) : '-';
+                                                            const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
+                                                            const odds = (top.price !== null && top.price !== undefined)
+                                                                ? fmtSigned(top.price, 0)
+                                                                : '—';
 
-                                                        return (
-                                                            <tr key={edge.id} className="hover:bg-slate-700/20">
-                                                                <td className="py-2 px-3 text-slate-400 text-xs whitespace-nowrap">
-                                                                    <div className="font-bold text-slate-300">{dateStr}</div>
-                                                                    <div>{timeStr}</div>
-                                                                </td>
-                                                                <td className="py-2 px-3 text-slate-200 font-bold">{edge.away_team} @ {edge.home_team}</td>
-                                                                <td className="py-2 px-3">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="px-2 py-0.5 rounded bg-slate-900/40 border border-slate-700 text-[10px] font-black text-slate-300 uppercase tracking-wider">
-                                                                            {top.bet_type}
-                                                                        </span>
-                                                                        <span className="text-white font-black break-words">{pickText}</span>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="py-2 px-3 text-slate-300 font-mono whitespace-nowrap">{odds}</td>
-                                                                <td className="py-2 px-3 text-green-300 font-mono font-bold whitespace-nowrap">{String(top.edge || '').startsWith('-') ? top.edge : `+${top.edge}`}</td>
-                                                                <td className="py-2 px-3 text-slate-300 whitespace-nowrap">{top.confidence}</td>
-                                                                <td className="py-2 px-3">
-                                                                    <div className="flex justify-end gap-2">
-                                                                        <button
-                                                                            onClick={() => onAddBet?.({
-                                                                                sport: edge.sport,
-                                                                                game: `${edge.away_team} @ ${edge.home_team}`,
-                                                                                market: top.bet_type,
-                                                                                pick: pickText,
-                                                                                line: top.market_line,
-                                                                                odds: top.price,
-                                                                                book: top.book,
-                                                                            })}
-                                                                            className="px-3 py-1 bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-500/30 rounded text-xs font-bold"
-                                                                        >
-                                                                            Add
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => analyzeGame(edge)}
-                                                                            className="px-3 py-1 bg-slate-800/60 text-slate-200 hover:bg-slate-800 border border-slate-700 rounded text-xs font-bold"
-                                                                        >
-                                                                            Details
-                                                                        </button>
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                                            const pickText = fmtPick(edge, top);
+                                                            const isTop = idx < 5;
+
+                                                            return (
+                                                                <tr key={edge.id} className={isTop ? "bg-emerald-500/5 hover:bg-emerald-500/10" : "hover:bg-slate-700/20"}>
+                                                                    <td className="py-2 px-3 text-slate-400 text-xs whitespace-nowrap">
+                                                                        <div className="font-bold text-slate-300">{dateStr}</div>
+                                                                        <div>{timeStr}</div>
+                                                                    </td>
+                                                                    <td className="py-2 px-3 text-slate-200 font-bold">{edge.away_team} @ {edge.home_team}</td>
+                                                                    <td className="py-2 px-3">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="px-2 py-0.5 rounded bg-slate-900/40 border border-slate-700 text-[10px] font-black text-slate-300 uppercase tracking-wider">
+                                                                                {top.bet_type}
+                                                                            </span>
+                                                                            <span className="text-white font-black break-words">{pickText}</span>
+                                                                            {isTop ? (
+                                                                                <span className="ml-1 px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/25 text-[10px] font-black text-emerald-200 uppercase tracking-wider">Top 5</span>
+                                                                            ) : null}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="py-2 px-3 text-slate-300 font-mono whitespace-nowrap">{odds}</td>
+                                                                    <td className="py-2 px-3 text-green-300 font-mono font-bold whitespace-nowrap">{String(top.edge || '').startsWith('-') ? top.edge : `+${top.edge}`}</td>
+                                                                    <td className="py-2 px-3 text-slate-300 whitespace-nowrap">{top.confidence}</td>
+                                                                    <td className="py-2 px-3">
+                                                                        <div className="flex justify-end gap-2">
+                                                                            <button
+                                                                                onClick={() => onAddBet?.({
+                                                                                    sport: edge.sport,
+                                                                                    game: `${edge.away_team} @ ${edge.home_team}`,
+                                                                                    market: top.bet_type,
+                                                                                    pick: pickText,
+                                                                                    line: top.market_line,
+                                                                                    odds: top.price,
+                                                                                    book: top.book,
+                                                                                })}
+                                                                                className="px-3 py-1 bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-500/30 rounded text-xs font-bold"
+                                                                            >
+                                                                                Add
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => analyzeGame(edge)}
+                                                                                className="px-3 py-1 bg-slate-800/60 text-slate-200 hover:bg-slate-800 border border-slate-700 rounded text-xs font-bold"
+                                                                            >
+                                                                                Details
+                                                                            </button>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </>
                                     );
                                 })()}
                             </div>
