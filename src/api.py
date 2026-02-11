@@ -182,6 +182,17 @@ RESEARCH_TTL = timedelta(minutes=5)
 _top_picks_cache = {}
 TOP_PICKS_TTL = timedelta(seconds=90)
 
+def invalidate_analytics_cache(user_id=None):
+    """Invalidate cached AnalyticsEngine so edits to bets immediately reflect in UI."""
+    try:
+        if user_id in _analytics_engines:
+            _analytics_engines.pop(user_id, None)
+        if user_id in _analytics_refresh_times:
+            _analytics_refresh_times.pop(user_id, None)
+    except Exception:
+        pass
+
+
 def get_analytics_engine(user_id=None):
     global _analytics_engines, _analytics_refresh_times
     
@@ -827,6 +838,10 @@ async def save_manual_bet(request: Request, user: dict = Depends(get_current_use
         
         from src.database import insert_bet_v2
         insert_bet_v2(doc, legs=[leg])
+
+        # Ensure analytics reflect the new/updated bet immediately
+        invalidate_analytics_cache(user_id)
+
         return {"status": "success", "link_status": leg['link_status'], "event_id": leg['event_id']}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -877,9 +892,12 @@ async def update_bet(bet_id: int, request: Request, user: dict = Depends(get_cur
         update_note = payload.get('update_note') or payload.get('audit_note')
 
         from src.database import update_bet_fields
-        ok = update_bet_fields(int(bet_id), fields, user_id=user.get('sub'), update_note=update_note)
+        uid = user.get('sub')
+        ok = update_bet_fields(int(bet_id), fields, user_id=uid, update_note=update_note)
         if not ok:
             raise HTTPException(status_code=404, detail="Bet not found")
+
+        invalidate_analytics_cache(uid)
         return {"status": "success"}
     except HTTPException:
         raise
@@ -895,10 +913,12 @@ async def settle_bet(bet_id: int, request: Request, user: dict = Depends(get_cur
         if status not in ['WON', 'LOST', 'PUSH', 'PENDING']:
             raise HTTPException(status_code=400, detail="Invalid status")
             
+        uid = user.get("sub")
         from src.database import update_bet_status
-        success = update_bet_status(bet_id, status, user_id=user.get("sub"))
+        success = update_bet_status(bet_id, status, user_id=uid)
         if not success:
             raise HTTPException(status_code=404, detail="Bet not found")
+        invalidate_analytics_cache(uid)
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -906,10 +926,12 @@ async def settle_bet(bet_id: int, request: Request, user: dict = Depends(get_cur
 @app.delete("/api/bets/{bet_id}")
 async def remove_bet(bet_id: int, user: dict = Depends(get_current_user)):
     try:
+        uid = user.get("sub")
         from src.database import delete_bet
-        success = delete_bet(bet_id, user_id=user.get("sub"))
+        success = delete_bet(bet_id, user_id=uid)
         if not success:
             raise HTTPException(status_code=404, detail="Bet not found")
+        invalidate_analytics_cache(uid)
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
