@@ -573,9 +573,10 @@ const Research = ({ onAddBet }) => {
                                             const edgeNum = Number(edgeStr);
 
                                             // Only show actionable recommendations (hide AUTO/blank/0-EV rows).
+                                            // NOTE: odds/price can be missing if the board ingest didn't capture a book yet;
+                                            // we still want to show the recommended play.
                                             if (!bt || bt === 'AUTO') return false;
                                             if (!sel || sel === '—') return false;
-                                            if (top.price === null || top.price === undefined) return false;
                                             if (!Number.isFinite(edgeNum) || edgeNum <= 0) return false;
                                             return true;
                                         });
