@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, PieChart, BarChart2, BarChart3, Calendar, Layout, LayoutDashboard, Search, Menu, X, PlusCircle, Trash, Trash2, CheckCircle, Clock, Percent, List, FileText, Info, Settings, User, RefreshCw, AlertTriangle, AlertCircle, Filter, ChevronDown, ChevronRight, MessageSquare, BookOpen, ExternalLink, ArrowRight, Table } from 'lucide-react';
 
-console.log("Basement Bets Frontend v1.5.0 Loaded at " + new Date().toISOString());
+console.log("Basement Bets Frontend v1.5.1 Loaded at " + new Date().toISOString());
 import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
@@ -1477,6 +1477,7 @@ function TransactionView({ bets, financials }) {
     const [showManualAdd, setShowManualAdd] = useState(false);
     const [showEdit, setShowEdit] = useState(false);
     const [editBet, setEditBet] = useState(null);
+    const [editNote, setEditNote] = useState('');
 
     const [manualBet, setManualBet] = useState({
         sportsbook: "DraftKings",
@@ -1542,9 +1543,11 @@ function TransactionView({ bets, financials }) {
                 status: editBet.status,
                 description: editBet.description,
                 selection: editBet.selection,
+                update_note: editNote,
             });
             setShowEdit(false);
             setEditBet(null);
+            setEditNote('');
             window.location.reload();
         } catch (err) {
             console.error('Edit save failed', err);
@@ -1670,7 +1673,7 @@ function TransactionView({ bets, financials }) {
                     <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-5">
                         <div className="flex items-center justify-between mb-4">
                             <div className="text-white font-bold">Edit Bet</div>
-                            <button type="button" className="text-gray-400 hover:text-white" onClick={() => { setShowEdit(false); setEditBet(null); }}>✕</button>
+                            <button type="button" className="text-gray-400 hover:text-white" onClick={() => { setShowEdit(false); setEditBet(null); setEditNote(''); }}>✕</button>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1770,6 +1773,17 @@ function TransactionView({ bets, financials }) {
                                     className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
                                     value={editBet.selection || ''}
                                     onChange={(e) => setEditBet({ ...editBet, selection: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="md:col-span-2">
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Audit note (optional)</div>
+                                <textarea
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                                    rows={2}
+                                    placeholder="e.g., fixed odds typo"
+                                    value={editNote}
+                                    onChange={(e) => setEditNote(e.target.value)}
                                 />
                             </div>
                         </div>
@@ -2125,6 +2139,7 @@ function TransactionView({ bets, financials }) {
                                                 description: bet.description,
                                                 selection: bet.selection,
                                             });
+                                            setEditNote('');
                                             setShowEdit(true);
                                         }}
                                     >
@@ -2260,7 +2275,7 @@ const FinancialHeader = ({ financials, mode = 'all' }) => {
     if (!financials) return null;
     return (
         <div className="flex flex-wrap gap-4 mb-8">
-            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.5.0</div>
+            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.5.1</div>
 
             {mode !== 'performance' && (
                 <FinancialCard

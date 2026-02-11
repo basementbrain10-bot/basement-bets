@@ -874,9 +874,10 @@ async def update_bet(bet_id: int, request: Request, user: dict = Depends(get_cur
             'description', 'selection'
         }
         fields = {k: payload.get(k) for k in allowed if k in payload}
+        update_note = payload.get('update_note') or payload.get('audit_note')
 
         from src.database import update_bet_fields
-        ok = update_bet_fields(int(bet_id), fields, user_id=user.get('sub'))
+        ok = update_bet_fields(int(bet_id), fields, user_id=user.get('sub'), update_note=update_note)
         if not ok:
             raise HTTPException(status_code=404, detail="Bet not found")
         return {"status": "success"}

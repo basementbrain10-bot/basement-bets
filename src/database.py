@@ -242,6 +242,10 @@ def init_bets_db():
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS external_id TEXT;",
         # Unique index for external_id when present
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_bets_user_provider_external_id ON bets(user_id, provider, external_id) WHERE external_id IS NOT NULL;",
+        # Audit trail for inline edits
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;",
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS updated_by TEXT;",
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS update_note TEXT;",
     ]
 
     with get_admin_db_connection() as conn:
@@ -1421,7 +1425,7 @@ def update_bet_status(bet_id: int, status: str, user_id: str | None = None) -> b
         return False
 
 
-def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None) -> bool:
+def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None, update_note: str | None = None) -> bool:
     """Update editable bet fields (manual corrections).
 
     Allowed fields:
@@ -1435,6 +1439,14 @@ def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None) -> 
         'provider', 'date', 'sport', 'bet_type', 'wager', 'odds', 'profit', 'status',
         'description', 'selection'
     }
+
+    # Always write audit fields on a successful update
+    # (columns added via init_bets_db migrations)
+    audit_note = None
+    try:
+        audit_note = (update_note or '').strip() or None
+    except Exception:
+        audit_note = None
 
     if not fields or not isinstance(fields, dict):
         return False
@@ -1482,6 +1494,13 @@ def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None) -> 
 
     if not sets:
         return False
+
+    # Add audit columns
+    sets.append("updated_at=NOW()")
+    sets.append("updated_by=%s")
+    params.append(user_id)
+    sets.append("update_note=%s")
+    params.append(audit_note)
 
     q = f"""
     UPDATE bets
