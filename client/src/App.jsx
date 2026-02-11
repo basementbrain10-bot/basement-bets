@@ -45,6 +45,30 @@ const LoginModal = ({ onSubmit }) => {
 // Helpers
 const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).filter ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val) : (typeof val === 'number' ? `$${val.toFixed(2)}` : val);
 
+// Always show dates as MM/DD/YYYY (ET)
+const formatDateMDY = (s) => {
+    if (!s) return '';
+    try {
+        const str = String(s).trim();
+        // handle YYYY-MM-DD
+        const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) {
+            const [, yy, mm, dd] = m;
+            return `${mm}/${dd}/${yy}`;
+        }
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+            return d.toLocaleDateString('en-US', {
+                month: '2-digit',
+                day: '2-digit',
+                year: 'numeric',
+                timeZone: 'America/New_York'
+            });
+        }
+    } catch (e) {}
+    return String(s);
+};
+
 class ErrorBoundary extends React.Component {
     constructor(props) {
         super(props);
@@ -791,7 +815,7 @@ function SummaryView({ stats, sportBreakdown, playerBreakdown, monthlyBreakdown,
                                 <XAxis
                                     dataKey="date"
                                     stroke="#94a3b8"
-                                    tickFormatter={(val) => new Date(val).toLocaleDateString([], { month: 'numeric', day: 'numeric' })}
+                                    tickFormatter={(val) => formatDateMDY(val)}
                                     minTickGap={30}
                                 />
                                 <YAxis stroke="#94a3b8" />
@@ -799,7 +823,7 @@ function SummaryView({ stats, sportBreakdown, playerBreakdown, monthlyBreakdown,
                                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }}
                                     itemStyle={{ color: '#fff' }}
                                     formatter={(value) => formatCurrency(value)}
-                                    labelFormatter={(label) => new Date(label).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
+                                    labelFormatter={(label) => formatDateMDY(label)}
                                 />
                                 <Line type="monotone" dataKey="balance" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="Balance" />
                             </LineChart>
@@ -1568,7 +1592,7 @@ function TransactionView({ bets, financials }) {
                                 const isDeposit = bet.bet_type === 'Deposit' || (bet.bet_type === 'Other' && bet.amount > 0);
                                 return (
                                     <tr key={bet.id || bet.txn_id} className="hover:bg-gray-800/50 transition duration-150">
-                                        <td className="px-6 py-3 text-gray-300 font-mono text-xs" title={bet.sort_date || bet.date}>{bet.display_date || bet.date}</td>
+                                        <td className="px-6 py-3 text-gray-300 font-mono text-xs" title={formatDateMDY(bet.sort_date || bet.date)}>{formatDateMDY(bet.sort_date || bet.date)}</td>
                                         <td className="px-6 py-3">
                                             <span className="px-2 py-1 rounded text-[10px] text-gray-300 border border-gray-700 bg-gray-800 shadow-sm uppercase font-bold tracking-wider">
                                                 {bet.provider}
