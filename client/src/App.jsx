@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, PieChart, BarChart2, BarChart3, Calendar, Layout, LayoutDashboard, Search, Menu, X, PlusCircle, Trash, Trash2, CheckCircle, Clock, Percent, List, FileText, Info, Settings, User, RefreshCw, AlertTriangle, AlertCircle, Filter, ChevronDown, ChevronRight, MessageSquare, BookOpen, ExternalLink, ArrowRight, Table } from 'lucide-react';
 
-console.log("Basement Bets Frontend v1.3.2 Loaded at " + new Date().toISOString());
+console.log("Basement Bets Frontend v1.4.0 Loaded at " + new Date().toISOString());
 import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
@@ -357,7 +357,7 @@ function App() {
                                 onClick={() => setView('research')}
                                 className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'research' ? 'bg-purple-500 text-white font-bold shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
                             >
-                                <TrendingUp size={18} /> Board
+                                <TrendingUp size={18} /> Model Recommendations
                             </button>
                             <button
                                 onClick={() => setView('performance')}
@@ -410,7 +410,17 @@ function App() {
                     ) : view === 'research' ? (
                         <Research onAddBet={() => setShowAddBet(true)} />
                     ) : (
-                        <PerformanceView timeSeries={timeSeries} financials={financials} periodStats={periodStats} edgeBreakdown={edgeBreakdown} bets={bets} />
+                        <PerformanceView
+                            timeSeries={timeSeries}
+                            financials={financials}
+                            periodStats={periodStats}
+                            edgeBreakdown={edgeBreakdown}
+                            bets={bets}
+                            onOpenTransactions={(prefill) => {
+                                try { localStorage.setItem('txn_prefill', JSON.stringify(prefill || {})); } catch (e) {}
+                                setView('transactions');
+                            }}
+                        />
                     )}
                 </div>
             </div>
@@ -418,12 +428,14 @@ function App() {
     );
 }
 
-function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, bets }) {
+function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, bets, onOpenTransactions }) {
     // Performance tab is focused on actual betting performance + breakdowns.
 
     // Scatter / drivers controls
     const [minSegmentBets, setMinSegmentBets] = useState(5);
     const [segmentWindow, setSegmentWindow] = useState('30d'); // 30d | 90d | all
+    const [scatterColorMode, setScatterColorMode] = useState('profit'); // profit | sport
+    const [scatterBubbleMode, setScatterBubbleMode] = useState('bets'); // bets | wager
 
     const settledBets = React.useMemo(() => {
         const xs = (bets || []);
@@ -465,7 +477,7 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
             const sport = (b.sport || 'Unknown').toUpperCase();
             const bt = (b.bet_type || 'Unknown');
             const key = `${sport}|||${bt}`;
-            if (!map[key]) map[key] = { sport, bet_type: bt, bets: 0, wins: 0, losses: 0, push: 0, wager: 0, profit: 0 };
+            if (!map[key]) map[key] = { sport, bet_type: bt, bets: 0, wins: 0, losses: 0, push: 0, wager: 0, profit: 0, odds_sum: 0, odds_n: 0 };
             const r = map[key];
             const st = (b.status || '').toUpperCase();
             r.bets += 1;
@@ -474,6 +486,12 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
             else r.push += 1;
             r.wager += Number(b.wager || 0);
             r.profit += Number(b.profit || 0);
+
+            const o = (b.odds === null || b.odds === undefined || b.odds === '') ? null : Number(b.odds);
+            if (o !== null && Number.isFinite(o)) {
+                r.odds_sum += o;
+                r.odds_n += 1;
+            }
         };
 
         const all = {};
@@ -500,7 +518,19 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
             const decided = r.wins + r.losses;
             const winp = decided > 0 ? (r.wins / decided * 100) : 0;
             const roi = r.wager > 0 ? (r.profit / r.wager * 100) : 0;
-            return { ...r, actual_win_rate: Number(winp.toFixed(1)), roi: Number(roi.toFixed(1)), profit: Number(r.profit.toFixed(2)) };
+            const avgStake = r.bets > 0 ? (r.wager / r.bets) : 0;
+            const profitPerBet = r.bets > 0 ? (r.profit / r.bets) : 0;
+            const avgOdds = r.odds_n > 0 ? (r.odds_sum / r.odds_n) : null;
+            return {
+                ...r,
+                actual_win_rate: Number(winp.toFixed(1)),
+                roi: Number(roi.toFixed(1)),
+                profit: Number(r.profit.toFixed(2)),
+                wager: Number(r.wager.toFixed(2)),
+                avg_stake: Number(avgStake.toFixed(2)),
+                profit_per_bet: Number(profitPerBet.toFixed(2)),
+                avg_odds: (avgOdds === null) ? null : Number(avgOdds.toFixed(0)),
+            };
         });
 
         const rows = toRows(all).filter(r => r.bets >= minSegmentBets);
@@ -679,7 +709,7 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                     <h3 className="text-xl font-bold flex items-center gap-2">
                         <BarChart3 className="text-blue-400" /> Win% vs ROI (by sport + bet type)
                     </h3>
-                    <div className="text-xs text-slate-500">Each dot = (sport, bet type) • bubble size = volume</div>
+                    <div className="text-xs text-slate-500">Click a dot to filter Transactions</div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -694,7 +724,27 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                         <option value="all">All-time</option>
                     </select>
 
-                    <div className="ml-2 text-xs text-slate-500">Min bets per dot</div>
+                    <div className="ml-2 text-xs text-slate-500">Color</div>
+                    <select
+                        className="bg-slate-950/40 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                        value={scatterColorMode}
+                        onChange={(e) => setScatterColorMode(e.target.value)}
+                    >
+                        <option value="profit">Profit sign</option>
+                        <option value="sport">Sport</option>
+                    </select>
+
+                    <div className="ml-2 text-xs text-slate-500">Bubble</div>
+                    <select
+                        className="bg-slate-950/40 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                        value={scatterBubbleMode}
+                        onChange={(e) => setScatterBubbleMode(e.target.value)}
+                    >
+                        <option value="bets"># Bets</option>
+                        <option value="wager">$ Wager</option>
+                    </select>
+
+                    <div className="ml-2 text-xs text-slate-500">Min N</div>
                     <input
                         type="number"
                         min={1}
@@ -703,7 +753,13 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                         onChange={(e) => setMinSegmentBets(Math.max(1, parseInt(e.target.value || '1', 10)))}
                         className="w-20 bg-slate-950/40 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
                     />
-                    <div className="text-xs text-slate-600">(recommended: 5–10)</div>
+                    <button
+                        type="button"
+                        onClick={() => setMinSegmentBets(10)}
+                        className={`px-2 py-1 text-xs rounded border ${minSegmentBets >= 10 ? 'bg-blue-600/20 text-blue-300 border-blue-500/30' : 'bg-slate-900/40 text-slate-300 border-slate-700'}`}
+                    >
+                        N≥10
+                    </button>
                 </div>
 
                 {(segmentAgg.rows || []).length === 0 ? (
@@ -734,7 +790,7 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                                     domain={[0, 100]}
                                     label={{ value: 'Win% (settled)', angle: -90, position: 'left', fill: '#64748b', fontSize: 10 }}
                                 />
-                                <ZAxis type="number" dataKey="bets" range={[60, 360]} name="Volume" />
+                                <ZAxis type="number" dataKey={scatterBubbleMode === 'wager' ? 'wager' : 'bets'} range={[60, 360]} name="Volume" />
                                 <Tooltip
                                     cursor={{ strokeDasharray: '3 3' }}
                                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '8px' }}
@@ -762,15 +818,41 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                                 <ReferenceLine x={0} stroke="#475569" strokeWidth={1} />
                                 <ReferenceLine y={50} stroke="#1f2937" strokeWidth={1} strokeDasharray="4 4" />
 
-                                <Scatter name="Segments" data={segmentAgg.rows}>
-                                    {(segmentAgg.rows || []).map((entry, index) => (
-                                        <Cell
-                                            key={`cell-${index}`}
-                                            fill={entry.profit >= 0 ? '#10b981' : '#ef4444'}
-                                            fillOpacity={0.55}
-                                            stroke={entry.profit >= 0 ? '#10b981' : '#ef4444'}
-                                        />
-                                    ))}
+                                <Scatter
+                                    name="Segments"
+                                    data={segmentAgg.rows}
+                                    onClick={(d) => {
+                                        const payload = d?.payload || d;
+                                        const sport = payload?.sport;
+                                        const betType = payload?.bet_type;
+                                        if (sport && betType && typeof onOpenTransactions === 'function') {
+                                            onOpenTransactions({ sport, type: betType });
+                                        }
+                                    }}
+                                >
+                                    {(segmentAgg.rows || []).map((entry, index) => {
+                                        const sportColors = {
+                                            NFL: '#60a5fa',
+                                            NBA: '#a78bfa',
+                                            NCAAM: '#f97316',
+                                            NCAAF: '#fbbf24',
+                                            MLB: '#22c55e',
+                                            NHL: '#38bdf8',
+                                            UNKNOWN: '#94a3b8'
+                                        };
+                                        const fill = scatterColorMode === 'sport'
+                                            ? (sportColors[String(entry.sport || 'UNKNOWN').toUpperCase()] || '#94a3b8')
+                                            : (entry.profit >= 0 ? '#10b981' : '#ef4444');
+                                        const stroke = fill;
+                                        return (
+                                            <Cell
+                                                key={`cell-${index}`}
+                                                fill={fill}
+                                                fillOpacity={0.55}
+                                                stroke={stroke}
+                                            />
+                                        );
+                                    })}
                                 </Scatter>
                             </ScatterChart>
                         </ResponsiveContainer>
@@ -785,7 +867,57 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                 <div className="mt-6">
                     <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-black text-slate-200 uppercase tracking-widest">What’s driving results (last 30d vs prior 30d)</h4>
-                        <div className="text-xs text-slate-500">Sorted by last 30d ROI</div>
+                        <div className="text-xs text-slate-500">Sorted by last 30d ROI (then 30d volume)</div>
+                    </div>
+
+                    {/* Top winners / losers */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                        {(() => {
+                            const rows = (segmentAgg.driving || []).slice().filter(r => (r.bets_30d || 0) >= Math.max(3, Math.min(10, minSegmentBets)));
+                            const winners = rows.slice().sort((a, b) => Number(b.profit_30d || 0) - Number(a.profit_30d || 0)).slice(0, 10);
+                            const losers = rows.slice().sort((a, b) => Number(a.profit_30d || 0) - Number(b.profit_30d || 0)).slice(0, 10);
+                            const Card = ({ title, data }) => (
+                                <div className="bg-slate-800/20 border border-slate-800 rounded-xl p-4">
+                                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black mb-2">{title}</div>
+                                    <div className="space-y-2">
+                                        {data.length === 0 ? (
+                                            <div className="text-xs text-slate-500">No segments meet the min-N.</div>
+                                        ) : data.map((r, i) => (
+                                            <div key={i} className="flex items-center justify-between text-sm">
+                                                <div className="text-slate-200 font-bold truncate pr-3">{r.sport} — <span className="text-slate-400 font-normal">{r.bet_type}</span></div>
+                                                <div className={`font-mono font-bold ${Number(r.profit_30d || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{formatCurrency(Number(r.profit_30d || 0))}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                            return (
+                                <>
+                                    <Card title="Top winners (30d net P/L)" data={winners} />
+                                    <Card title="Top losers (30d net P/L)" data={losers} />
+                                </>
+                            );
+                        })()}
+                    </div>
+
+                    {/* Biggest changes */}
+                    <div className="bg-slate-800/20 border border-slate-800 rounded-xl p-4 mb-4">
+                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black mb-2">Biggest changes (ROI Δ, min N)</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {(() => {
+                                const rows = (segmentAgg.driving || [])
+                                    .filter(r => r.roi_delta !== null && r.roi_delta !== undefined)
+                                    .filter(r => (r.bets_30d || 0) >= Math.max(3, minSegmentBets));
+                                const top = rows.slice().sort((a, b) => Math.abs(Number(b.roi_delta || 0)) - Math.abs(Number(a.roi_delta || 0))).slice(0, 9);
+                                return top.map((r, i) => (
+                                    <div key={i} className="bg-slate-900/30 border border-slate-800 rounded-xl p-3">
+                                        <div className="text-slate-200 font-bold text-sm truncate">{r.sport} — <span className="text-slate-400 font-normal">{r.bet_type}</span></div>
+                                        <div className={`mt-1 font-mono font-black ${(Number(r.roi_delta || 0) >= 0) ? 'text-green-300' : 'text-red-300'}`}>{Number(r.roi_delta) >= 0 ? '+' : ''}{Number(r.roi_delta).toFixed(1)}%</div>
+                                        <div className="text-[10px] text-slate-500">ROI 30d: {r.roi_30d === null ? '—' : `${Number(r.roi_30d).toFixed(1)}%`} • prev: {r.roi_prev30d === null ? '—' : `${Number(r.roi_prev30d).toFixed(1)}%`} • N={r.bets_30d || 0}</div>
+                                    </div>
+                                ));
+                            })()}
+                        </div>
                     </div>
 
                     <div className="overflow-x-auto border border-slate-800 rounded-xl">
@@ -794,6 +926,9 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                                 <tr className="text-[10px] uppercase tracking-wider text-slate-500">
                                     <th className="py-2 px-3">Segment</th>
                                     <th className="py-2 px-3 text-right">Bets (all)</th>
+                                    <th className="py-2 px-3 text-right">Avg odds</th>
+                                    <th className="py-2 px-3 text-right">Avg stake</th>
+                                    <th className="py-2 px-3 text-right">P/B</th>
                                     <th className="py-2 px-3 text-right">ROI (all)</th>
                                     <th className="py-2 px-3 text-right">Win% (all)</th>
                                     <th className="py-2 px-3 text-right">P/L (30d)</th>
@@ -822,6 +957,9 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                                             <tr key={i} className="hover:bg-slate-800/30">
                                                 <td className="py-2 px-3 text-slate-200 font-bold">{r.sport} — <span className="text-slate-400 font-normal">{r.bet_type}</span></td>
                                                 <td className="py-2 px-3 text-right text-slate-300 font-mono">{r.bets}</td>
+                                                <td className="py-2 px-3 text-right text-slate-300 font-mono">{r.avg_odds === null ? '—' : (r.avg_odds > 0 ? `+${r.avg_odds}` : String(r.avg_odds))}</td>
+                                                <td className="py-2 px-3 text-right text-slate-300 font-mono">{formatCurrency(r.avg_stake || 0)}</td>
+                                                <td className={`py-2 px-3 text-right font-mono ${(r.profit_per_bet || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{formatCurrency(r.profit_per_bet || 0)}</td>
                                                 <td className={`py-2 px-3 text-right font-mono ${Number(r.roi || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{r.roi.toFixed(1)}%</td>
                                                 <td className="py-2 px-3 text-right text-slate-300 font-mono">{Number(r.actual_win_rate || 0).toFixed(1)}%</td>
                                                 <td className={`py-2 px-3 text-right font-mono ${Number(r.profit_30d || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{r.profit_30d === null ? '—' : formatCurrency(r.profit_30d)}</td>
@@ -1318,6 +1456,23 @@ function TransactionView({ bets, financials }) {
         selection: "",
         status: "All"
     });
+
+    // Optional prefill from other charts (e.g., Performance scatter)
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('txn_prefill');
+            if (!raw) return;
+            const p = JSON.parse(raw);
+            localStorage.removeItem('txn_prefill');
+            setFilters(f => ({
+                ...f,
+                sport: p?.sport ? String(p.sport).toUpperCase() : f.sport,
+                type: p?.type ? String(p.type) : f.type,
+                sportsbook: p?.sportsbook ? String(p.sportsbook) : f.sportsbook,
+                selection: p?.selection ? String(p.selection) : f.selection,
+            }));
+        } catch (e) {}
+    }, []);
 
     const [showManualAdd, setShowManualAdd] = useState(false);
     const [manualBet, setManualBet] = useState({
@@ -1921,7 +2076,7 @@ const FinancialHeader = ({ financials, mode = 'all' }) => {
     if (!financials) return null;
     return (
         <div className="flex flex-wrap gap-4 mb-8">
-            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.3.2</div>
+            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.4.0</div>
 
             {mode !== 'performance' && (
                 <FinancialCard

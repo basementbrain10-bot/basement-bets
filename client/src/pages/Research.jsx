@@ -426,7 +426,7 @@ const Research = ({ onAddBet }) => {
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-green-400 bg-clip-text text-transparent">
-                        Bet Research
+                        Model Recommendations
                     </h1>
                     <div className="text-xs text-slate-500 mt-1">
                         Showing NCAAM board for next <span className="text-slate-300 font-bold">3</span> days from selected date.
@@ -1027,6 +1027,70 @@ const Research = ({ onAddBet }) => {
 
                         {!loading && getRecommendedHistory().length > 0 && (
                             <>
+                                {/* Daily recap (most recent graded ET day) */}
+                                <div className="px-6 py-4 border-b border-slate-700 bg-slate-900/20">
+                                    {(() => {
+                                        const hist = getRecommendedHistory();
+                                        const etDay = (ts) => {
+                                            try {
+                                                return new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+                                            } catch (e) {
+                                                return null;
+                                            }
+                                        };
+                                        const normOutcome = (x) => {
+                                            const o = (x?.graded_result || x?.outcome || x?.result || 'PENDING');
+                                            const s = String(o).toUpperCase();
+                                            if (s === 'WON' || s === 'WIN') return 'WON';
+                                            if (s === 'LOST' || s === 'LOSS') return 'LOST';
+                                            if (s === 'PUSH') return 'PUSH';
+                                            return 'PENDING';
+                                        };
+
+                                        const days = [...new Set(hist.map(h => etDay(h?.analyzed_at || h?.created_at)).filter(Boolean))].sort();
+                                        const lastDay = days.length ? days[days.length - 1] : null;
+                                        const dayRows = lastDay ? hist.filter(h => etDay(h?.analyzed_at || h?.created_at) === lastDay) : [];
+                                        const graded = dayRows.filter(h => ['WON','LOST','PUSH'].includes(normOutcome(h)));
+                                        const w = graded.filter(h => normOutcome(h) === 'WON').length;
+                                        const l = graded.filter(h => normOutcome(h) === 'LOST').length;
+                                        const p = graded.filter(h => normOutcome(h) === 'PUSH').length;
+                                        const winRate = (w + l) ? (w / (w + l) * 100) : 0;
+
+                                        const fmtMDY = (ymd) => {
+                                            try {
+                                                const [yy, mm, dd] = String(ymd || '').split('-');
+                                                if (yy && mm && dd) return `${mm}/${dd}/${yy}`;
+                                            } catch (e) {}
+                                            return ymd || '—';
+                                        };
+
+                                        return (
+                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                                <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+                                                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Daily recap</div>
+                                                    <div className="mt-1 text-white font-black text-lg">{fmtMDY(lastDay)}</div>
+                                                    <div className="text-xs text-slate-500">most recent day in history</div>
+                                                </div>
+                                                <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+                                                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Bets</div>
+                                                    <div className="mt-1 text-white font-black text-2xl">{dayRows.length}</div>
+                                                    <div className="text-xs text-slate-500">recommended (that day)</div>
+                                                </div>
+                                                <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+                                                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Record</div>
+                                                    <div className="mt-1 text-white font-black text-2xl">{w}-{l}{p ? `-${p}` : ''}</div>
+                                                    <div className="text-xs text-slate-500">graded only</div>
+                                                </div>
+                                                <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+                                                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Win%</div>
+                                                    <div className="mt-1 text-white font-black text-2xl">{(w + l) ? `${winRate.toFixed(1)}%` : '—'}</div>
+                                                    <div className="text-xs text-slate-500">W/L only</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+
                                 <ModelPerformanceAnalytics history={getRecommendedHistory()} />
 
                                 <div className="overflow-x-auto">
