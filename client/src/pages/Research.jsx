@@ -588,25 +588,12 @@ const Research = ({ onAddBet }) => {
                                         }
                                     };
 
-                                    const selectedIsToday = (() => {
-                                        try {
-                                            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-                                            return String(selectedDate) === String(today);
-                                        } catch (e) {
-                                            return false;
-                                        }
-                                    })();
-
                                     const rows = getProcessedEdges()
-                                        .filter((e) => {
-                                            // UX rule: if viewing TODAY, Top 6 should be today-only.
-                                            // If viewing a past/future date, Top 6 should respect the board window.
-                                            if (!selectedIsToday) return true;
-                                            return isSameEtDay(e?.start_time, selectedDate);
-                                        })
                                         .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null }))
-                                        .filter(({ top }) => {
+                                        .filter(({ edge, top }) => {
                                             if (!top) return false;
+                                            // Recommended view should reflect the calendar day selected (ET)
+                                            if (!isSameEtDay(edge?.start_time, selectedDate)) return false;
                                             const bt = String(top.bet_type || '').toUpperCase();
                                             const sel = String(top.selection || '').trim();
                                             const edgeStr = String(top.edge ?? '').replace('%', '').trim();
