@@ -1484,6 +1484,50 @@ const Research = ({ onAddBet }) => {
                                             );
                                         })()}
 
+                                        {/* Quick Read (end-user friendly) */}
+                                        {(() => {
+                                            const rec = (analysisResult.recommendations || [])[0] || null;
+                                            if (!rec) return null;
+                                            const ms = String(analysisResult.narrative?.market_summary || '').trim();
+                                            const kf = (analysisResult.key_factors || []).filter(Boolean);
+                                            const rk = (analysisResult.risks || []).filter(Boolean);
+
+                                            return (
+                                                <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
+                                                    <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2">Quick Read</div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                                        <div className="bg-slate-900/30 p-3 rounded-lg border border-slate-700/50">
+                                                            <div className="text-[10px] text-slate-500 uppercase font-black mb-1">The bet</div>
+                                                            <div className="text-slate-200 font-black">{rec.selection}</div>
+                                                            <div className="mt-1 text-[11px] text-slate-400">
+                                                                {rec.bet_type} • EV {rec.edge ? `+${rec.edge}` : '—'} • {rec.confidence || '—'} confidence
+                                                            </div>
+                                                        </div>
+                                                        <div className="bg-slate-900/30 p-3 rounded-lg border border-slate-700/50">
+                                                            <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Why</div>
+                                                            {ms ? (
+                                                                <div className="text-slate-300 text-xs leading-snug">{ms}</div>
+                                                            ) : (
+                                                                <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
+                                                                    {kf.slice(0, 3).map((x, i) => <li key={`qk-${i}`}>{x}</li>)}
+                                                                </ul>
+                                                            )}
+                                                        </div>
+                                                        <div className="bg-slate-900/30 p-3 rounded-lg border border-slate-700/50">
+                                                            <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Risks</div>
+                                                            {rk.length ? (
+                                                                <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
+                                                                    {rk.slice(0, 3).map((x, i) => <li key={`qr-${i}`}>{x}</li>)}
+                                                                </ul>
+                                                            ) : (
+                                                                <div className="text-xs text-slate-500">No major risks flagged.</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+
                                         {/* Market Lines (clarify who is favored) */}
                                         <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
                                             <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2">Market Lines</div>
