@@ -997,6 +997,30 @@ const Research = ({ onAddBet }) => {
                                         const p = graded.filter(h => normOutcome(h) === 'PUSH').length;
                                         const winRate = (w + l) ? (w / (w + l) * 100) : 0;
 
+                                        const confBucket = (h) => {
+                                            const c = Number(h?.confidence_0_100 ?? h?.confidence ?? h?.confidence0_100 ?? 0);
+                                            if (c >= 80) return 'High';
+                                            if (c >= 50) return 'Medium';
+                                            return 'Low';
+                                        };
+
+                                        const byConf = { High: [], Medium: [], Low: [] };
+                                        graded.forEach((h) => {
+                                            byConf[confBucket(h)].push(h);
+                                        });
+
+                                        const confStats = (arr) => {
+                                            const ww = arr.filter(x => normOutcome(x) === 'WON').length;
+                                            const ll = arr.filter(x => normOutcome(x) === 'LOST').length;
+                                            const pp = arr.filter(x => normOutcome(x) === 'PUSH').length;
+                                            const wr = (ww + ll) ? (ww / (ww + ll) * 100) : null;
+                                            return { w: ww, l: ll, p: pp, wr };
+                                        };
+
+                                        const hi = confStats(byConf.High);
+                                        const md = confStats(byConf.Medium);
+                                        const lo = confStats(byConf.Low);
+
                                         const fmtMDY = (ymd) => {
                                             try {
                                                 const [yy, mm, dd] = String(ymd || '').split('-');
@@ -1027,6 +1051,16 @@ const Research = ({ onAddBet }) => {
                                                     <div className="mt-1 text-white font-black text-2xl">{(w + l) ? `${winRate.toFixed(1)}%` : '—'}</div>
                                                     <div className="text-xs text-slate-500">W/L only</div>
                                                 </div>
+                                            </div>
+
+                                            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                {[{k:'High', s:hi, cls:'text-green-300'},{k:'Medium', s:md, cls:'text-amber-300'},{k:'Low', s:lo, cls:'text-purple-300'}].map(({k,s,cls}) => (
+                                                    <div key={k} className="bg-slate-950/30 border border-slate-800 rounded-xl p-4">
+                                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{k} confidence</div>
+                                                        <div className={`mt-1 font-black text-lg ${cls}`}>{s.w}-{s.l}{s.p ? `-${s.p}` : ''}</div>
+                                                        <div className="text-xs text-slate-500">Win%: <span className="text-slate-200 font-bold">{s.wr === null ? '—' : `${s.wr.toFixed(1)}%`}</span> • N={(s.w+s.l+s.p)}</div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         );
                                     })()}
