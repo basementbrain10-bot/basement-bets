@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, PieChart, BarChart2, BarChart3, Calendar, Layout, LayoutDashboard, Search, Menu, X, PlusCircle, Trash, Trash2, CheckCircle, Clock, Percent, List, FileText, Info, Settings, User, RefreshCw, AlertTriangle, AlertCircle, Filter, ChevronDown, ChevronRight, MessageSquare, BookOpen, ExternalLink, ArrowRight, Table } from 'lucide-react';
 
-console.log("Basement Bets Frontend v1.3.1 Loaded at " + new Date().toISOString());
+console.log("Basement Bets Frontend v1.3.2 Loaded at " + new Date().toISOString());
 import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
@@ -785,7 +785,7 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                 <div className="mt-6">
                     <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-black text-slate-200 uppercase tracking-widest">What’s driving results (last 30d vs prior 30d)</h4>
-                        <div className="text-xs text-slate-500">Sorted by last 30d net P/L</div>
+                        <div className="text-xs text-slate-500">Sorted by last 30d ROI</div>
                     </div>
 
                     <div className="overflow-x-auto border border-slate-800 rounded-xl">
@@ -804,7 +804,16 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                             <tbody className="divide-y divide-slate-800/60">
                                 {(segmentAgg.driving || [])
                                     .slice()
-                                    .sort((a, b) => (Number(b.profit_30d || 0) - Number(a.profit_30d || 0)))
+                                    .sort((a, b) => {
+                                        // sort by last 30d ROI desc, then by sample size desc
+                                        const ar = (a.roi_30d === null || a.roi_30d === undefined) ? -Infinity : Number(a.roi_30d);
+                                        const br = (b.roi_30d === null || b.roi_30d === undefined) ? -Infinity : Number(b.roi_30d);
+                                        if (br !== ar) return br - ar;
+                                        const an = Number(a.bets_30d || 0);
+                                        const bn = Number(b.bets_30d || 0);
+                                        if (bn !== an) return bn - an;
+                                        return Number(b.profit_30d || 0) - Number(a.profit_30d || 0);
+                                    })
                                     .slice(0, 25)
                                     .map((r, i) => {
                                         const roiDelta = r.roi_delta;
@@ -1912,7 +1921,7 @@ const FinancialHeader = ({ financials, mode = 'all' }) => {
     if (!financials) return null;
     return (
         <div className="flex flex-wrap gap-4 mb-8">
-            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.3.1</div>
+            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.3.2</div>
 
             {mode !== 'performance' && (
                 <FinancialCard
