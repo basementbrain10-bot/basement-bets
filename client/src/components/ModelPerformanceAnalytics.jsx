@@ -150,6 +150,17 @@ const ModelPerformanceAnalytics = ({ history }) => {
         return { level, count: filtered.length, wins: w, losses: l, winRate: wr, roi: r };
     });
 
+    const toEtDay = (ts) => {
+        if (!ts) return null;
+        try {
+            const d = new Date(ts);
+            const s = d.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+            return s || null;
+        } catch (e) {
+            return null;
+        }
+    };
+
     const isWithinDays = (h, days) => {
         const ts = h?.analyzed_at || h?.created_at;
         if (!ts) return false;
@@ -163,10 +174,20 @@ const ModelPerformanceAnalytics = ({ history }) => {
         }
     };
 
-    const confidenceTrend = (days) => confidenceLevels.map(level => {
+    const isYesterdayET = (h) => {
+        const ts = h?.analyzed_at || h?.created_at;
+        const day = toEtDay(ts);
+        if (!day) return false;
+        const now = new Date();
+        const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const yday = y.toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+        return day === yday;
+    };
+
+    const confidenceTrend = (predicateFn) => confidenceLevels.map(level => {
         const filtered = graded
             .filter(h => getConfidenceLabel(h) === level)
-            .filter(h => isWithinDays(h, days));
+            .filter(predicateFn);
         const w = filtered.filter(h => getResult(h) === 'WON' || getResult(h) === 'Win').length;
         const l = filtered.filter(h => getResult(h) === 'LOST' || getResult(h) === 'Loss').length;
         const p = filtered.filter(h => getResult(h) === 'PUSH' || getResult(h) === 'Push').length;
@@ -175,8 +196,10 @@ const ModelPerformanceAnalytics = ({ history }) => {
         return { level, count: filtered.length, wins: w, losses: l, pushes: p, winRate: wr };
     });
 
-    const trend7 = confidenceTrend(7);
-    const trend30 = confidenceTrend(30);
+    const trendYday = confidenceTrend((h) => isYesterdayET(h));
+    const trend3 = confidenceTrend((h) => isWithinDays(h, 3));
+    const trend7 = confidenceTrend((h) => isWithinDays(h, 7));
+    const trend30 = confidenceTrend((h) => isWithinDays(h, 30));
 
     if (graded.length === 0) return null;
 
@@ -281,6 +304,24 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     <div className="mt-4 pt-3 border-t border-slate-700">
                         <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Trend by confidence</div>
                         <div className="grid grid-cols-2 gap-3 text-[11px]">
+                            <div className="bg-slate-950/30 rounded-md p-2 border border-slate-800">
+                                <div className="text-[10px] text-slate-500 font-bold mb-1">Yesterday</div>
+                                {trendYday.map(t => (
+                                    <div key={t.level} className="flex justify-between">
+                                        <span className="text-slate-400">{t.level}</span>
+                                        <span className="text-slate-300">{t.wins}-{t.losses}{t.pushes ? `-${t.pushes}` : ''} ({t.winRate.toFixed(0)}%)</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="bg-slate-950/30 rounded-md p-2 border border-slate-800">
+                                <div className="text-[10px] text-slate-500 font-bold mb-1">Last 3 days</div>
+                                {trend3.map(t => (
+                                    <div key={t.level} className="flex justify-between">
+                                        <span className="text-slate-400">{t.level}</span>
+                                        <span className="text-slate-300">{t.wins}-{t.losses}{t.pushes ? `-${t.pushes}` : ''} ({t.winRate.toFixed(0)}%)</span>
+                                    </div>
+                                ))}
+                            </div>
                             <div className="bg-slate-950/30 rounded-md p-2 border border-slate-800">
                                 <div className="text-[10px] text-slate-500 font-bold mb-1">Last 7 days</div>
                                 {trend7.map(t => (
