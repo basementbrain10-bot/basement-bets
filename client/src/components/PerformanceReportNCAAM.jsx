@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { RefreshCw } from 'lucide-react';
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ScatterChart, Scatter, ZAxis, Legend } from 'recharts';
 
 const fmtPct = (x) => (x === null || x === undefined) ? '—' : `${x >= 0 ? '+' : ''}${Number(x).toFixed(1)}%`;
 const fmtOdds = (p) => (p === null || p === undefined) ? '—' : `${Number(p) > 0 ? '+' : ''}${p}`;
@@ -18,17 +18,20 @@ export default function PerformanceReportNCAAM() {
   const [series, setSeries] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
+  const [scatter, setScatter] = useState(null);
 
   const load = async () => {
     setLoading(true);
     setErr(null);
     try {
-      const [rep, ser] = await Promise.all([
+      const [rep, ser, sc] = await Promise.all([
         api.get('/api/ncaam/performance-report', { params: { days: 30 } }),
         api.get('/api/ncaam/model-performance/series', { params: { days: 30, min_ev_per_unit: 0.02 } }),
+        api.get('/api/model/performance/scatter', { params: { days: 120, min_ev_per_unit: 0.02 } }),
       ]);
       setData(rep.data);
       setSeries(ser.data);
+      setScatter(sc.data);
     } catch (e) {
       setErr(e?.response?.data?.detail || e?.message || 'Failed to load report');
     } finally {
@@ -115,11 +118,35 @@ export default function PerformanceReportNCAAM() {
             })}
           </div>
 
-          <div className="mt-4 text-xs text-slate-500">
-            Coverage (last 30d): {data?.coverage?.decided ?? 0} decided • {data?.coverage?.pending ?? 0} pending
-            {Number(data?.coverage?.pending_but_final_available || 0) > 0 ? (
-              <span className="text-yellow-300"> • {data.coverage.pending_but_final_available} pending but finals exist (grading lag)</span>
-            ) : null}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-3">
+              <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Total in play</div>
+              <div className="mt-1 text-white font-black text-lg">{data?.coverage?.pending ?? 0} pending</div>
+              <div className="text-slate-500">(recommended bets not graded yet)</div>
+              {Number(data?.coverage?.pending_but_final_available || 0) > 0 ? (
+                <div className="mt-1 text-yellow-300">{data.coverage.pending_but_final_available} pending but finals exist (grading lag)</div>
+              ) : null}
+            </div>
+            <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-3">
+              <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Coverage</div>
+              <div className="mt-1 text-white font-black text-lg">{data?.coverage?.decided ?? 0} decided</div>
+              <div className="text-slate-500">last 30d recommended bets</div>
+            </div>
+            <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-3">
+              <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Trend</div>
+              <div className="mt-1 text-white font-black text-lg">
+                {(() => {
+                  const s = series?.series || [];
+                  if (!s.length) return '—';
+                  const last = s[s.length - 1];
+                  const last7 = s.slice(Math.max(0, s.length - 7));
+                  const units7 = last7.reduce((acc, r) => acc + (Number(r.units) || 0), 0);
+                  const sign = units7 >= 0 ? '+' : '';
+                  return `${sign}${units7.toFixed(2)}u (7d)`;
+                })()}
+              </div>
+              <div className="text-slate-500">profit units over last 7 days</div>
+            </div>
           </div>
 
           {(data?.confidence_breakdown || []).length > 0 && (
@@ -138,6 +165,59 @@ export default function PerformanceReportNCAAM() {
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Model performance (recommended bets only)</h3>
               <div className="text-xs text-slate-500">EV gate: ≥2% EV/u • cumulative units</div>
+            </div>
+
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Win% vs ROI scatter (all sports + bet types)</h3>
+                <div className="text-xs text-slate-500">Each dot = (sport, market_type) bucket • last {scatter?.days ?? '—'}d</div>
+              </div>
+              <div className="bg-slate-800/40 border border-slate-800 rounded-xl p-4">
+                {(!scatter || !(scatter.points || []).length) ? (
+                  <div className="text-slate-500 text-sm">{loading ? 'Loading…' : 'No data yet.'}</div>
+                ) : (
+                  <div className="h-[320px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ScatterChart margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                        <XAxis type="number" dataKey="roi_pct" name="ROI%" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                        <YAxis type="number" dataKey="win_rate" name="Win%" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                        <ZAxis type="number" dataKey="n" range={[60, 300]} name="N" />
+                        <Tooltip
+                          cursor={{ strokeDasharray: '3 3' }}
+                          contentStyle={{ background: '#0b1220', border: '1px solid #334155', color: '#e2e8f0' }}
+                          formatter={(v, name, props) => {
+                            if (name === 'roi_pct') return [`${fmtPct(v)}`, 'ROI'];
+                            if (name === 'win_rate') return [`${Number(v).toFixed(1)}%`, 'Win%'];
+                            if (name === 'n') return [v, 'N'];
+                            return [v, name];
+                          }}
+                          labelFormatter={() => ''}
+                        />
+                        <Legend />
+                        {(() => {
+                          const colors = {
+                            NCAAM: '#f97316',
+                            NFL: '#60a5fa',
+                            NCAAF: '#fbbf24',
+                            EPL: '#a78bfa',
+                            UNKNOWN: '#94a3b8',
+                          };
+                          const bySport = {};
+                          (scatter.points || []).forEach((p) => {
+                            const s = p.sport || 'UNKNOWN';
+                            bySport[s] = bySport[s] || [];
+                            bySport[s].push({ ...p, name: `${s} ${p.market_type}` });
+                          });
+                          return Object.keys(bySport).map((s) => (
+                            <Scatter key={s} name={s} data={bySport[s]} fill={colors[s] || '#94a3b8'} />
+                          ));
+                        })()}
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="bg-slate-800/40 border border-slate-800 rounded-xl p-4">

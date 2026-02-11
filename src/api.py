@@ -1943,6 +1943,99 @@ async def ncaam_performance_report(days: int = 30):
     }
 
 
+@app.get("/api/model/performance/scatter")
+async def get_model_performance_scatter(days: int = 60, min_ev_per_unit: float = 0.02):
+    """Scatter breakout: win% vs ROI by league + market_type.
+
+    Intended for UI: each point is a (sport/league, bet type) bucket.
+    Filters to recommended bets via min_ev_per_unit.
+    """
+    from src.database import get_db_connection, _exec
+
+    def payout_per_unit(price: int) -> float:
+        if price is None:
+            price = -110
+        p = int(price)
+        return (p / 100.0) if p > 0 else (100.0 / abs(p))
+
+    def roi_per_unit(outcome: str, price: int) -> float:
+        o = (outcome or '').upper()
+        if o == 'WON':
+            return payout_per_unit(price)
+        if o == 'LOST':
+            return -1.0
+        if o == 'PUSH':
+            return 0.0
+        return 0.0
+
+    try:
+        days = int(days)
+    except Exception:
+        days = 60
+    days = max(7, min(days, 365))
+
+    try:
+        min_ev = float(min_ev_per_unit)
+    except Exception:
+        min_ev = 0.02
+
+    with get_db_connection() as conn:
+        rows = _exec(conn, """
+          SELECT
+            e.league as sport,
+            COALESCE(NULLIF(m.market_type,''), 'UNKNOWN') as market_type,
+            m.outcome,
+            COALESCE(m.bet_price, -110) as price
+          FROM model_predictions m
+          JOIN events e ON m.event_id=e.id
+          WHERE m.analyzed_at > NOW() - (%(d)s || ' days')::interval
+            AND COALESCE(m.ev_per_unit,0) >= %(min_ev)s
+            AND m.market_type IS NOT NULL AND UPPER(m.market_type) <> 'AUTO'
+            AND m.pick IS NOT NULL AND UPPER(m.pick) <> 'NONE'
+            AND m.selection IS NOT NULL AND TRIM(m.selection) <> '' AND m.selection <> '—'
+            AND m.outcome IN ('WON','LOST','PUSH')
+        """, {"d": int(days), "min_ev": float(min_ev)}).fetchall()
+
+    buckets = {}
+    for r in rows:
+        sport = r.get('sport')
+        mt = (r.get('market_type') or '').upper()
+        key = (sport, mt)
+        buckets.setdefault(key, [])
+        buckets[key].append(dict(r))
+
+    out = []
+    for (sport, mt), xs in buckets.items():
+        won = sum(1 for x in xs if (x.get('outcome') or '').upper() == 'WON')
+        lost = sum(1 for x in xs if (x.get('outcome') or '').upper() == 'LOST')
+        push = sum(1 for x in xs if (x.get('outcome') or '').upper() == 'PUSH')
+        decided = won + lost + push
+        wl = won + lost
+        win_rate = (won / wl * 100.0) if wl else 0.0
+        roi_vals = [roi_per_unit(x.get('outcome'), x.get('price')) for x in xs]
+        roi_pct = (sum(roi_vals) / decided * 100.0) if decided else 0.0
+        out.append({
+            "sport": sport,
+            "market_type": mt,
+            "n": decided,
+            "won": won,
+            "lost": lost,
+            "push": push,
+            "win_rate": round(win_rate, 2),
+            "roi_pct": round(roi_pct, 2),
+        })
+
+    # stable sort
+    out.sort(key=lambda x: (x.get('sport') or '', x.get('market_type') or ''))
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + 'Z',
+        "days": int(days),
+        "min_ev_per_unit": float(min_ev),
+        "points": out,
+    }
+
+
 @app.get("/api/ncaam/analytics")
 async def get_ncaam_analytics(days: int = 30, min_ev_per_unit: float = 0.02):
     """Aggregated model performance stats for NCAAM.
