@@ -336,9 +336,10 @@ function App() {
         </div>
     );
 
-    if (!stats) return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white font-mono animate-pulse">Loading Basement Bets...</div>;
-
+    // Actuals sub-tab (combined Performance + Transactions)
     const [actualsTab, setActualsTab] = useState('performance'); // performance | transactions
+
+    if (!stats) return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white font-mono animate-pulse">Loading Basement Bets...</div>;
 
     return (
         <ErrorBoundary>
