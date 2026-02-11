@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, PieChart, BarChart2, BarChart3, Calendar, Layout, LayoutDashboard, Search, Menu, X, PlusCircle, Trash, Trash2, CheckCircle, Clock, Percent, List, FileText, Info, Settings, User, RefreshCw, AlertTriangle, AlertCircle, Filter, ChevronDown, ChevronRight, MessageSquare, BookOpen, ExternalLink, ArrowRight, Table } from 'lucide-react';
 
-console.log("Basement Bets Frontend v1.5.2 Loaded at " + new Date().toISOString());
+console.log("Basement Bets Frontend v1.6.0 Loaded at " + new Date().toISOString());
 import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
@@ -100,7 +100,7 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
-    const [view, setView] = useState('research');
+    const [view, setView] = useState('research'); // research | actuals
     const [stats, setStats] = useState(null);
     const [bets, setBets] = useState([]);
     const [sportBreakdown, setSportBreakdown] = useState([]);
@@ -338,6 +338,8 @@ function App() {
 
     if (!stats) return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white font-mono animate-pulse">Loading Basement Bets...</div>;
 
+    const [actualsTab, setActualsTab] = useState('performance'); // performance | transactions
+
     return (
         <ErrorBoundary>
             {/* <StagingBanner /> */}
@@ -360,17 +362,29 @@ function App() {
                                 <TrendingUp size={18} /> Model Recommendations
                             </button>
                             <button
-                                onClick={() => setView('performance')}
-                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'performance' ? 'bg-blue-500 text-white font-bold shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
+                                onClick={() => setView('actuals')}
+                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'actuals' ? 'bg-blue-500 text-white font-bold shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
                             >
-                                <LayoutDashboard size={18} /> Bet Performance (actuals)
+                                <LayoutDashboard size={18} /> Actuals
                             </button>
-                            <button
-                                onClick={() => setView('transactions')}
-                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'transactions' ? 'bg-green-500 text-black font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
-                            >
-                                <List size={18} /> Transactions (actuals)
-                            </button>
+
+                            {view === 'actuals' && (
+                                <div className="flex gap-1 ml-2 bg-slate-900/50 border border-slate-800 rounded-lg p-1">
+                                    <button
+                                        onClick={() => setActualsTab('performance')}
+                                        className={`px-3 py-1 rounded-md text-sm font-bold ${actualsTab === 'performance' ? 'bg-slate-700 text-white' : 'text-slate-300 hover:text-white'}`}
+                                    >
+                                        Bet Performance
+                                    </button>
+                                    <button
+                                        onClick={() => setActualsTab('transactions')}
+                                        className={`px-3 py-1 rounded-md text-sm font-bold ${actualsTab === 'transactions' ? 'bg-slate-700 text-white' : 'text-slate-300 hover:text-white'}`}
+                                    >
+                                        Transactions
+                                    </button>
+                                </div>
+                            )}
+
                             <button
                                 onClick={handleSyncResults}
                                 disabled={isSyncing}
@@ -405,22 +419,27 @@ function App() {
                         </div>
                     )}
 
-                    {view === 'transactions' ? (
-                        <TransactionView bets={bets} financials={financials} />
-                    ) : view === 'research' ? (
+                    {view === 'research' ? (
                         <Research onAddBet={() => setShowAddBet(true)} />
                     ) : (
-                        <PerformanceView
-                            timeSeries={timeSeries}
-                            financials={financials}
-                            periodStats={periodStats}
-                            edgeBreakdown={edgeBreakdown}
-                            bets={bets}
-                            onOpenTransactions={(prefill) => {
-                                try { localStorage.setItem('txn_prefill', JSON.stringify(prefill || {})); } catch (e) {}
-                                setView('transactions');
-                            }}
-                        />
+                        <>
+                            {actualsTab === 'transactions' ? (
+                                <TransactionView bets={bets} financials={financials} />
+                            ) : (
+                                <PerformanceView
+                                    timeSeries={timeSeries}
+                                    financials={financials}
+                                    periodStats={periodStats}
+                                    edgeBreakdown={edgeBreakdown}
+                                    bets={bets}
+                                    onOpenTransactions={(prefill) => {
+                                        try { localStorage.setItem('txn_prefill', JSON.stringify(prefill || {})); } catch (e) {}
+                                        setView('actuals');
+                                        setActualsTab('transactions');
+                                    }}
+                                />
+                            )}
+                        </>
                     )}
                 </div>
             </div>
@@ -2275,7 +2294,7 @@ const FinancialHeader = ({ financials, mode = 'all' }) => {
     if (!financials) return null;
     return (
         <div className="flex flex-wrap gap-4 mb-8">
-            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.5.2</div>
+            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.6.0</div>
 
             {mode !== 'performance' && (
                 <FinancialCard
