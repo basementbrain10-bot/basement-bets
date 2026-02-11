@@ -783,8 +783,15 @@ class NCAAMMarketFirstModelV2(BaseModel):
             res['id'] = str(uuid.uuid4())
 
         # 10. Persist
-        insert_model_prediction(res)
-        
+        # Only keep history for recommended bets (avoid storing analysis-only rows).
+        should_persist = bool(best_rec) and (float(res.get('ev_per_unit') or 0.0) >= self.PUBLISH_MIN_EV)
+        should_persist = should_persist and str(res.get('market_type') or '').upper() not in ('', 'AUTO')
+        should_persist = should_persist and str(res.get('pick') or '').upper() not in ('', 'NONE')
+        should_persist = should_persist and (res.get('selection') is not None and str(res.get('selection')).strip() not in ('', '—'))
+
+        if should_persist:
+            insert_model_prediction(res)
+
         return res
 
     # --- Publication gates (Research tab) ---

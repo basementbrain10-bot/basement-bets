@@ -1069,7 +1069,15 @@ async def get_research_edges(refresh: bool = False, user: dict = Depends(get_cur
                 audit_result = auditor.audit(edge)
                 edge['audit_class'] = audit_result['audit_class']
                 edge['audit_reason'] = audit_result['audit_reason']
-                
+
+                # Only persist *recommended* bets (avoid storing analysis-only rows)
+                ev = float(edge.get('ev') or 0.0)
+                mkt = str(edge.get('market') or '').upper()
+                pick = str(edge.get('bet_on') or '').upper()
+                sel = str(edge.get('bet_on') or '').strip()
+                if (ev < 0.02) or (not mkt) or (mkt == 'AUTO') or (not sel) or (sel == '—') or (pick == 'NONE'):
+                    continue
+
                 # Capture in DB with correct schema
                 matchup = edge.get('game') or edge.get('matchup') or f"{edge.get('away_team', 'Away')} @ {edge.get('home_team', 'Home')}"
                 from datetime import datetime as dt_mod
@@ -1087,12 +1095,13 @@ async def get_research_edges(refresh: bool = False, user: dict = Depends(get_cur
                     "mu_final": edge.get('fair_line') or 0,
                     "sigma": 10.0,
                     "win_prob": edge.get('win_prob') or 0.5,
-                    "ev_per_unit": edge.get('ev') or 0,
+                    "ev_per_unit": ev,
                     "confidence_0_100": int(abs(edge.get('edge', 0)) * 10),
                     "inputs_json": "{}",
                     "outputs_json": "{}",
                     "narrative_json": "{}",
-                    "model_version": "research_v1"
+                    "model_version": "research_v1",
+                    "selection": sel,
                 }
                 insert_model_prediction(doc)
             except Exception as e:
