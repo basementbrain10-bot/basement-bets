@@ -79,9 +79,9 @@ const ModelPerformanceAnalytics = ({ history }) => {
     });
 
     // Performance by confidence level
+    // Confidence should always be attached to the *recommended bet*. Depending on schema version,
+    // it may live on the row, inside outputs_json, or inside recommendation_json.
     const normalizeConfidence = (val) => {
-        if (val === null || val === undefined) return 'Unknown';
-
         // numeric confidence
         const asNum = Number(val);
         if (Number.isFinite(asNum)) {
@@ -90,32 +90,57 @@ const ModelPerformanceAnalytics = ({ history }) => {
             return 'Low';
         }
 
-        const s = String(val).trim();
-        if (!s || s === '—') return 'Unknown';
+        const s = String(val ?? '').trim();
         const up = s.toUpperCase();
-        if (up.startsWith('H') || up.includes('HIGH')) return 'High';
-        if (up.startsWith('M') || up.includes('MED')) return 'Medium';
-        if (up.startsWith('L') || up.includes('LOW')) return 'Low';
-        return 'Unknown';
+        if (!up || up === '—') return null;
+        if (up === 'H' || up.startsWith('HIGH')) return 'High';
+        if (up === 'M' || up.startsWith('MED')) return 'Medium';
+        if (up === 'L' || up.startsWith('LOW')) return 'Low';
+        return null;
+    };
+
+    const inferConfidenceFromEv = (h) => {
+        // Fallback (should be rare): bucket by EV/u.
+        const ev = Number(h?.ev_per_unit ?? h?.ev);
+        if (!Number.isFinite(ev)) return 'Low';
+        if (ev >= 0.08) return 'High';
+        if (ev >= 0.04) return 'Medium';
+        return 'Low';
     };
 
     const getConfidenceLabel = (h) => {
-        const explicit = h?.confidence_label || h?.confidenceLevel || h?.confidence_level;
-        if (explicit !== undefined && explicit !== null) return normalizeConfidence(explicit);
+        // 1) explicit row-level fields
+        const explicit = h?.confidence_label || h?.confidenceLevel || h?.confidence_level || h?.confidence;
+        const n1 = normalizeConfidence(explicit);
+        if (n1) return n1;
 
+        // 2) outputs_json: { confidence_label } or { recommendations: [{confidence_level/confidence_label/confidence}] }
         try {
             if (h?.outputs_json) {
                 const out = JSON.parse(h.outputs_json);
-                const c = out?.confidence_label || out?.confidenceLevel || out?.confidence;
-                if (c !== undefined && c !== null) return normalizeConfidence(c);
+                const n2 = normalizeConfidence(out?.confidence_label || out?.confidenceLevel || out?.confidence);
+                if (n2) return n2;
+                const rec = Array.isArray(out?.recommendations) ? out.recommendations[0] : null;
+                const n2b = normalizeConfidence(rec?.confidence_level || rec?.confidence_label || rec?.confidence);
+                if (n2b) return n2b;
             }
         } catch (e) {}
 
-        if (h?.confidence !== undefined && h?.confidence !== null) return normalizeConfidence(h.confidence);
-        return 'Unknown';
+        // 3) recommendation_json: legacy recommendations array
+        try {
+            if (h?.recommendation_json) {
+                const recs = JSON.parse(h.recommendation_json);
+                const rec = Array.isArray(recs) ? recs[0] : recs;
+                const n3 = normalizeConfidence(rec?.confidence_level || rec?.confidence_label || rec?.confidence);
+                if (n3) return n3;
+            }
+        } catch (e) {}
+
+        // 4) last resort: infer from EV
+        return inferConfidenceFromEv(h);
     };
 
-    const confidenceLevels = ['High', 'Medium', 'Low', 'Unknown'];
+    const confidenceLevels = ['High', 'Medium', 'Low'];
     const confidencePerformance = confidenceLevels.map(level => {
         const filtered = graded.filter(h => getConfidenceLabel(h) === level);
         const w = filtered.filter(h => getResult(h) === 'WON' || getResult(h) === 'Win').length;
