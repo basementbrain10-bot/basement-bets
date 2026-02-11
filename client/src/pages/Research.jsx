@@ -116,12 +116,26 @@ const Research = ({ onAddBet }) => {
             const result = res.data;
             alert(`Grading Complete! ${result.graded || 0} bets updated.`);
             // Fetch layout/refresh data - CONSISTENT ENDPOINTS
-            const [boardRes, historyRes] = await Promise.all([
-                api.get('/api/ncaam/board', { params: { date: selectedDate } }),
-                api.get('/api/ncaam/history', { params: { limit: 500 } })
+            const [boardRes, historyRes, topPicksRes] = await Promise.all([
+                api.get('/api/board', { params: { league: leagueFilter, date: selectedDate, days: BOARD_DAYS_DEFAULT } }),
+                api.get('/api/ncaam/history', { params: { limit: 500 } }),
+                (leagueFilter === 'NCAAM'
+                    ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 200 } }).catch(() => ({ data: null }))
+                    : Promise.resolve({ data: null })
+                )
             ]);
             setEdges(boardRes.data || []);
             setHistory(historyRes.data || []);
+            try {
+                const tp = topPicksRes?.data?.picks || null;
+                if (tp && typeof tp === 'object') {
+                    const mapped = {};
+                    Object.keys(tp).forEach((eid) => {
+                        mapped[eid] = { rec: tp[eid]?.rec, analyzedAt: tp[eid]?.analyzed_at };
+                    });
+                    setRowTopPicks(mapped);
+                }
+            } catch (e) { }
         } catch (err) {
             console.error(err);
             alert('Grading failed: ' + (err.response?.data?.message || err.message));
@@ -1065,7 +1079,7 @@ const Research = ({ onAddBet }) => {
                                                 const resultStatus = item.graded_result || item.outcome || 'Pending';
 
                                                 return (
-                                                    <tr key={idx} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                                                    <tr key={item.id || `${item.event_id || 'evt'}:${idx}`} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
                                                         <td className="py-2 px-4 text-slate-400 text-xs whitespace-nowrap">
                                                             <div className="font-bold text-slate-300">
                                                                 {new Date(item.analyzed_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
