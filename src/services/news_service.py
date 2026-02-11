@@ -8,6 +8,7 @@ Fetches relevant news articles about teams to capture:
 - Team momentum/trends
 """
 
+import os
 import requests
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
@@ -31,7 +32,7 @@ class NewsService:
         Args:
             api_key: News API key (optional, uses env var if not provided)
         """
-        import os
+        self.skip_fetch = os.environ.get('BASEMENT_SKIP_NEWS') == '1'
         self.api_key = api_key or os.environ.get('NEWS_API_KEY')
         self.base_url = "https://newsapi.org/v2/everything"
         # RSS defaults
@@ -39,6 +40,8 @@ class NewsService:
     
     def _fetch_google_news_rss(self, query: str, days_back: int = 3, limit: int = 5) -> List[Dict]:
         """Fetch headlines from Google News RSS for a query (no API key required)."""
+        if self.skip_fetch:
+            return []
         q = query
         cache_key = (q, int(days_back))
         now = time.time()
@@ -90,6 +93,8 @@ class NewsService:
         Returns:
             List of news articles with title, description, url, publishedAt
         """
+        if self.skip_fetch:
+            return []
         if not self.api_key:
             # Fallback: Google News RSS
             q = f'"{team_name}" basketball (injury OR lineup OR suspended OR "out for")'
@@ -141,6 +146,14 @@ class NewsService:
         Returns:
             Dict with 'home_news' and 'away_news' lists
         """
+        if self.skip_fetch:
+            return {
+                'home_team': home_team,
+                'away_team': away_team,
+                'home_news': [],
+                'away_news': [],
+                'has_injury_news': False
+            }
         home_news = self.fetch_team_news(home_team)
         away_news = self.fetch_team_news(away_team)
         
