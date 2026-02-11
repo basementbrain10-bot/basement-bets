@@ -9,6 +9,8 @@ html5lib
 supabase
 python-jose[cryptography]
 openai
-selenium
-undetected-chromedriver
+
+# NOTE: keep Vercel serverless bundle small.
+# Selenium + undetected-chromedriver are used for local ingestion only.
+# Install them via requirements-worker.txt (or your local venv) instead.
 
