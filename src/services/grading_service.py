@@ -388,6 +388,13 @@ class GradingService:
           AND gr.final = TRUE
           AND e.start_time < CURRENT_TIMESTAMP
           AND COALESCE(m.ev_per_unit, 0) >= %(min_ev)s
+          AND m.market_type IS NOT NULL
+          AND UPPER(m.market_type) <> 'AUTO'
+          AND m.pick IS NOT NULL
+          AND UPPER(m.pick) <> 'NONE'
+          AND m.selection IS NOT NULL
+          AND TRIM(m.selection) <> ''
+          AND m.selection <> '—'
         ORDER BY m.analyzed_at DESC
         LIMIT %(lim)s
         """

@@ -852,7 +852,7 @@ async def grade_research_history():
 @app.get("/api/research/history")
 async def get_history(user: dict = Depends(get_current_user)):
     user_id = user.get("sub")
-    return fetch_model_history(user_id=user_id)
+    return fetch_model_history(user_id=user_id, recommended_only=True)
 
 
 @app.get("/api/schedule")
@@ -1687,7 +1687,7 @@ async def get_ncaam_history(limit: int = 100):
     Returns past model predictions/analysis.
     """
     from src.database import fetch_model_history
-    data = fetch_model_history(limit=limit)
+    data = fetch_model_history(limit=limit, recommended_only=True)
     return _ensure_utc(data)
 
 @app.get("/api/ncaam/performance-report")

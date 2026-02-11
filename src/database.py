@@ -967,7 +967,7 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
 
     return bet_id
 
-def fetch_model_history(limit=100, league=None, user_id=None):
+def fetch_model_history(limit=100, league=None, user_id=None, recommended_only: bool = False):
     """
     Fetch model prediction history with optional filtering.
     
@@ -994,9 +994,21 @@ def fetch_model_history(limit=100, league=None, user_id=None):
         conditions.append("e.league = %s")
         params.append(league)
     
+    if recommended_only:
+        # Server-side definition of "recommended" to keep History tab clean.
+        # Mirrors UI gates: must be actionable (selection present), non-AUTO, real pick, and EV gate.
+        conditions.append("COALESCE(m.ev_per_unit, 0) >= 0.02")
+        conditions.append("m.market_type IS NOT NULL")
+        conditions.append("UPPER(m.market_type) <> 'AUTO'")
+        conditions.append("m.pick IS NOT NULL")
+        conditions.append("UPPER(m.pick) <> 'NONE'")
+        conditions.append("m.selection IS NOT NULL")
+        conditions.append("TRIM(m.selection) <> ''")
+        conditions.append("m.selection <> '—'")
+
     if conditions:
         base_query += " WHERE " + " AND ".join(conditions)
-        
+
     base_query += " ORDER BY m.analyzed_at DESC LIMIT %s"
     params.append(limit)
     
