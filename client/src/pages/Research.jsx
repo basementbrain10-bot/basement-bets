@@ -583,7 +583,7 @@ const Research = ({ onAddBet }) => {
                                 <div className="flex items-center justify-between mb-3">
                                     <div>
                                         <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Recommended picks</div>
-                                        <div className="text-xs text-slate-500 mt-1">Top pick per game (precomputed). Use Add to slip or open details.</div>
+                                        {/* helper text removed */}
                                     </div>
                                 </div>
 
