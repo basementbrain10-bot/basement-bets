@@ -1401,6 +1401,118 @@ def fetch_latest_ledger_info(user_id: str | None = None):
         print(f"[DB] fetch_latest_ledger_info error: {e}")
     return result
 
+def update_bet_status(bet_id: int, status: str, user_id: str | None = None) -> bool:
+    """Update bet status for a user's bet."""
+    st = (status or '').upper()
+    if st not in ('WON', 'LOST', 'PUSH', 'PENDING'):
+        return False
+    q = """
+    UPDATE bets
+    SET status=%s
+    WHERE id=%s AND (%s IS NULL OR user_id=%s)
+    """
+    try:
+        with get_db_connection() as conn:
+            cur = _exec(conn, q, (st, int(bet_id), user_id, user_id))
+            conn.commit()
+            return bool(cur.rowcount and cur.rowcount > 0)
+    except Exception as e:
+        print(f"[DB] update_bet_status error: {e}")
+        return False
+
+
+def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None) -> bool:
+    """Update editable bet fields (manual corrections).
+
+    Allowed fields:
+      provider, date, sport, bet_type, wager, odds, profit, status, description, selection
+
+    Notes:
+    - Persists directly to DB so it shows up in history/analytics.
+    - Scoped to user_id when provided.
+    """
+    allowed = {
+        'provider', 'date', 'sport', 'bet_type', 'wager', 'odds', 'profit', 'status',
+        'description', 'selection'
+    }
+
+    if not fields or not isinstance(fields, dict):
+        return False
+
+    sets = []
+    params = []
+
+    def norm_provider(x: str) -> str:
+        p = (x or '').strip()
+        if p.upper() == 'DK':
+            return 'DraftKings'
+        if p.upper() in ('FD', 'FANDUEL'):
+            return 'FanDuel'
+        return p
+
+    for k, v in fields.items():
+        if k not in allowed:
+            continue
+        if k == 'provider':
+            v = norm_provider(str(v))
+        if k == 'status':
+            v = str(v or '').upper()
+            if v not in ('WON', 'LOST', 'PUSH', 'PENDING'):
+                continue
+        if k in ('wager', 'profit'):
+            try:
+                v = float(v)
+            except Exception:
+                continue
+        if k == 'odds':
+            if v is None or v == '':
+                v = None
+            else:
+                try:
+                    v = int(v)
+                except Exception:
+                    continue
+        if k == 'date':
+            # store as YYYY-MM-DD string
+            v = str(v or '').strip()
+            if not v:
+                continue
+        sets.append(f"{k}=%s")
+        params.append(v)
+
+    if not sets:
+        return False
+
+    q = f"""
+    UPDATE bets
+    SET {', '.join(sets)}
+    WHERE id=%s AND (%s IS NULL OR user_id=%s)
+    """
+    params.extend([int(bet_id), user_id, user_id])
+
+    try:
+        with get_db_connection() as conn:
+            cur = _exec(conn, q, tuple(params))
+            conn.commit()
+            return bool(cur.rowcount and cur.rowcount > 0)
+    except Exception as e:
+        print(f"[DB] update_bet_fields error: {e}")
+        return False
+
+
+def delete_bet(bet_id: int, user_id: str | None = None) -> bool:
+    """Delete a bet row (scoped to user_id when provided)."""
+    q = "DELETE FROM bets WHERE id=%s AND (%s IS NULL OR user_id=%s)"
+    try:
+        with get_db_connection() as conn:
+            cur = _exec(conn, q, (int(bet_id), user_id, user_id))
+            conn.commit()
+            return bool(cur.rowcount and cur.rowcount > 0)
+    except Exception as e:
+        print(f"[DB] delete_bet error: {e}")
+        return False
+
+
 def insert_bet(bet_data: dict):
     """
     Inserts a single bet into the bets table with idempotency.

@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, PieChart, BarChart2, BarChart3, Calendar, Layout, LayoutDashboard, Search, Menu, X, PlusCircle, Trash, Trash2, CheckCircle, Clock, Percent, List, FileText, Info, Settings, User, RefreshCw, AlertTriangle, AlertCircle, Filter, ChevronDown, ChevronRight, MessageSquare, BookOpen, ExternalLink, ArrowRight, Table } from 'lucide-react';
 
-console.log("Basement Bets Frontend v1.4.0 Loaded at " + new Date().toISOString());
+console.log("Basement Bets Frontend v1.5.0 Loaded at " + new Date().toISOString());
 import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
@@ -1475,6 +1475,9 @@ function TransactionView({ bets, financials }) {
     }, []);
 
     const [showManualAdd, setShowManualAdd] = useState(false);
+    const [showEdit, setShowEdit] = useState(false);
+    const [editBet, setEditBet] = useState(null);
+
     const [manualBet, setManualBet] = useState({
         sportsbook: "DraftKings",
         sport: "NFL",
@@ -1519,6 +1522,33 @@ function TransactionView({ bets, financials }) {
         } catch (err) {
             console.error("Settle Error:", err);
             alert("Failed to settle bet.");
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
+    const handleEditSave = async () => {
+        if (!editBet?.id) return;
+        setIsUpdating(true);
+        try {
+            await api.patch(`/api/bets/${editBet.id}`, {
+                provider: editBet.provider,
+                date: editBet.date,
+                sport: editBet.sport,
+                bet_type: editBet.bet_type,
+                wager: editBet.wager,
+                odds: editBet.odds,
+                profit: editBet.profit,
+                status: editBet.status,
+                description: editBet.description,
+                selection: editBet.selection,
+            });
+            setShowEdit(false);
+            setEditBet(null);
+            window.location.reload();
+        } catch (err) {
+            console.error('Edit save failed', err);
+            alert('Failed to update bet.');
         } finally {
             setIsUpdating(false);
         }
@@ -1635,6 +1665,140 @@ function TransactionView({ bets, financials }) {
 
     return (
         <div className="space-y-8">
+            {showEdit && editBet && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                    <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-5">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="text-white font-bold">Edit Bet</div>
+                            <button type="button" className="text-gray-400 hover:text-white" onClick={() => { setShowEdit(false); setEditBet(null); }}>✕</button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Date</div>
+                                <input
+                                    type="date"
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                                    value={(editBet.date || '').slice(0, 10)}
+                                    onChange={(e) => setEditBet({ ...editBet, date: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Sportsbook</div>
+                                <select
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                                    value={editBet.provider || ''}
+                                    onChange={(e) => setEditBet({ ...editBet, provider: e.target.value })}
+                                >
+                                    <option value="DraftKings">DraftKings</option>
+                                    <option value="FanDuel">FanDuel</option>
+                                </select>
+                            </div>
+                            <div>
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Sport</div>
+                                <input
+                                    type="text"
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                                    value={editBet.sport || ''}
+                                    onChange={(e) => setEditBet({ ...editBet, sport: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Bet Type</div>
+                                <input
+                                    type="text"
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                                    value={editBet.bet_type || ''}
+                                    onChange={(e) => setEditBet({ ...editBet, bet_type: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Wager</div>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                                    value={editBet.wager ?? ''}
+                                    onChange={(e) => setEditBet({ ...editBet, wager: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Odds (American)</div>
+                                <input
+                                    type="number"
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                                    value={editBet.odds ?? ''}
+                                    onChange={(e) => setEditBet({ ...editBet, odds: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Profit</div>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                                    value={editBet.profit ?? ''}
+                                    onChange={(e) => setEditBet({ ...editBet, profit: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Status</div>
+                                <select
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                                    value={editBet.status || 'PENDING'}
+                                    onChange={(e) => setEditBet({ ...editBet, status: e.target.value })}
+                                >
+                                    <option value="WON">WON</option>
+                                    <option value="LOST">LOST</option>
+                                    <option value="PUSH">PUSH</option>
+                                    <option value="PENDING">PENDING</option>
+                                </select>
+                            </div>
+                            <div className="md:col-span-2">
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Event / Description</div>
+                                <input
+                                    type="text"
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                                    value={editBet.description || ''}
+                                    onChange={(e) => setEditBet({ ...editBet, description: e.target.value })}
+                                />
+                            </div>
+                            <div className="md:col-span-2">
+                                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Selection</div>
+                                <input
+                                    type="text"
+                                    className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+                                    value={editBet.selection || ''}
+                                    onChange={(e) => setEditBet({ ...editBet, selection: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="mt-5 flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-bold"
+                                onClick={() => { setShowEdit(false); setEditBet(null); }}
+                                disabled={isUpdating}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="px-4 py-2 bg-green-600 hover:bg-green-500 text-black rounded-lg text-sm font-black"
+                                onClick={handleEditSave}
+                                disabled={isUpdating}
+                            >
+                                {isUpdating ? 'Saving…' : 'Save'}
+                            </button>
+                        </div>
+                        <div className="mt-2 text-[10px] text-slate-500">
+                            Saves directly to the database (persists for history + analytics).
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {showManualAdd && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
                     <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-5">
@@ -1943,7 +2107,27 @@ function TransactionView({ bets, financials }) {
                                 const isTxn = bet.category === 'Transaction';
                                 const isDeposit = bet.bet_type === 'Deposit' || (bet.bet_type === 'Other' && bet.amount > 0);
                                 return (
-                                    <tr key={bet.id || bet.txn_id} className="hover:bg-gray-800/50 transition duration-150">
+                                    <tr
+                                        key={bet.id || bet.txn_id}
+                                        className="hover:bg-gray-800/50 transition duration-150 cursor-pointer"
+                                        onClick={() => {
+                                            if (!bet.id) return;
+                                            setEditBet({
+                                                id: bet.id,
+                                                provider: bet.provider,
+                                                date: (bet.sort_date || bet.date || '').slice(0, 10),
+                                                sport: bet.sport,
+                                                bet_type: bet.bet_type,
+                                                wager: bet.wager,
+                                                odds: bet.odds,
+                                                profit: bet.profit,
+                                                status: bet.status,
+                                                description: bet.description,
+                                                selection: bet.selection,
+                                            });
+                                            setShowEdit(true);
+                                        }}
+                                    >
                                         <td className="px-6 py-3 text-gray-300 font-mono text-xs" title={formatDateMDY(bet.sort_date || bet.date)}>{formatDateMDY(bet.sort_date || bet.date)}</td>
                                         <td className="px-6 py-3">
                                             <span className="px-2 py-1 rounded text-[10px] text-gray-300 border border-gray-700 bg-gray-800 shadow-sm uppercase font-bold tracking-wider">
@@ -1998,28 +2182,28 @@ function TransactionView({ bets, financials }) {
                                             {!isTxn && (
                                                 <>
                                                     <button
-                                                        onClick={() => handleSettle(bet.id, 'WON')}
+                                                        onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'WON'); }}
                                                         className="p-1 text-green-500 hover:bg-green-500/10 rounded border border-green-500/20 title='Settle as Win'"
                                                         disabled={isUpdating}
                                                     >
                                                         W
                                                     </button>
                                                     <button
-                                                        onClick={() => handleSettle(bet.id, 'LOST')}
+                                                        onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'LOST'); }}
                                                         className="p-1 text-red-500 hover:bg-red-500/10 rounded border border-red-500/20 title='Settle as Loss'"
                                                         disabled={isUpdating}
                                                     >
                                                         L
                                                     </button>
                                                     <button
-                                                        onClick={() => handleSettle(bet.id, 'PUSH')}
+                                                        onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'PUSH'); }}
                                                         className="p-1 text-yellow-500 hover:bg-yellow-500/10 rounded border border-yellow-500/20 title='Settle as Push'"
                                                         disabled={isUpdating}
                                                     >
                                                         P
                                                     </button>
                                                     <button
-                                                        onClick={() => handleDelete(bet.id)}
+                                                        onClick={(e) => { e.stopPropagation(); handleDelete(bet.id); }}
                                                         className="p-1 text-gray-500 hover:text-red-400 title='Delete'"
                                                         disabled={isUpdating}
                                                     >
@@ -2076,7 +2260,7 @@ const FinancialHeader = ({ financials, mode = 'all' }) => {
     if (!financials) return null;
     return (
         <div className="flex flex-wrap gap-4 mb-8">
-            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.4.0</div>
+            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.5.0</div>
 
             {mode !== 'performance' && (
                 <FinancialCard

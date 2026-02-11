@@ -861,6 +861,31 @@ async def ingest_odds(league: str, request: Request):
     
     return {"status": "success", "league": league, "date": date_str, "snapshots_ingested": count}
 
+@app.patch("/api/bets/{bet_id}")
+async def update_bet(bet_id: int, request: Request, user: dict = Depends(get_current_user)):
+    """Inline edit endpoint for manual bet corrections."""
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="Invalid payload")
+
+        allowed = {
+            'provider', 'date', 'sport', 'bet_type', 'wager', 'odds', 'profit', 'status',
+            'description', 'selection'
+        }
+        fields = {k: payload.get(k) for k in allowed if k in payload}
+
+        from src.database import update_bet_fields
+        ok = update_bet_fields(int(bet_id), fields, user_id=user.get('sub'))
+        if not ok:
+            raise HTTPException(status_code=404, detail="Bet not found")
+        return {"status": "success"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.patch("/api/bets/{bet_id}/settle")
 async def settle_bet(bet_id: int, request: Request, user: dict = Depends(get_current_user)):
     try:
