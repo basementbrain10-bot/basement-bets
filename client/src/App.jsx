@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, PieChart, BarChart2, BarChart3, Calendar, Layout, LayoutDashboard, Search, Menu, X, PlusCircle, Trash, Trash2, CheckCircle, Clock, Percent, List, FileText, Info, Settings, User, RefreshCw, AlertTriangle, AlertCircle, Filter, ChevronDown, ChevronRight, MessageSquare, BookOpen, ExternalLink, ArrowRight, Table } from 'lucide-react';
 
-console.log("Basement Bets Frontend v1.5.1 Loaded at " + new Date().toISOString());
+console.log("Basement Bets Frontend v1.5.2 Loaded at " + new Date().toISOString());
 import axios from 'axios';
 import BetTypeAnalysis from './components/BetTypeAnalysis';
 import Research from './pages/Research';
@@ -363,13 +363,13 @@ function App() {
                                 onClick={() => setView('performance')}
                                 className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'performance' ? 'bg-blue-500 text-white font-bold shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
                             >
-                                <LayoutDashboard size={18} /> Performance
+                                <LayoutDashboard size={18} /> Bet Performance (actuals)
                             </button>
                             <button
                                 onClick={() => setView('transactions')}
                                 className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'transactions' ? 'bg-green-500 text-black font-bold shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
                             >
-                                <List size={18} /> Transactions
+                                <List size={18} /> Transactions (actuals)
                             </button>
                             <button
                                 onClick={handleSyncResults}
@@ -2275,7 +2275,7 @@ const FinancialHeader = ({ financials, mode = 'all' }) => {
     if (!financials) return null;
     return (
         <div className="flex flex-wrap gap-4 mb-8">
-            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.5.1</div>
+            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.5.2</div>
 
             {mode !== 'performance' && (
                 <FinancialCard

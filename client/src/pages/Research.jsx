@@ -14,9 +14,7 @@ const Research = ({ onAddBet }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Balance snapshots (UI source-of-truth)
-    const [balanceSnaps, setBalanceSnaps] = useState([]);
-    const [balanceError, setBalanceError] = useState(null);
+    // (Balances removed from this page; tracked in Performance)
     // Research tab focuses on board-backed leagues
     const [leagueFilter, setLeagueFilter] = useState('NCAAM');
     // Date Filtering
@@ -47,19 +45,12 @@ const Research = ({ onAddBet }) => {
         try {
             setLoading(true);
             setError(null);
-            setBalanceError(null);
-
-            // Fetch NCAAM board (next N days from selected date), overall history, and balance snapshots
-            const [boardRes, historyRes, balancesRes, topPicksRes] = await Promise.all([
+            // Fetch board + history
+            const [boardRes, historyRes, topPicksRes] = await Promise.all([
                 api.get('/api/board', { params: { league: leagueFilter, date: selectedDate, days: BOARD_DAYS_DEFAULT } }),
                 api.get('/api/ncaam/history', { params: { limit: 500 } }).catch((e) => {
                     console.warn("History fetch failed:", e);
                     return { data: [] };
-                }),
-                api.get('/api/balances').catch((e) => {
-                    // Don't fail the entire page if balances error out
-                    setBalanceError(e);
-                    return { data: {} };
                 }),
                 (leagueFilter === 'NCAAM'
                     ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 200 } }).catch(() => ({ data: null }))
@@ -69,8 +60,6 @@ const Research = ({ onAddBet }) => {
 
             setEdges(boardRes.data || []);
             setHistory(historyRes.data || []);
-            // balances endpoint returns computed balances keyed by provider
-            setBalanceSnaps(balancesRes.data || {});
 
             // Hydrate row badges from server-side top picks (avoid N analyze calls)
             try {
@@ -239,12 +228,18 @@ const Research = ({ onAddBet }) => {
     };
 
     const shiftDate = (days) => {
-        const current = new Date(selectedDate);
-        current.setDate(current.getDate() + days);
-        // Correct timezone offset issue if any, or just use simple string manipulation if date is reliable
-        // To be safe with 'en-CA' (YYYY-MM-DD)
-        const nextDate = current.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-        setSelectedDate(nextDate);
+        // selectedDate is YYYY-MM-DD. Do NOT use new Date('YYYY-MM-DD') (parsed as UTC).
+        // Create a local Date at noon to avoid DST/offset edge cases, then format back to ET.
+        try {
+            const [yy, mm, dd] = String(selectedDate || '').split('-').map(x => parseInt(x, 10));
+            if (!yy || !mm || !dd) return;
+            const current = new Date(yy, mm - 1, dd, 12, 0, 0);
+            current.setDate(current.getDate() + days);
+            const nextDate = current.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+            setSelectedDate(nextDate);
+        } catch (e) {
+            // fallback: no-op
+        }
     };
 
     const fmtSigned = (n, decimals = 1) => {
@@ -383,43 +378,9 @@ const Research = ({ onAddBet }) => {
         return sortConfig.direction === 'asc' ? <ChevronUp size={12} className="ml-1 text-blue-400" /> : <ChevronDown size={12} className="ml-1 text-blue-400" />;
     };
 
-    const getSnap = (providerKey) => {
-        const key = String(providerKey || '').toLowerCase();
+    // Balance snapshot helpers removed from this page (tracked in Performance).
 
-        // New shape: { DraftKings: {balance,last_bet}, FanDuel: {...} }
-        if (balanceSnaps && typeof balanceSnaps === 'object' && !Array.isArray(balanceSnaps)) {
-            const entries = Object.entries(balanceSnaps);
-            for (const [prov, val] of entries) {
-                if (String(prov || '').toLowerCase() === key) {
-                    return { provider: prov, ...(val || {}) };
-                }
-            }
-        }
-
-        // Legacy shape: array of snapshots
-        const snaps = Array.isArray(balanceSnaps) ? balanceSnaps : Object.values(balanceSnaps || {});
-        return (snaps || []).find(s => String(s?.provider || '').toLowerCase() === key);
-    };
-
-    const fmtMoney = (v) => {
-        if (v === null || v === undefined || v === '') return '—';
-        const x = Number(v);
-        if (Number.isNaN(x)) return String(v);
-        return x.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-    };
-
-    const fmtTs = (ts) => {
-        if (!ts) return '';
-        try {
-            const d = new Date(ts);
-            return d.toLocaleString('en-US', { timeZone: 'America/New_York' });
-        } catch {
-            return String(ts);
-        }
-    };
-
-    const dk = getSnap('draftkings') || getSnap('dk');
-    const fd = getSnap('fanduel') || getSnap('fd');
+    // Balances removed from this page (shown in Performance)
 
     return (
         <div className="p-6 bg-slate-900 min-h-screen text-white">
@@ -428,27 +389,7 @@ const Research = ({ onAddBet }) => {
                     <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-green-400 bg-clip-text text-transparent">
                         Model Recommendations
                     </h1>
-                    <div className="text-xs text-slate-500 mt-1">
-                        Showing NCAAM board for next <span className="text-slate-300 font-bold">3</span> days from selected date.
-                    </div>
-
-                    <div className="mt-2 text-xs text-slate-300 flex flex-wrap gap-3 items-center">
-                        <div className="px-2 py-1 rounded bg-slate-800/60 border border-slate-700">
-                            <span className="text-slate-400">DraftKings:</span>{' '}
-                            <span className="font-bold text-white">{fmtMoney(dk?.balance)}</span>
-                            {dk?.captured_at ? <span className="text-slate-500"> · {fmtTs(dk.captured_at)}</span> : (dk?.last_bet ? <span className="text-slate-500"> · last bet {dk.last_bet}</span> : null)}
-                        </div>
-                        <div className="px-2 py-1 rounded bg-slate-800/60 border border-slate-700">
-                            <span className="text-slate-400">FanDuel:</span>{' '}
-                            <span className="font-bold text-white">{fmtMoney(fd?.balance)}</span>
-                            {fd?.captured_at ? <span className="text-slate-500"> · {fmtTs(fd.captured_at)}</span> : (fd?.last_bet ? <span className="text-slate-500"> · last bet {fd.last_bet}</span> : null)}
-                        </div>
-                        {balanceError ? (
-                            <div className="text-xs text-amber-300">
-                                Balances unavailable (snapshots endpoint).
-                            </div>
-                        ) : null}
-                    </div>
+                    {/* Balance tiles removed (tracked in Performance) */}
                 </div>
                 <div className="flex gap-2">
                     <button
