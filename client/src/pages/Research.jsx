@@ -417,7 +417,7 @@ const Research = ({ onAddBet }) => {
                     onClick={() => setActiveTab('history')}
                     className={`pb-2 px-4 text-sm font-medium transition-colors ${activeTab === 'history' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-slate-200'}`}
                 >
-                    History
+                    Model Performance
                 </button>
             </div>
 
@@ -951,7 +951,7 @@ const Research = ({ onAddBet }) => {
                 activeTab === 'history' && (
                     <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-xl overflow-hidden">
                         <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
-                            <h2 className="text-lg font-semibold text-slate-200">History</h2>
+                            <h2 className="text-lg font-semibold text-slate-200">Model Performance</h2>
                             <div className="flex items-center gap-6">
                             </div>
                         </div>
