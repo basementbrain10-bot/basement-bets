@@ -967,33 +967,26 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
 
     return bet_id
 
-def fetch_model_history(limit=100, league=None, user_id=None, recommended_only: bool = False):
+def fetch_model_history(limit=100, league=None, user_id=None, recommended_only: bool = False, dedupe: bool = True, lookback_days: int = 120):
+    """Fetch model prediction history.
+
+    Notes:
+    - When recommended_only=True, we enforce server-side gates so History reflects only bettable recs.
+    - When dedupe=True, we keep only the most recent recommendation per (event_id, market_type)
+      to avoid repeats from reruns/regrades.
     """
-    Fetch model prediction history with optional filtering.
-    
-    Args:
-        limit: Max rows to return
-        league: Filter by league (e.g., 'NCAAM')
-        user_id: Filter by user_id for multi-user isolation
-    """
-    # Build query dynamically based on filters
-    base_query = """
-    SELECT m.*, e.league as sport, e.home_team, e.away_team, e.start_time
-    FROM model_predictions m
-    JOIN events e ON m.event_id = e.id
-    """
-    
+
     conditions = []
     params = []
-    
+
     if user_id:
         conditions.append("m.user_id = %s")
         params.append(user_id)
-    
+
     if league:
         conditions.append("e.league = %s")
         params.append(league)
-    
+
     if recommended_only:
         # Server-side definition of "recommended" to keep History tab clean.
         # Mirrors UI gates: must be actionable (selection present), non-AUTO, real pick, and EV gate.
@@ -1006,12 +999,50 @@ def fetch_model_history(limit=100, league=None, user_id=None, recommended_only: 
         conditions.append("TRIM(m.selection) <> ''")
         conditions.append("m.selection <> '—'")
 
-    if conditions:
-        base_query += " WHERE " + " AND ".join(conditions)
+        # Performance/UX: History should be recent-ish; also prevents DISTINCT ON from scanning
+        # the entire table (we rerun models many times per game).
+        if lookback_days and int(lookback_days) > 0:
+            conditions.append("m.analyzed_at >= (NOW() - (%s || ' days')::interval)")
+            params.append(int(lookback_days))
 
-    base_query += " ORDER BY m.analyzed_at DESC LIMIT %s"
+    where_sql = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    if recommended_only and dedupe:
+        # Dedupe: keep only the latest rec per game+market.
+        # Postgres DISTINCT ON keeps first row per group based on ORDER BY.
+        query = f"""
+        WITH base AS (
+            SELECT m.*, e.league as sport, e.home_team, e.away_team, e.start_time
+            FROM model_predictions m
+            JOIN events e ON m.event_id = e.id
+            {where_sql}
+        ), deduped AS (
+            SELECT DISTINCT ON (event_id, market_type)
+                *
+            FROM base
+            ORDER BY event_id, market_type, analyzed_at DESC
+        )
+        SELECT *
+        FROM deduped
+        ORDER BY analyzed_at DESC
+        LIMIT %s
+        """
+        params2 = list(params) + [limit]
+        with get_db_connection() as conn:
+            cursor = _exec(conn, query, tuple(params2))
+            return [dict(r) for r in cursor.fetchall()]
+
+    # Non-deduped path
+    base_query = f"""
+    SELECT m.*, e.league as sport, e.home_team, e.away_team, e.start_time
+    FROM model_predictions m
+    JOIN events e ON m.event_id = e.id
+    {where_sql}
+    ORDER BY m.analyzed_at DESC
+    LIMIT %s
+    """
     params.append(limit)
-    
+
     with get_db_connection() as conn:
         cursor = _exec(conn, base_query, tuple(params))
         return [dict(r) for r in cursor.fetchall()]
