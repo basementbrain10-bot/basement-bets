@@ -33,39 +33,33 @@ const ModelPerformanceAnalytics = ({ history }) => {
     // - h.edge_points
     // - h.ev_per_unit (decimal EV, e.g. 0.04 = 4%)
     const getEdge = (h) => {
+        // For the History analytics, we want EV% bands.
+        // Always prefer EV/u (decimal), falling back to edge_points only if EV is missing.
+        const ev = Number(h?.ev_per_unit ?? h?.ev);
+        if (Number.isFinite(ev)) return ev; // decimal EV
         const raw = h?.edge ?? h?.edge_points;
         const n = Number(raw);
         if (Number.isFinite(n)) return n;
-        const ev = Number(h?.ev_per_unit ?? h?.ev);
-        if (Number.isFinite(ev)) return ev; // keep in decimal units
         return null;
     };
 
     const edgeVals = graded.map(getEdge).filter(v => v !== null && v !== undefined && Number.isFinite(v));
     const maxAbs = edgeVals.length ? Math.max(...edgeVals.map(v => Math.abs(v))) : 0;
 
-    // Heuristic: if edges are mostly in [0,1], treat as EV decimals; else treat as point edges.
-    const edgeMode = maxAbs <= 1.0 ? 'ev' : 'points';
+    // EV% bands only (based on EV/u decimal)
+    const edgeMode = 'ev';
 
     // Show edge performance in *bands* (ranges), not cumulative thresholds.
     // This is easier to interpret and lets us show the right tail.
-    const edgeBands = edgeMode === 'ev'
-        ? [
-            { lo: 0.00, hi: 0.05, label: '0–5%' },
-            { lo: 0.05, hi: 0.10, label: '5–10%' },
-            { lo: 0.10, hi: 0.15, label: '10–15%' },
-            { lo: 0.15, hi: 0.20, label: '15–20%' },
-            { lo: 0.20, hi: 0.25, label: '20–25%' },
-            { lo: 0.25, hi: null, label: '25%+' },
-        ]
-        : [
-            { lo: 0.0, hi: 1.0, label: '0–1 pts' },
-            { lo: 1.0, hi: 2.0, label: '1–2 pts' },
-            { lo: 2.0, hi: 3.0, label: '2–3 pts' },
-            { lo: 3.0, hi: 4.0, label: '3–4 pts' },
-            { lo: 4.0, hi: 5.0, label: '4–5 pts' },
-            { lo: 5.0, hi: null, label: '5+ pts' },
-        ];
+    const edgeBands = [
+        { lo: 0.00, hi: 0.05, label: '0–5%' },
+        { lo: 0.05, hi: 0.10, label: '5–10%' },
+        { lo: 0.10, hi: 0.15, label: '10–15%' },
+        { lo: 0.15, hi: 0.20, label: '15–20%' },
+        { lo: 0.20, hi: 0.25, label: '20–25%' },
+        { lo: 0.25, hi: 0.30, label: '25–30%' },
+        { lo: 0.30, hi: null, label: '30%+' },
+    ];
 
     const inBand = (e, b) => {
         if (!Number.isFinite(e)) return false;
@@ -483,7 +477,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Performance by Edge</h4>
 
                     <div className="text-[10px] text-slate-500 mb-2">
-                        Bands are {edgeMode === 'ev' ? 'EV%' : 'edge points'} ranges (not cumulative). Includes the right tail.
+                        Bands are EV% ranges (not cumulative), based on EV/u.
                     </div>
 
                     <div className="overflow-x-auto">
