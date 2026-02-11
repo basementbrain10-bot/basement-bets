@@ -588,8 +588,22 @@ const Research = ({ onAddBet }) => {
                                         }
                                     };
 
+                                    const selectedIsToday = (() => {
+                                        try {
+                                            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+                                            return String(selectedDate) === String(today);
+                                        } catch (e) {
+                                            return false;
+                                        }
+                                    })();
+
                                     const rows = getProcessedEdges()
-                                        .filter((e) => isSameEtDay(e?.start_time, selectedDate))
+                                        .filter((e) => {
+                                            // UX rule: if viewing TODAY, Top 6 should be today-only.
+                                            // If viewing a past/future date, Top 6 should respect the board window.
+                                            if (!selectedIsToday) return true;
+                                            return isSameEtDay(e?.start_time, selectedDate);
+                                        })
                                         .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null }))
                                         .filter(({ top }) => {
                                             if (!top) return false;
@@ -613,7 +627,7 @@ const Research = ({ onAddBet }) => {
                                         });
 
                                     if (!rows.length) {
-                                        return <div className="text-slate-500">No recommendations available for this day.</div>;
+                                        return <div className="text-slate-500">No recommendations available for this window.</div>;
                                     }
 
                                     const fmtPick = (edge, top) => {
@@ -634,7 +648,7 @@ const Research = ({ onAddBet }) => {
                                         <>
                                             <div className="mb-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-[11px] font-black text-emerald-200">Top 6 Plays (Today only)</div>
+                                                    <div className="text-[11px] font-black text-emerald-200">Top 6 Plays</div>
                                                     <div className="text-[10px] text-slate-500">{selectedDate} • Sorted by EV% (1dp)</div>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
