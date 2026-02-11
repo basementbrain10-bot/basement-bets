@@ -49,3 +49,7 @@ data/model_params/ncaab_market_first_v2.json
 chrome_profile/
 chrome_profile_fd/
 playwright_profile_fd/
+
+# Local scratch
+memory/
+
