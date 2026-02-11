@@ -4,7 +4,7 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell,
     ScatterChart, Scatter, ZAxis, ReferenceLine
 } from 'recharts';
-import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, PieChart, BarChart2, BarChart3, Calendar, Layout, LayoutDashboard, Search, Menu, X, PlusCircle, Trash, Trash2, CheckCircle, Clock, Percent, List, FileText, Info, Settings, User, RefreshCw, AlertTriangle, AlertCircle, Filter, ChevronDown, ChevronRight, MessageSquare, BookOpen, ExternalLink, ArrowRight, Table } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, BarChart3, LayoutDashboard, Search, X, PlusCircle, Trash, RefreshCw, AlertCircle, Filter, Table } from 'lucide-react';
 
 // (removed unused imports)
 import Research from './pages/Research';
