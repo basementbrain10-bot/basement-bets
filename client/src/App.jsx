@@ -386,7 +386,7 @@ function App() {
                     ) : view === 'research' ? (
                         <Research onAddBet={() => setShowAddBet(true)} />
                     ) : (
-                        <PerformanceView timeSeries={timeSeries} drawdown={drawdown} financials={financials} periodStats={periodStats} />
+                        <PerformanceView timeSeries={timeSeries} financials={financials} periodStats={periodStats} edgeBreakdown={edgeBreakdown} />
                     )}
                 </div>
             </div>
@@ -394,15 +394,8 @@ function App() {
     );
 }
 
-function PerformanceView({ timeSeries, drawdown, financials, periodStats }) {
-    const [inPlaySeries, setInPlaySeries] = useState([]);
-
-    useEffect(() => {
-        // Trend of Total In Play from balance snapshots
-        api.get('/api/financials/inplay/series', { params: { days: 30 } })
-            .then(r => setInPlaySeries(r.data?.series || []))
-            .catch(() => {});
-    }, []);
+function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown }) {
+    // Performance tab is focused on actual betting performance + breakdowns.
 
     // Charts-only view (no daily picks feed here).
     if (!timeSeries || timeSeries.length === 0) {
@@ -502,107 +495,127 @@ function PerformanceView({ timeSeries, drawdown, financials, periodStats }) {
 
             {/* Drawdown tiles removed (keep Performance tab focused on betting performance + curves) */}
 
-            {/* Total In Play Trend */}
+            {/* Betting performance windows (settled bets) */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl backdrop-blur-sm">
-                <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-                    <Activity className="text-green-400" /> Total In Play Trend
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <TrendingUp className="text-blue-400" /> Betting Performance
                 </h3>
-                {(!inPlaySeries || inPlaySeries.length === 0) ? (
-                    <div className="text-gray-500 text-sm">No balance snapshot history yet (need daily balance snapshots to see a 30d trend).</div>
-                ) : (
-                    <>
-                        {(() => {
-                            const s = inPlaySeries || [];
-                            const last = s[s.length - 1];
-                            const lastVal = Number(last?.total_in_play || 0);
-                            const dayAgo = (k) => s.length > k ? Number(s[s.length - 1 - k]?.total_in_play || 0) : null;
-                            const v7 = dayAgo(7);
-                            const v30 = dayAgo(30);
-                            const d7 = (v7 === null) ? null : (lastVal - v7);
-                            const d30 = (v30 === null) ? null : (lastVal - v30);
-                            const cls = (x) => x === null ? 'text-slate-300' : x >= 0 ? 'text-green-400' : 'text-red-400';
-                            const fmt = (x) => x === null ? '—' : formatCurrency(x);
-                            return (
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                                    <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
-                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Total in play (latest)</div>
-                                        <div className="mt-1 text-white font-black text-2xl">{formatCurrency(lastVal)}</div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(['7d', '30d', 'ytd', 'all']).map((k) => {
+                        const w = periodStats?.[k];
+                        if (!w) return null;
+                        const profit = Number(w.net_profit || 0);
+                        const roi = Number(w.roi || 0);
+                        return (
+                            <div key={k} className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+                                <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black mb-2">
+                                    {k === '7d' ? 'Last 7 days' : k === '30d' ? 'Last 30 days' : k === 'ytd' ? 'YTD' : 'All-time'}
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div>
+                                        <div className="text-slate-400 text-xs">Net P/L</div>
+                                        <div className={`font-black text-lg ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatCurrency(profit)}</div>
                                     </div>
-                                    <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
-                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Change (7d)</div>
-                                        <div className={`mt-1 font-black text-2xl ${cls(d7)}`}>{fmt(d7)}</div>
+                                    <div>
+                                        <div className="text-slate-400 text-xs">ROI</div>
+                                        <div className={`font-black text-lg ${roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>{roi.toFixed(1)}%</div>
                                     </div>
-                                    <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
-                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Change (30d)</div>
-                                        <div className={`mt-1 font-black text-2xl ${cls(d30)}`}>{fmt(d30)}</div>
+                                    <div>
+                                        <div className="text-slate-400 text-xs">Record</div>
+                                        <div className="text-white font-bold">{w.wins}-{w.losses}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-slate-400 text-xs">Win%</div>
+                                        <div className="text-white font-bold">{Number(w.actual_win_rate || 0).toFixed(1)}%</div>
                                     </div>
                                 </div>
-                            );
-                        })()}
-                        <div className="h-[260px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={inPlaySeries}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                    <XAxis dataKey="day" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val}`} />
-                                    <Tooltip
-                                        contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
-                                        itemStyle={{ color: '#22c55e', fontWeight: 'bold' }}
-                                        formatter={(val) => [formatCurrency(val), 'Total In Play']}
-                                    />
-                                    <Line type="monotone" dataKey="total_in_play" stroke="#22c55e" strokeWidth={3} dot={false} animationDuration={1200} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="mt-4 text-center text-xs text-gray-500">
-                            Last 30 days (ET). Each day uses the latest per-book snapshot.
-                        </div>
-                    </>
-                )}
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
 
-            {/* Equity Curve Chart */}
+            {/* Scatter: Win% vs ROI by sport + bet type */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl backdrop-blur-sm">
-                <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-                    <TrendingUp className="text-green-400" /> Equity Curve (Settled)
-                </h3>
-                <div className="h-[400px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={timeSeries}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                            <XAxis
-                                dataKey="date"
-                                stroke="#64748b"
-                                fontSize={10}
-                                tickLine={false}
-                                axisLine={false}
-                            />
-                            <YAxis
-                                stroke="#64748b"
-                                fontSize={10}
-                                tickLine={false}
-                                axisLine={false}
-                                tickFormatter={(val) => `$${val}`}
-                            />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
-                                itemStyle={{ color: '#22c55e', fontWeight: 'bold' }}
-                                formatter={(val) => [formatCurrency(val), "Net Balance"]}
-                            />
-                            <Line
-                                type="monotone"
-                                dataKey="cumulative"
-                                stroke="#22c55e"
-                                strokeWidth={3}
-                                dot={timeSeries.length < 50 ? { fill: '#22c55e', strokeWidth: 2, r: 4, stroke: '#0f172a' } : false}
-                                activeDot={{ r: 6, strokeWidth: 0 }}
-                                animationDuration={1500}
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                    <h3 className="text-xl font-bold flex items-center gap-2">
+                        <BarChart3 className="text-blue-400" /> Win% vs ROI (by sport + bet type)
+                    </h3>
+                    <div className="text-xs text-slate-500">Each dot = (sport, bet type) • bubble size = volume</div>
                 </div>
-                <div className="mt-4 text-center text-xs text-gray-500">
-                    Settled-only equity curve (from bet results + ledger).
+
+                {(edgeBreakdown || []).length === 0 ? (
+                    <div className="text-slate-500 text-sm">No settled bet data yet.</div>
+                ) : (
+                    <div className="h-[420px] bg-slate-800/20 rounded-xl border border-slate-800/50 p-4">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                <XAxis
+                                    type="number"
+                                    dataKey="roi"
+                                    name="ROI"
+                                    unit="%"
+                                    stroke="#94a3b8"
+                                    fontSize={10}
+                                    domain={['auto', 'auto']}
+                                    label={{ value: 'ROI (%)', position: 'bottom', fill: '#64748b', fontSize: 10 }}
+                                    tickFormatter={(val) => `${val}%`}
+                                />
+                                <YAxis
+                                    type="number"
+                                    dataKey="actual_win_rate"
+                                    name="Win Rate"
+                                    unit="%"
+                                    stroke="#94a3b8"
+                                    fontSize={10}
+                                    domain={[0, 100]}
+                                    label={{ value: 'Win% (settled)', angle: -90, position: 'left', fill: '#64748b', fontSize: 10 }}
+                                />
+                                <ZAxis type="number" dataKey="bets" range={[50, 400]} name="Volume" />
+                                <Tooltip
+                                    cursor={{ strokeDasharray: '3 3' }}
+                                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '8px' }}
+                                    itemStyle={{ color: '#fff' }}
+                                    content={({ active, payload }) => {
+                                        if (active && payload && payload.length) {
+                                            const d = payload[0].payload;
+                                            return (
+                                                <div className="bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-xl">
+                                                    <p className="font-bold text-blue-400 mb-1">{d.sport} - {d.bet_type}</p>
+                                                    <div className="grid grid-cols-2 gap-x-4 text-[10px]">
+                                                        <span className="text-slate-400">Bets:</span> <span className="text-white text-right">{d.bets}</span>
+                                                        <span className="text-slate-400">Net P/L:</span> <span className={d.profit >= 0 ? 'text-green-400 text-right' : 'text-red-400 text-right'}>{formatCurrency(d.profit)}</span>
+                                                        <span className="text-slate-400">ROI:</span> <span className="text-white text-right">{d.roi}%</span>
+                                                        <span className="text-slate-400">Win%:</span> <span className="text-white text-right">{d.actual_win_rate}%</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    }}
+                                />
+                                <ReferenceLine x={0} stroke="#475569" strokeWidth={1} />
+                                <ReferenceLine y={50} stroke="#1f2937" strokeWidth={1} strokeDasharray="4 4" />
+
+                                <Scatter name="Segments" data={(edgeBreakdown || []).filter(x => (x.bets || 0) >= 3)}>
+                                    {(edgeBreakdown || []).filter(x => (x.bets || 0) >= 3).map((entry, index) => (
+                                        <Cell
+                                            key={`cell-${index}`}
+                                            fill={entry.profit >= 0 ? '#10b981' : '#ef4444'}
+                                            fillOpacity={0.55}
+                                            stroke={entry.profit >= 0 ? '#10b981' : '#ef4444'}
+                                        />
+                                    ))}
+                                </Scatter>
+                            </ScatterChart>
+                        </ResponsiveContainer>
+                    </div>
+                )}
+
+                <div className="text-[10px] text-slate-500 text-center mt-2 italic">
+                    Breakeven line at ROI=0%. Dotted line at Win%=50% (context only).
                 </div>
             </div>
         </div>
