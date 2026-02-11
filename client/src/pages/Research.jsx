@@ -622,8 +622,8 @@ const Research = ({ onAddBet }) => {
                                         <>
                                             <div className="mb-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-[10px] uppercase tracking-widest text-emerald-300 font-black">Top 6 plays today</div>
-                                                    <div className="text-[10px] text-slate-500">Sorted by EV</div>
+                                                    <div className="text-[11px] font-black text-emerald-200">Top 6 Plays</div>
+                                                    <div className="text-[10px] text-slate-500">Sorted by EV% (1dp)</div>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                     {top6.map(({ edge, top }, i) => (
@@ -633,7 +633,13 @@ const Research = ({ onAddBet }) => {
                                                                 <div className="text-xs text-slate-400 truncate">{top.bet_type} • {fmtPick(edge, top)} • {top.confidence || '—'}</div>
                                                             </div>
                                                             <div className="text-right shrink-0">
-                                                                <div className="text-xs font-mono font-black text-emerald-300">{String(top.edge || '').startsWith('-') ? top.edge : `+${top.edge}`}</div>
+                                                                <div className="text-xs font-mono font-black text-emerald-300">{(() => {
+                                                                    const raw = String(top.edge || '').replace('%', '').trim();
+                                                                    const n = Number(raw);
+                                                                    if (!Number.isFinite(n)) return top.edge;
+                                                                    const s = `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
+                                                                    return s;
+                                                                })()}</div>
                                                                 <div className="text-[10px] text-slate-500 font-mono">{(top.price !== null && top.price !== undefined) ? fmtSigned(top.price, 0) : '—'}</div>
                                                             </div>
                                                         </div>
