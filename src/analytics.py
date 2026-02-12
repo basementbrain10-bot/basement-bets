@@ -561,22 +561,27 @@ class AnalyticsEngine:
 
     def get_balances(self, user_id=None):
         """
-        Returns current balances per provider.
-        Logic:
-        1. Find latest explicit 'Balance' snapshot from transactions.
-        2. Add any Deposits/Withdrawals occurring AFTER that snapshot.
-        3. Add any Bet Profits occurring AFTER that snapshot.
+        Calculates current sportsbook balances by starting from the latest manual snapshots
+        and adding subsequent transactions (deposits/withdrawals) and bet results.
+        Returns a dict: { provider: { balance: float, last_bet: str|None } }
         """
+        from dateutil.parser import parse as parse_date
         from src.database import get_db_connection
         from collections import defaultdict
-        from dateutil.parser import parse as parse_date
-        import datetime
         
+        def _to_naive(d):
+            if not d: return None
+            if isinstance(d, str):
+                try: d = parse_date(d)
+                except: return None
+            if hasattr(d, 'replace') and hasattr(d, 'tzinfo') and d.tzinfo:
+                return d.replace(tzinfo=None)
+            return d
+
         bets = self.bets
         if user_id and user_id != self.user_id:
              bets = [b for b in self.bets if b.get('user_id') == user_id]
-
-        # 1. Get explicit balance snapshots (source-of-truth) and all transactions
+             
         explicit_balances = {}  # provider -> (balance, dt_object, original_date_str, source_type)
 
         # Prefer dedicated balance_snapshots table
@@ -585,13 +590,11 @@ class AnalyticsEngine:
             latest_snaps = fetch_latest_balance_snapshots(user_id=user_id)
             for provider, snap in (latest_snaps or {}).items():
                 # snap['captured_at'] may be str or datetime
-                try:
-                    dt = parse_date(str(snap.get('captured_at'))) if snap.get('captured_at') else None
-                except Exception:
-                    dt = None
+                dt = _to_naive(snap.get('captured_at'))
                 explicit_balances[provider] = (float(snap.get('balance') or 0), dt, str(snap.get('captured_at') or ''), 'BalanceSnapshot')
         except Exception as e:
             print(f"[Analytics] balance_snapshots lookup failed: {e}")
+
         deposits = defaultdict(list)     # provider -> list of (amount, dt)
         withdrawals = defaultdict(list)  # provider -> list of (amount, dt)
         
@@ -608,12 +611,9 @@ class AnalyticsEngine:
                     provider = r['provider']
                     tx_type = r['type']
                     
-                    # Parse date
-                    try:
-                        dt = parse_date(r['date'])
-                    except:
-                        dt = None
-                        
+                    # Parse date and normalize to naive
+                    dt = _to_naive(r['date'])
+
                     # Treat BalanceSnapshot as highest-priority (explicit source-of-truth for UI).
                     if tx_type in ('BalanceSnapshot', 'Balance'):
                         current_bal = float(r['balance'] or 0)
@@ -627,7 +627,7 @@ class AnalyticsEngine:
                                 explicit_balances[provider] = (current_bal, dt, r['date'], tx_type)
                             elif dt and not existing_dt:
                                 explicit_balances[provider] = (current_bal, dt, r['date'], tx_type)
-                            elif (dt == existing_dt) and (existing_type != 'BalanceSnapshot') and (tx_type == 'BalanceSnapshot'):
+                            elif (dt and existing_dt and dt == existing_dt) and (existing_type != 'BalanceSnapshot') and (tx_type == 'BalanceSnapshot'):
                                 explicit_balances[provider] = (current_bal, dt, r['date'], tx_type)
                                 
                     elif tx_type == 'Deposit':
@@ -665,14 +665,14 @@ class AnalyticsEngine:
                 # If no snapshot, include all. If snapshot, include only if newer.
                 if not snapshot_dt:
                     base_balance += amt
-                elif dt and dt > snapshot_dt:
+                elif dt and snapshot_dt and dt > snapshot_dt:
                     base_balance += amt
                     
             # Withdrawals
             for amt, dt in withdrawals.get(provider, []):
                 if not snapshot_dt:
                     base_balance -= amt
-                elif dt and dt > snapshot_dt:
+                elif dt and snapshot_dt and dt > snapshot_dt:
                     base_balance -= amt
                     
             # C. Add Bet Profits AFTER snapshot
