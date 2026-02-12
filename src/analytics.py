@@ -337,11 +337,11 @@ class AnalyticsEngine:
             except: continue
 
         # 2. Process Transactions (Deposits/Withdrawals) - graceful degradation if table missing
-        query = "SELECT date, type, amount FROM transactions WHERE type IN ('Deposit', 'Withdrawal')"
+        query = "SELECT date, type, amount FROM transactions WHERE type IN ('Deposit', 'Withdrawal') AND (%(user_id)s IS NULL OR user_id = %(user_id)s)"
         try:
             with get_db_connection() as conn:
-                cur = conn.cursor()
-                cur.execute(query)
+                from src.database import _exec
+                cur = _exec(conn, query, {"user_id": user_id})
                 for r in cur.fetchall():
                     date_str = r['date']
                     if not date_str: continue
@@ -350,9 +350,9 @@ class AnalyticsEngine:
                         dt = datetime.strptime(d_str, "%Y-%m-%d")
                         month_key = dt.strftime("%Y-%m")
                         if r['type'] == 'Deposit':
-                            monthly_deposits[month_key] += abs(r['amount'])
+                            monthly_deposits[month_key] += abs(float(r['amount'] or 0))
                         else:
-                            monthly_withdrawals[month_key] += abs(r['amount'])
+                            monthly_withdrawals[month_key] += abs(float(r['amount'] or 0))
                     except: continue
         except Exception as e:
             # Transactions table may not exist yet - degrade gracefully
@@ -441,19 +441,19 @@ class AnalyticsEngine:
                 daily_profit[day_key] += profit
 
         # Transactions
-        query = "SELECT date, type, amount FROM transactions WHERE type IN ('Deposit', 'Withdrawal')"
+        query = "SELECT date, type, amount FROM transactions WHERE type IN ('Deposit', 'Withdrawal') AND (%(user_id)s IS NULL OR user_id = %(user_id)s)"
         try:
             with get_db_connection() as conn:
-                cur = conn.cursor()
-                cur.execute(query)
+                from src.database import _exec
+                cur = _exec(conn, query, {"user_id": user_id})
                 for r in cur.fetchall():
                     day_key = self._to_day_key(r['date'])
                     if not day_key:
                         continue
                     if r['type'] == 'Deposit':
-                        daily_deposits[day_key] += abs(float(r['amount']))
+                        daily_deposits[day_key] += abs(float(r['amount'] or 0))
                     elif r['type'] == 'Withdrawal':
-                        daily_withdrawals[day_key] += abs(float(r['amount']))
+                        daily_withdrawals[day_key] += abs(float(r['amount'] or 0))
         except Exception as e:
             print(f"[Analytics] Skipping transactions (table may not exist): {e}")
 
@@ -598,11 +598,12 @@ class AnalyticsEngine:
         query = """
         SELECT provider, type, amount, balance, date
         FROM transactions
+        WHERE (%(user_id)s IS NULL OR user_id = %(user_id)s)
         """
         try:
             with get_db_connection() as conn:
                 from src.database import _exec
-                cur = _exec(conn, query)
+                cur = _exec(conn, query, {"user_id": user_id})
                 for r in cur.fetchall():
                     provider = r['provider']
                     tx_type = r['type']
@@ -866,38 +867,28 @@ class AnalyticsEngine:
         """
         from src.database import get_db_connection, fetch_latest_ledger_info
         
-        query = "SELECT type, description, amount FROM transactions"
+        query = """
+        SELECT type, description, amount 
+        FROM transactions 
+        WHERE (%(user_id)s IS NULL OR user_id = %(user_id)s)
+        """
         total_deposits = 0.0
         total_withdrawals = 0.0
         
         try:
             with get_db_connection() as conn:
-                cur = conn.cursor()
-                cur.execute(query)
+                from src.database import _exec
+                cur = _exec(conn, query, {"user_id": user_id})
                 rows = cur.fetchall()
                 for r in rows:
-                    amt = r['amount']
+                    amt = float(r['amount'] or 0)
                     typ = r['type']
                     desc = r['description'] or ''
-
-                    # Exclusion logic removed to show all transactions
-                    # if (abs(amt - 1900.0) < 0.01 or "1900" in desc):
-                    #     if typ == 'Deposit' or ('Transfer in' in desc and amt > 0):
-                    #         continue
 
                     if typ == 'Deposit':
                         total_deposits += amt
                     elif typ == 'Withdrawal':
                         total_withdrawals += abs(amt)
-                    elif typ == 'Other':
-                        # Heuristic: "Wallet transfer - Transfer in/out"
-                        # Capture "Transfer in" as Deposit, "Transfer out" as Withdrawal
-                        # FIX: Exclude these from Global Financial Summary to avoid inflating totals with internal moves.
-                        # if 'Transfer in' in desc and amt > 0:
-                        #     total_deposits += amt
-                        # elif 'Transfer out' in desc and amt < 0:
-                        #     total_withdrawals += abs(amt)
-                        pass
         except Exception as e:
             # Transactions table may not exist yet - degrade gracefully
             print(f"[Analytics] Skipping transactions for financial summary (table may not exist): {e}")
@@ -915,22 +906,21 @@ class AnalyticsEngine:
         net_bet_profit = (total_equity + total_withdrawals) - total_deposits
 
         # Breakdown by Provider
-        # Re-query or iterate to group by provider
         provider_stats = defaultdict(lambda: {'deposited': 0.0, 'withdrawn': 0.0})
-        query_all = "SELECT provider, type, amount, description FROM transactions"
+        query_all = """
+        SELECT provider, type, amount, description 
+        FROM transactions
+        WHERE (%(user_id)s IS NULL OR user_id = %(user_id)s)
+        """
         try:
             with get_db_connection() as conn:
-                cur = conn.cursor()
-                cur.execute(query_all)
+                from src.database import _exec
+                cur = _exec(conn, query_all, {"user_id": user_id})
                 rows = cur.fetchall()
                 for r in rows:
                     p = r['provider']
-                    amt = r['amount']
+                    amt = float(r['amount'] or 0)
                     typ = r['type']
-                    desc = r['description'] or ''
-                    
-                    # No longer filtering 'Manual' - we want ALL deposit/withdrawal transactions
-                    # This includes manual adjustments, imports, and corrections
                     
                     if typ == 'Deposit':
                         provider_stats[p]['deposited'] += amt
@@ -1000,10 +990,14 @@ class AnalyticsEngine:
         })
         
         try:
-            query = "SELECT provider, type, amount, balance, date FROM transactions"
+            query = """
+            SELECT provider, type, amount, balance, date 
+            FROM transactions
+            WHERE (%(user_id)s IS NULL OR user_id = %(user_id)s)
+            """
             with get_db_connection() as conn:
                 from src.database import _exec
-                cur = _exec(conn, query)
+                cur = _exec(conn, query, {"user_id": user_id})
                 for r in cur.fetchall():
                     provider = r['provider']
                     tx_type = (r['type'] or '').strip()
@@ -1125,17 +1119,18 @@ Kept for backward compatibility, but UI should prefer bets-only endpoints.
         query = """
             SELECT txn_id, provider, date, type, description, amount
             FROM transactions
-            WHERE type IN ('Deposit', 'Withdrawal')
-               OR (type = 'Other' AND description LIKE '%Transfer%')
-               OR (type = 'Other' AND description LIKE '%Manual%')
+            WHERE (user_id=%s) AND (
+               type IN ('Deposit', 'Withdrawal')
+               OR (type = 'Other' AND description LIKE '%%Transfer%%')
+               OR (type = 'Other' AND description LIKE '%%Manual%%')
+            )
             ORDER BY date DESC
         """
         try:
             with get_db_connection() as conn:
-                cur = conn.cursor()
-                cur.execute(query)
-                rows = cur.fetchall()
-                for r in rows:
+                from src.database import _exec
+                cur = _exec(conn, query, (user_id,))
+                for r in cur.fetchall():
                     t = dict(r)
                     amt = t['amount']
                     typ = t['type']
