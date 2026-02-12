@@ -10,7 +10,7 @@ import Research from './pages/Research';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 // import { StagingBanner } from './components/StagingBanner';
 
-console.log("Basement Bets Frontend v1.6.4 Loaded at " + new Date().toISOString());
+console.log("Basement Bets Frontend v1.6.5 Loaded at " + new Date().toISOString());
 
 // --- Login Modal Component ---
 const LoginModal = ({ onSubmit }) => {
@@ -111,6 +111,7 @@ function App() {
     const [timeSeries, setTimeSeries] = useState([]);
     const [drawdown, setDrawdown] = useState(null);
     const [financials, setFinancials] = useState({ total_in_play: 0, total_deposited: 0, total_withdrawn: 0, realized_profit: 0 });
+    const [reconciliation, setReconciliation] = useState(null);
     const [periodStats, setPeriodStats] = useState({ '7d': null, '30d': null, 'ytd': null, 'all': null });
     const [edgeBreakdown, setEdgeBreakdown] = useState([]);
     const [showAddBet, setShowAddBet] = useState(false);
@@ -169,6 +170,7 @@ function App() {
                     api.get('/api/breakdown/bet_type'),
                     api.get('/api/balances/snapshots/latest'),
                     api.get('/api/financials'),
+                    api.get('/api/financials/reconciliation'),
                     api.get('/api/analytics/series'),
                     api.get('/api/analytics/drawdown'),
                     api.get('/api/breakdown/edge')
@@ -275,9 +277,10 @@ function App() {
                 } catch (e) {}
                 setBalances(mapped);
                 setFinancials(getVal(results[7], { total_in_play: 0, total_deposited: 0, total_withdrawn: 0, realized_profit: 0 }));
-                setTimeSeries(getVal(results[8], []));
-                setDrawdown(getVal(results[9], { max_drawdown: 0.0, current_drawdown: 0.0, peak_profit: 0.0 }));
-                setEdgeBreakdown(getVal(results[10], []));
+                setReconciliation(getVal(results[8], null));
+                setTimeSeries(getVal(results[9], []));
+                setDrawdown(getVal(results[10], { max_drawdown: 0.0, current_drawdown: 0.0, peak_profit: 0.0 }));
+                setEdgeBreakdown(getVal(results[11], []));
 
                 setPeriodStats({
                     '7d': getVal(periodResults[0], { net_profit: 0, roi: 0, wins: 0, losses: 0, total_bets: 0, actual_win_rate: 0, implied_win_rate: 0 }),
@@ -424,7 +427,7 @@ function App() {
                     ) : (
                         <>
                             {actualsTab === 'transactions' ? (
-                                <TransactionView bets={bets} financials={financials} />
+                                <TransactionView bets={bets} financials={financials} reconciliation={reconciliation} />
                             ) : (
                                 <PerformanceView
                                     timeSeries={timeSeries}
@@ -432,6 +435,7 @@ function App() {
                                     periodStats={periodStats}
                                     edgeBreakdown={edgeBreakdown}
                                     bets={bets}
+                                    reconciliation={reconciliation}
                                     onOpenTransactions={(prefill) => {
                                         try { localStorage.setItem('txn_prefill', JSON.stringify(prefill || {})); } catch (e) {}
                                         setView('actuals');
@@ -447,7 +451,7 @@ function App() {
     );
 }
 
-function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, bets, onOpenTransactions }) {
+function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, bets, reconciliation, onOpenTransactions }) {
     // Performance tab is focused on actual betting performance + breakdowns.
 
     // Scatter / drivers controls
@@ -649,6 +653,41 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                         <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                             <DollarSign className="text-green-400" /> Sportsbook Financials
                         </h3>
+
+                        {/* In-play audit (snapshot + bet P/L = in play) */}
+                        {(() => {
+                            const rows = reconciliation?.providers || [];
+                            const dk = rows.find(r => String(r.provider || '').toLowerCase().includes('draftkings'));
+                            if (!dk) return null;
+                            return (
+                                <div className="mb-4 bg-slate-800/20 border border-slate-800 rounded-xl p-4">
+                                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black mb-2">DraftKings in-play audit</div>
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3">
+                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Latest snapshot</div>
+                                            <div className="mt-1 text-white font-black text-lg">{dk.latest_reported_balance === null || dk.latest_reported_balance === undefined ? '—' : formatCurrency(dk.latest_reported_balance)}</div>
+                                            <div className="text-[10px] text-slate-500">{dk.latest_balance_date || ''}</div>
+                                        </div>
+                                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3">
+                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Bet P/L (since snapshot)</div>
+                                            <div className={`mt-1 font-black text-lg ${Number(dk.bet_profit_total || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{formatCurrency(Number(dk.bet_profit_total || 0))}</div>
+                                            <div className="text-[10px] text-slate-500">N={dk.bet_count || 0} bets</div>
+                                        </div>
+                                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3">
+                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Computed in play</div>
+                                            <div className="mt-1 text-white font-black text-lg">{formatCurrency(Number(dk.computed_balance || 0))}</div>
+                                            <div className="text-[10px] text-slate-500">snapshot + Σ(P/L)</div>
+                                        </div>
+                                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3">
+                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Discrepancy</div>
+                                            <div className={`mt-1 font-black text-lg ${dk.discrepancy === null || dk.discrepancy === undefined ? 'text-slate-300' : Math.abs(Number(dk.discrepancy)) < 1 ? 'text-green-300' : 'text-amber-300'}`}>{dk.discrepancy === null || dk.discrepancy === undefined ? '—' : formatCurrency(Number(dk.discrepancy))}</div>
+                                            <div className="text-[10px] text-slate-500">status: {dk.status}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
                         <table className="w-full text-left text-sm">
                             <thead>
                                 <tr className="text-gray-400 border-b border-gray-700">
@@ -1466,7 +1505,7 @@ function OddsTicker() {
     );
 }
 
-function TransactionView({ bets, financials }) {
+function TransactionView({ bets, financials, reconciliation }) {
     const [filters, setFilters] = useState({
         date: "",
         sportsbook: "All",
@@ -2010,6 +2049,18 @@ function TransactionView({ bets, financials }) {
                 </div>
 
                 {/* Grid */}
+
+                {(() => {
+                    const betRows = (sortedBets || []).filter(b => (b.category || '') !== 'Transaction');
+                    const sum = betRows.reduce((acc, b) => acc + (Number(b.profit) || 0), 0);
+                    return (
+                        <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/30 flex items-center justify-between text-xs">
+                            <div className="text-slate-500">Filtered bets: <span className="text-slate-200 font-bold">{betRows.length}</span></div>
+                            <div className="text-slate-500">Σ Profit/Loss: <span className={`font-mono font-bold ${sum >= 0 ? 'text-green-300' : 'text-red-300'}`}>{formatCurrency(sum)}</span></div>
+                        </div>
+                    );
+                })()}
+
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm whitespace-nowrap">
                         <thead className="bg-gray-800 text-gray-400 font-medium uppercase text-xs tracking-wider">
@@ -2305,7 +2356,7 @@ const FinancialHeader = ({ financials, mode = 'all' }) => {
     if (!financials) return null;
     return (
         <div className="flex flex-wrap gap-4 mb-8">
-            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.6.4</div>
+            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.6.5</div>
 
             {mode !== 'performance' && (
                 <FinancialCard
