@@ -98,8 +98,7 @@ Bet #	Date	Bookmaker	Bet Type	League	Home Team	Away Team	Bet Placed	Odds	Stake	L
 40	2/21/2023	DraftKings	2 Leg Parlay	NCAAM			See Below:	108	$20.00	No	No	No		 $ 20.00 	-0.92	48%	 $ 41.60 	 $ 21.60 	 $ -   	 $ (20.00)	
 	2/21/2023	DraftKings	     Leg	NCAAM	Texas	Iowa St	Iowa St +7.5			No	No	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
 	2/21/2023	DraftKings	     Leg	NCAAM	Georgia	Arkansas	Arkansas ML			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
-41	2/21/2023	DraftKings	3 Leg Parlay	NCAAM			See Below:	170	$12.00	No	At Risk	No		 $ 12.00 	-0.71	37%	 $ 32.40 	 $ 20.40 	 $ -   	 $ -   	
-	2/21/2023	DraftKings	     Leg	NCAAM	Michigan St	Indiana	Michigan St ML			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
+41	2/21/2023	DraftKings	3 Leg Parlay	NCAAM			See Below:	170	$12.00	No	No	No		 $ 12.00 	-0.71	37%	 $ 32.40 	 $ 20.40 	 $ -   	 $ -   	 $ (12.00) 	2/21/2023	DraftKings	     Leg	NCAAM	Michigan St	Indiana	Michigan St ML			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
 	2/21/2023	DraftKings	     Leg	NCAAM	Nevada	San Jose St	Nevada ML			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
 	2/21/2023	DraftKings	     Leg	NCAAM	Creighton	Marquette	Creighton ML			Yes	No	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
 42	2/21/2023	DraftKings	Winner (ML)	NCAAM	Creighton	Marquette	Creighton ML	-180	$18.00	Yes	No	No		 $ 18.00 	-1.23	64%	 $ 28.00 	 $ 10.00 	 $ -   	 $ (18.00)	
@@ -447,8 +446,7 @@ Bet #	Date	Bookmaker	Bet Type	League	Home Team	Away Team	Bet Placed	Odds	Stake	L
 272	5/6/2023	FanDuel	Prop	NBA 	Miami Heat	New York Knicks	1+ dunk in final 3 minutes	120	$5.00	Yes	Yes	No		 $ 5.00 	1.15	45%	 $ 11.00 	 $ 6.00 	 $ 11.00 	 $ 6.00 	
 273	5/6/2023	DraftKings	Winner (ML)	MLB	Cincinnati Reds	Chicago White Sox	Reds not to bat in Bottom 9	-140	$45.00	No	Yes	No		 $ 45.00 	0.90	58%	 $ 77.14 	 $ 32.14 	 $ 77.14 	 $ 32.14 	
 274	5/7/2023	FanDuel	Over / Under	MLB	Reds	White Sox	NRFI	100	$10.00	No	No	No		 $ 10.00 	-0.95	50%	 $ 20.00 	 $ 10.00 	 $ -   	 $ (10.00)	
-275	5/7/2023	DraftKings	Prop	Other	F1	Racing	Miami Grand Prix Ferrari top 6 finishes	-125	$9.81	No	At Risk	No		 $ 9.81 	-1.06	56%	 $ 17.66 	 $ 7.85 	 $ -   	 $ -   	
-276	5/7/2023	DraftKings	Prop	Other	F1	Racing	Miami Grand Prix Red Bull double podium	-125	$10.00	No	Yes	No		 $ 10.00 	0.94	56%	 $ 18.00 	 $ 8.00 	 $ 18.00 	 $ 8.00 	
+275	5/7/2023	DraftKings	Prop	Other	F1	Racing	Miami Grand Prix Ferrari top 6 finishes	-125	$9.81	No	No	No		 $ 9.81 	-1.06	56%	 $ 17.66 	 $ 7.85 	 $ -   	 $ -   	 $ (9.81) 276	5/7/2023	DraftKings	Prop	Other	F1	Racing	Miami Grand Prix Red Bull double podium	-125	$10.00	No	Yes	No		 $ 10.00 	0.94	56%	 $ 18.00 	 $ 8.00 	 $ 18.00 	 $ 8.00 	
 277	5/7/2023	DraftKings	3 Leg Parlay	Other			See Below	239	$10.00	No	Yes	No		 $ 10.00 	1.78	29%	 $ 33.90 	 $ 23.90 	 $ 33.90 	 $ 23.90 	
 	5/7/2023	DraftKings	     Leg	Other	F1	Racing	Miami Grand Prix Red Bull top 6 finishes			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
 	5/7/2023	DraftKings	     Leg	Other	F1	Racing	Miami Grand Prix Ferrari top 10 finishes			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
@@ -554,8 +552,7 @@ Bet #	Date	Bookmaker	Bet Type	League	Home Team	Away Team	Bet Placed	Odds	Stake	L
 366	6/4/2023	DraftKings	SGP	NBA 	Nuggets	Heat	Murray 4 A, Porter JR 2 3's, Jimmy 6 R, Jokic 5A	105	$15.00	No	No	No		 $ 15.00 	-0.93	49%	 $ 30.75 	 $ 15.75 	 $ -   	 $ (15.00)	
 367	6/4/2023	FanDuel	Over / Under	NBA 	Nuggets	Heat	Gordon PRA under 21.5	114	$25.00	No	Yes	No		 $ 25.00 	1.12	47%	 $ 53.50 	 $ 28.50 	 $ 53.50 	 $ 28.50 	
 368	6/4/2023	FanDuel	Over / Under	NBA 	Nuggets	Heat	Heat over 103.5	111	$10.00	No	Yes	No		 $ 10.00 	1.11	47%	 $ 21.10 	 $ 11.10 	 $ 21.10 	 $ 11.10 	
-369	6/4/2023	DraftKings	Prop	NBA 	Nuggets	Heat	Race to 15pts	195	$10.61	No	At Risk	No		 $ 10.61 	1.55	34%	 $ 31.30 	 $ 20.69 	 $ -   	 $ -   	
-370	6/5/2023	DraftKings	Winner (ML)	Tennis	Rune	Cerundolo	Rune ML	-110	$15.00	Yes	Yes	No		 $ 15.00 	1.00	52%	 $ 28.64 	 $ 13.64 	 $ 28.64 	 $ 13.64 	
+369	6/4/2023	DraftKings	Prop	NBA 	Nuggets	Heat	Race to 15pts	195	$10.61	No	Yes	No		 $ 10.61 	1.55	34%	 $ 31.30 	 $ 20.69 	 $ -   	 $ -   	 $ 20.69 370	6/5/2023	DraftKings	Winner (ML)	Tennis	Rune	Cerundolo	Rune ML	-110	$15.00	Yes	Yes	No		 $ 15.00 	1.00	52%	 $ 28.64 	 $ 13.64 	 $ 28.64 	 $ 13.64 	
 371	6/6/2023	DraftKings	Winner (ML)	MLB	Angels	Cubs	Angels ML	-120	$20.00	No	Yes	No		 $ 20.00 	0.96	55%	 $ 36.67 	 $ 16.67 	 $ 36.67 	 $ 16.67 	
 372	6/6/2023	DraftKings	Winner (ML)	MLB	reds	dodgers	reds ml	160	$20.00	No	Yes	No		 $ 20.00 	1.36	38%	 $ 52.00 	 $ 32.00 	 $ 52.00 	 $ 32.00 	
 373	6/7/2023	DraftKings	SGP	NBA 	Heat	Nuggets	Murray 20th, Vincent 2 threes, butler 5r	110	$10.00	No	No	Yes		 $ 10.00 	-0.91	48%	 $ 21.00 	 $ 11.00 	 $ -   	 $ -   	
@@ -991,8 +988,7 @@ Bet #	Date	Bookmaker	Bet Type	League	Home Team	Away Team	Bet Placed	Odds	Stake	L
 723	12/16/2023	DraftKings	Spread	NCAAM			Indiana +7.5	-120	$30.00	No	Yes	No		 $ 30.00 	0.96	55%	 $ 55.00 	 $ 25.00 	 $ 55.00 	 $ 25.00 	
 724	12/16/2023	DraftKings	Over / Under	NCAAM			Indiana over 146.5	-120	$30.00	No	No	No		 $ 30.00 	-1.04	55%	 $ 55.00 	 $ 25.00 	 $ -   	 $ (30.00)	
 725	12/16/2023	DraftKings	Spread	NCAAM			Florida A&M +24.5	-110	$30.00	No	No	No		 $ 30.00 	-1.00	52%	 $ 57.27 	 $ 27.27 	 $ -   	 $ (30.00)	
-726	10/25/2023	DraftKings	Over / Under	NBA 			Pacers over 40.5 wins	135	$200.00	No	At Risk	No		 $ 200.00 	-0.81	43%	 $ 470.00 	 $ 270.00 	 $ -   	 $ -   	
-727	12/20/2023	DraftKings	2 Leg Parlay	NCAAM			See Below	-135	$30.00	No	Yes	No		 $ 30.00 	0.91	57%	 $ 52.22 	 $ 22.22 	 $ 52.22 	 $ 22.22 	
+726	10/25/2023	DraftKings	Over / Under	NBA 			Pacers over 40.5 wins	135	$200.00	No	Yes	No		 $ 200.00 	-0.81	43%	 $ 470.00 	 $ 270.00 	 $ -   	 $ -   	 $ 270.00 727	12/20/2023	DraftKings	2 Leg Parlay	NCAAM			See Below	-135	$30.00	No	Yes	No		 $ 30.00 	0.91	57%	 $ 52.22 	 $ 22.22 	 $ 52.22 	 $ 22.22 	
 727	12/20/2023	DraftKings	     Leg	NCAAM			Arizona ML			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
 727	12/20/2023	DraftKings	     Leg	NCAAM			Chicago St ML			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
 728	12/20/2023	FanDuel	Spread	NCAAM			Xavier +5.5	-102	$30.00	No	No	No		 $ 30.00 	-0.96	50%	 $ 59.41 	 $ 29.41 	 $ -   	 $ (30.00)	
@@ -1163,4 +1159,4 @@ Bet #	Date	Bookmaker	Bet Type	League	Home Team	Away Team	Bet Placed	Odds	Stake	L
 871	1/10/2024	FanDuel	Spread	NCAAM			NC State +2.5	-104	$10.00	No	No	No		 $ 10.00 	-0.97	51%	 $ 19.62 	 $ 9.62 	 $ -   	 $ (10.00)	
 872	1/10/2024	FanDuel	Spread	NCAAM			Xavier +4.5	-105	$10.00	No	No	No		 $ 10.00 	-0.98	51%	 $ 19.52 	 $ 9.52 	 $ -   	 $ (10.00)	
 873	1/10/2024	FanDuel	Spread	NCAAM			Ole Miss +2.5	-118	$10.00	No	Yes	No		 $ 10.00 	0.97	54%	 $ 18.47 	 $ 8.47 	 $ 18.47 	 $ 8.47 	
-874	1/21/2024	FanDuel	SGP	NFL			diggs and bills ML	121	$10.00	No	No	No		 $ 10.00 	-0.86	45%	 $ 22.10 	 $ 12.10 	 $ -   	 $ (10.00)	
+874	1/21/2024	FanDuel	SGP	NFL			diggs and bills ML	121	$10.00	No	No	No		 $ 10.00 	-0.86	45%	 $ 22.10 	 $ 12.10 	 $ -   	 $ (10.00)	ADJ	2/12/2026	DraftKings	Adjustment		Balance Correction						N/A										 $ (36.46) 
