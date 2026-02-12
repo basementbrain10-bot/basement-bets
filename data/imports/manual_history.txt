@@ -98,7 +98,7 @@ Bet #	Date	Bookmaker	Bet Type	League	Home Team	Away Team	Bet Placed	Odds	Stake	L
 40	2/21/2023	DraftKings	2 Leg Parlay	NCAAM			See Below:	108	$20.00	No	No	No		 $ 20.00 	-0.92	48%	 $ 41.60 	 $ 21.60 	 $ -   	 $ (20.00)	
 	2/21/2023	DraftKings	     Leg	NCAAM	Texas	Iowa St	Iowa St +7.5			No	No	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
 	2/21/2023	DraftKings	     Leg	NCAAM	Georgia	Arkansas	Arkansas ML			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
-41	2/21/2023	DraftKings	3 Leg Parlay	NCAAM			See Below:	170	$12.00	No	No	No		 $ 12.00 	-0.71	37%	 $ 32.40 	 $ 20.40 	 $ -   	 $ (12.00)	
+41	2/21/2023	DraftKings	3 Leg Parlay	NCAAM			See Below:	170	$12.00	No	At Risk	No		 $ 12.00 	-0.71	37%	 $ 32.40 	 $ 20.40 	 $ -   	 $ -   	
 	2/21/2023	DraftKings	     Leg	NCAAM	Michigan St	Indiana	Michigan St ML			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
 	2/21/2023	DraftKings	     Leg	NCAAM	Nevada	San Jose St	Nevada ML			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
 	2/21/2023	DraftKings	     Leg	NCAAM	Creighton	Marquette	Creighton ML			Yes	No	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
@@ -447,7 +447,7 @@ Bet #	Date	Bookmaker	Bet Type	League	Home Team	Away Team	Bet Placed	Odds	Stake	L
 272	5/6/2023	FanDuel	Prop	NBA 	Miami Heat	New York Knicks	1+ dunk in final 3 minutes	120	$5.00	Yes	Yes	No		 $ 5.00 	1.15	45%	 $ 11.00 	 $ 6.00 	 $ 11.00 	 $ 6.00 	
 273	5/6/2023	DraftKings	Winner (ML)	MLB	Cincinnati Reds	Chicago White Sox	Reds not to bat in Bottom 9	-140	$45.00	No	Yes	No		 $ 45.00 	0.90	58%	 $ 77.14 	 $ 32.14 	 $ 77.14 	 $ 32.14 	
 274	5/7/2023	FanDuel	Over / Under	MLB	Reds	White Sox	NRFI	100	$10.00	No	No	No		 $ 10.00 	-0.95	50%	 $ 20.00 	 $ 10.00 	 $ -   	 $ (10.00)	
-275	5/7/2023	DraftKings	Prop	Other	F1	Racing	Miami Grand Prix Ferrari top 6 finishes	-125	$9.81	No	No	No		 $ 9.81 	-1.06	56%	 $ 17.66 	 $ 7.85 	 $ -   	 $ (9.81)	
+275	5/7/2023	DraftKings	Prop	Other	F1	Racing	Miami Grand Prix Ferrari top 6 finishes	-125	$9.81	No	At Risk	No		 $ 9.81 	-1.06	56%	 $ 17.66 	 $ 7.85 	 $ -   	 $ -   	
 276	5/7/2023	DraftKings	Prop	Other	F1	Racing	Miami Grand Prix Red Bull double podium	-125	$10.00	No	Yes	No		 $ 10.00 	0.94	56%	 $ 18.00 	 $ 8.00 	 $ 18.00 	 $ 8.00 	
 277	5/7/2023	DraftKings	3 Leg Parlay	Other			See Below	239	$10.00	No	Yes	No		 $ 10.00 	1.78	29%	 $ 33.90 	 $ 23.90 	 $ 33.90 	 $ 23.90 	
 	5/7/2023	DraftKings	     Leg	Other	F1	Racing	Miami Grand Prix Red Bull top 6 finishes			No	Yes	No				0%	 $ -   	 $ -   	 $ -   	 $ -   	
@@ -554,7 +554,7 @@ Bet #	Date	Bookmaker	Bet Type	League	Home Team	Away Team	Bet Placed	Odds	Stake	L
 366	6/4/2023	DraftKings	SGP	NBA 	Nuggets	Heat	Murray 4 A, Porter JR 2 3's, Jimmy 6 R, Jokic 5A	105	$15.00	No	No	No		 $ 15.00 	-0.93	49%	 $ 30.75 	 $ 15.75 	 $ -   	 $ (15.00)	
 367	6/4/2023	FanDuel	Over / Under	NBA 	Nuggets	Heat	Gordon PRA under 21.5	114	$25.00	No	Yes	No		 $ 25.00 	1.12	47%	 $ 53.50 	 $ 28.50 	 $ 53.50 	 $ 28.50 	
 368	6/4/2023	FanDuel	Over / Under	NBA 	Nuggets	Heat	Heat over 103.5	111	$10.00	No	Yes	No		 $ 10.00 	1.11	47%	 $ 21.10 	 $ 11.10 	 $ 21.10 	 $ 11.10 	
-369	6/4/2023	DraftKings	Prop	NBA 	Nuggets	Heat	Race to 15pts	195	$10.61	No	Yes	No		 $ 10.61 	1.55	34%	 $ 31.30 	 $ 20.69 	 $ 31.30 	 $ 20.69 	
+369	6/4/2023	DraftKings	Prop	NBA 	Nuggets	Heat	Race to 15pts	195	$10.61	No	At Risk	No		 $ 10.61 	1.55	34%	 $ 31.30 	 $ 20.69 	 $ -   	 $ -   	
 370	6/5/2023	DraftKings	Winner (ML)	Tennis	Rune	Cerundolo	Rune ML	-110	$15.00	Yes	Yes	No		 $ 15.00 	1.00	52%	 $ 28.64 	 $ 13.64 	 $ 28.64 	 $ 13.64 	
 371	6/6/2023	DraftKings	Winner (ML)	MLB	Angels	Cubs	Angels ML	-120	$20.00	No	Yes	No		 $ 20.00 	0.96	55%	 $ 36.67 	 $ 16.67 	 $ 36.67 	 $ 16.67 	
 372	6/6/2023	DraftKings	Winner (ML)	MLB	reds	dodgers	reds ml	160	$20.00	No	Yes	No		 $ 20.00 	1.36	38%	 $ 52.00 	 $ 32.00 	 $ 52.00 	 $ 32.00 	
