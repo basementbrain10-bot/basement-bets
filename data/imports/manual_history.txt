@@ -1159,4 +1159,5 @@ Bet #	Date	Bookmaker	Bet Type	League	Home Team	Away Team	Bet Placed	Odds	Stake	L
 871	1/10/2024	FanDuel	Spread	NCAAM			NC State +2.5	-104	$10.00	No	No	No		 $ 10.00 	-0.97	51%	 $ 19.62 	 $ 9.62 	 $ -   	 $ (10.00)	
 872	1/10/2024	FanDuel	Spread	NCAAM			Xavier +4.5	-105	$10.00	No	No	No		 $ 10.00 	-0.98	51%	 $ 19.52 	 $ 9.52 	 $ -   	 $ (10.00)	
 873	1/10/2024	FanDuel	Spread	NCAAM			Ole Miss +2.5	-118	$10.00	No	Yes	No		 $ 10.00 	0.97	54%	 $ 18.47 	 $ 8.47 	 $ 18.47 	 $ 8.47 	
-874	1/21/2024	FanDuel	SGP	NFL			diggs and bills ML	121	$10.00	No	No	No		 $ 10.00 	-0.86	45%	 $ 22.10 	 $ 12.10 	 $ -   	 $ (10.00)	ADJ	2/12/2026	DraftKings	Adjustment		Balance Correction						N/A										 $ (36.46) 
+874	1/21/2024	FanDuel	SGP	NFL			diggs and bills ML	121	$10.00	No	No	No		 $ 10.00 	-0.86	45%	 $ 22.10 	 $ 12.10 	 $ -   	 $ (10.00)	
+ADJ	2/12/2026	DraftKings	Adjustment		Balance Correction						N/A										 $ (36.46) 

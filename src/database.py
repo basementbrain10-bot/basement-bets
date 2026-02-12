@@ -840,6 +840,96 @@ def upsert_bt_daily_schedule(payload: list, date_yyyymmdd: str):
         """, {"date": date_yyyymmdd, "json": json.dumps(payload)})
         conn.commit()
 
+def _sync_transaction_for_bet(bet_id, doc=None):
+    """
+    Helper to upsert a transaction record reflecting the financial impact of a bet.
+    If doc is None or incomplete, fetches from DB.
+    """
+    try:
+        from src.database import insert_transaction, get_db_connection, _exec
+        
+        # If doc is missing or lacks key fields, fetch from DB
+        if not doc or not all(k in doc for k in ('provider', 'wager', 'status')):
+             with get_db_connection() as conn:
+                 row = _exec(conn, "SELECT * FROM bets WHERE id=%s", (bet_id,)).fetchone()
+                 if row:
+                     # Convert row to dict
+                     doc = dict(row)
+                     # Ensure date is string
+                     if hasattr(doc['date'], 'strftime'):
+                         doc['date'] = doc['date'].strftime("%Y-%m-%d")
+                 else:
+                     print(f"[DB] Bet {bet_id} not found for transaction sync.")
+                     return
+
+        txn_amount = 0.0
+        status_up = str(doc.get("status", "")).upper()
+        
+        # Use wager from doc (float)
+        try:
+            wager = float(doc.get("wager", 0))
+        except:
+            wager = 0.0
+            
+        try:
+            profit = float(doc.get("profit", 0))
+        except:
+            profit = 0.0
+
+        if status_up in ["PENDING", "OPEN", "AT RISK"]:
+            txn_amount = -1 * wager
+        elif status_up in ["LOST"]:
+             txn_amount = -1 * wager
+        elif status_up in ["WON"]:
+             # Won: Amount is Net Profit
+             txn_amount = profit
+        elif status_up in ["PUSH", "VOID"]:
+             txn_amount = 0.0
+        
+        # Adjustment handling
+        if "Adjustment" in str(doc.get("bet_type", "")) or "Adjustment" in str(doc.get("provider", "")):
+             txn_amount = profit
+             
+        txn_doc = {
+            "provider": doc.get('provider'),
+            "txn_id": f"bet_{bet_id}", 
+            "date": doc.get('date'),
+            "type": "Bet" if txn_amount <= 0 else "Payout", 
+            "description": f"Bet: {doc.get('description')} ({doc.get('bet_type')})",
+            "amount": txn_amount,
+            "user_id": doc.get('user_id'),
+            "raw_data": f"Linked to Bet ID {bet_id}"
+        }
+        insert_transaction(txn_doc)
+    except Exception as e:
+         print(f"[DB] Failed to auto-create transaction for bet {bet_id}: {e}")
+
+
+
+def update_bet_status(bet_id: int, status: str, user_id: str | None = None) -> bool:
+    """Update bet status for a user's bet."""
+    st = (status or '').upper()
+    if st not in ('WON', 'LOST', 'PUSH', 'PENDING'):
+        return False
+    q = """
+    UPDATE bets
+    SET status=%s
+    WHERE id=%s AND (%s IS NULL OR user_id=%s)
+    """
+    try:
+        with get_db_connection() as conn:
+            cur = _exec(conn, q, (st, int(bet_id), user_id, user_id))
+            conn.commit()
+            success = bool(cur.rowcount and cur.rowcount > 0)
+            
+        if success:
+            _sync_transaction_for_bet(bet_id)
+            
+        return success
+    except Exception as e:
+        print(f"[DB] update_bet_status error: {e}")
+        return False
+
 def insert_bet_v2(doc: dict, legs: list = None) -> int:
     """
     Inserts a bet into the 'bets' table with support for legs (currently ignored/summarized).
@@ -911,6 +1001,10 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
                     ),
                 )
                 conn.commit()
+                
+                # Link transaction
+                _sync_transaction_for_bet(bet_id, doc)
+                
                 return bet_id
             conn.commit()
 
@@ -958,16 +1052,7 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
     # 2. Insert Transaction (Bankroll Impact)
     # Only if bet_id found (meaning inserted or updated)
     if bet_id:
-        # Determine transaction type/amount
-        # PENDING -> Debit Wager? 
-        # WON/LOST -> Debit Wager + Credit Payout? or Net? 
-        # We model "Wager" as debit at placement. "Payout" as credit at settlement.
-        # But if we ingest settled bets directly (History), we just want the net effect?
-        # NO. We should insert "Wager" transaction if date matches. 
-        
-        # Simplified for MVP: Just ensure 'transactions' table has record.
-        # Check src/parsers/transactions.py logic if available.
-        pass
+        _sync_transaction_for_bet(bet_id, doc)
 
     return bet_id
 
@@ -1405,24 +1490,6 @@ def fetch_latest_ledger_info(user_id: str | None = None):
         print(f"[DB] fetch_latest_ledger_info error: {e}")
     return result
 
-def update_bet_status(bet_id: int, status: str, user_id: str | None = None) -> bool:
-    """Update bet status for a user's bet."""
-    st = (status or '').upper()
-    if st not in ('WON', 'LOST', 'PUSH', 'PENDING'):
-        return False
-    q = """
-    UPDATE bets
-    SET status=%s
-    WHERE id=%s AND (%s IS NULL OR user_id=%s)
-    """
-    try:
-        with get_db_connection() as conn:
-            cur = _exec(conn, q, (st, int(bet_id), user_id, user_id))
-            conn.commit()
-            return bool(cur.rowcount and cur.rowcount > 0)
-    except Exception as e:
-        print(f"[DB] update_bet_status error: {e}")
-        return False
 
 
 def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None, update_note: str | None = None) -> bool:
@@ -1523,7 +1590,12 @@ def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None, upd
             _ensure_audit_cols(conn)
             cur = _exec(conn, q, tuple(params))
             conn.commit()
-            return bool(cur.rowcount and cur.rowcount > 0)
+            success = bool(cur.rowcount and cur.rowcount > 0)
+            
+        if success:
+            _sync_transaction_for_bet(bet_id)
+            
+        return success
     except Exception as e:
         print(f"[DB] update_bet_fields error: {e}")
         return False
@@ -1531,10 +1603,13 @@ def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None, upd
 
 def delete_bet(bet_id: int, user_id: str | None = None) -> bool:
     """Delete a bet row (scoped to user_id when provided)."""
-    q = "DELETE FROM bets WHERE id=%s AND (%s IS NULL OR user_id=%s)"
+    q_bet = "DELETE FROM bets WHERE id=%s AND (%s IS NULL OR user_id=%s)"
+    q_txn = "DELETE FROM transactions WHERE txn_id=%s AND (%s IS NULL OR user_id=%s)"
     try:
         with get_db_connection() as conn:
-            cur = _exec(conn, q, (int(bet_id), user_id, user_id))
+            # Delete transaction first? Or after? Either way is fine in commit.
+            _exec(conn, q_txn, (f"bet_{bet_id}", user_id, user_id))
+            cur = _exec(conn, q_bet, (int(bet_id), user_id, user_id))
             conn.commit()
             return bool(cur.rowcount and cur.rowcount > 0)
     except Exception as e:
