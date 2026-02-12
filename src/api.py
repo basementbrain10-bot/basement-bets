@@ -675,11 +675,24 @@ async def parse_slip(request: Request, user: dict = Depends(get_current_user)):
             }
 
         if sportsbook == "DraftKings":
+            # Primary: DK 'My Bets' text dump parser
             from src.parsers.draftkings_text import DraftKingsTextParser
             parser = DraftKingsTextParser()
-            results = parser.parse(raw_text)
+            results = parser.parse(raw_text or "")
+
+            # Fallback: DK 'Card View' dump parser (often used when pasting multiple slips)
             if not results:
-                raise Exception("Failed to parse DraftKings slip")
+                try:
+                    from src.parsers.draftkings import DraftKingsParser
+                    results = DraftKingsParser().parse_text_dump(raw_text or "")
+                except Exception:
+                    results = []
+
+            if not results:
+                # Last resort: LLM (single bet)
+                from src.parsers.llm_parser import LLMSlipParser
+                parsed = LLMSlipParser().parse(raw_text, sportsbook)
+                return parsed
 
             # If multiple bets were pasted, return a batch.
             if len(results) > 1:

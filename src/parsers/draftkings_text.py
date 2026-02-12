@@ -19,13 +19,14 @@ class DraftKingsTextParser:
         
         for line in lines:
             line = line.strip()
-            if not line: continue
-            
+            if not line:
+                continue
+
             # Check for DK ID at start of line
             id_match = id_pattern.search(line)
             if id_match:
                 bet_id = id_match.group(1)
-                
+
                 # Find date in the buffer (look backwards)
                 raw_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -39,17 +40,33 @@ class DraftKingsTextParser:
                     if re.search(r"[A-Z][a-z]{2} \d{1,2}, \d{4}", buffer[-i]):
                         raw_date = buffer[-i]
                         break
-                
+
                 # If we have a buffer, parse it
                 if buffer:
                     bet = self._parse_block(buffer, raw_date, bet_id)
                     if bet:
                         bets.append(bet)
-                
+
                 buffer = []
             else:
                 buffer.append(line)
-                
+
+        # Handle trailing block when paste does not include a DK id line.
+        # (Common when copying multiple bets or partial slips.)
+        if buffer:
+            raw_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            for i in range(1, min(len(buffer) + 1, 11)):
+                d_match = date_pattern.search(buffer[-i])
+                if d_match:
+                    raw_date = d_match.group(1)
+                    break
+                if re.search(r"[A-Z][a-z]{2} \d{1,2}, \d{4}", buffer[-i]):
+                    raw_date = buffer[-i]
+                    break
+            bet = self._parse_block(buffer, raw_date, bet_id="DK_UNKNOWN")
+            if bet:
+                bets.append(bet)
+
         return bets
 
 
