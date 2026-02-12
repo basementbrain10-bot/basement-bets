@@ -10,7 +10,7 @@ import Research from './pages/Research';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 // import { StagingBanner } from './components/StagingBanner';
 
-console.log("Basement Bets Frontend v1.6.3 Loaded at " + new Date().toISOString());
+console.log("Basement Bets Frontend v1.6.4 Loaded at " + new Date().toISOString());
 
 // --- Login Modal Component ---
 const LoginModal = ({ onSubmit }) => {
@@ -2175,7 +2175,18 @@ function TransactionView({ bets, financials }) {
                                         </td>
                                         <td className="px-6 py-3 text-gray-400 text-xs">{bet.bet_type}</td>
                                         <td className="px-6 py-3 max-w-xs truncate text-gray-300 text-xs" title={bet.selection || bet.description}>
-                                            {bet.display_selection || bet.selection || bet.description}
+                                            {(() => {
+                                                // Keep Selection column concise: just team(s) + bet, not slip metadata.
+                                                const raw = bet.display_selection || bet.selection || bet.description || '';
+                                                let s = String(raw);
+                                                // Strip slip/settlement details that belong in other columns
+                                                ['Wager:', 'Paid:', 'Payout:', 'Final Score', 'Cash Out:', 'Potential Payout:'].forEach((tok) => {
+                                                    if (s.includes(tok)) s = s.split(tok)[0];
+                                                });
+                                                s = s.replace(/\s+/g, ' ').trim();
+                                                if (s.length > 80) s = s.slice(0, 77) + '...';
+                                                return s;
+                                            })()}
                                             {bet.is_live && <span className="ml-2 text-[9px] bg-red-900/50 text-red-300 px-1 rounded border border-red-800">LIVE</span>}
                                             {bet.is_bonus && <span className="ml-2 text-[9px] bg-yellow-900/50 text-yellow-300 px-1 rounded border border-yellow-800">BONUS</span>}
                                         </td>
@@ -2294,7 +2305,7 @@ const FinancialHeader = ({ financials, mode = 'all' }) => {
     if (!financials) return null;
     return (
         <div className="flex flex-wrap gap-4 mb-8">
-            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.6.3</div>
+            <div className="text-[10px] text-slate-500 absolute top-2 right-4">v1.6.4</div>
 
             {mode !== 'performance' && (
                 <FinancialCard
