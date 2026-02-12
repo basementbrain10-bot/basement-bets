@@ -4,66 +4,90 @@ from datetime import datetime
 
 class DraftKingsTextParser:
     def parse(self, content: str) -> List[Dict]:
+        """Parse raw copy-pasted text from DraftKings.
+
+        DK copy/paste formats vary. Two common shapes:
+        1) "My Bets" dump where each bet block ends with a DK transaction id line.
+        2) Multi-bet paste where each bet block *starts* with a DK id line.
+
+        This parser supports both.
         """
-        Parses raw copy-pasted text from DraftKings 'My Bets' view.
-        Blocks end with a 'DK...' transaction ID.
-        """
-        bets = []
-        # Regex to find the Transaction ID line (e.g., DK12345678)
+        bets: List[Dict] = []
+
         id_pattern = re.compile(r'^(DK\d+)')
-        # Accept with or without seconds (DK varies)
         date_pattern = re.compile(r'([A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}(?::\d{2})? [AP]M)')
 
-        lines = content.split('\n')
-        buffer = []
-        
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
+        lines = [ln.strip() for ln in (content or '').replace('\r\n', '\n').split('\n') if ln.strip()]
+        if not lines:
+            return []
 
-            # Check for DK ID at start of line
-            id_match = id_pattern.search(line)
-            if id_match:
-                bet_id = id_match.group(1)
+        def infer_date(buf: List[str]) -> str:
+            raw_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            for j in range(1, min(len(buf) + 1, 11)):
+                d_match = date_pattern.search(buf[-j])
+                if d_match:
+                    return d_match.group(1)
+                if re.search(r"[A-Z][a-z]{2} \d{1,2}, \d{4}", buf[-j]):
+                    return buf[-j]
+            return raw_date
 
-                # Find date in the buffer (look backwards)
-                raw_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Detect if DK ids are used as START markers (common for multi-bet paste)
+        first_id_idx = None
+        for idx, ln in enumerate(lines):
+            if id_pattern.search(ln):
+                first_id_idx = idx
+                break
 
-                # Check last 10 lines for a date-like string
-                for i in range(1, min(len(buffer) + 1, 11)):
-                    d_match = date_pattern.search(buffer[-i])
-                    if d_match:
-                        raw_date = d_match.group(1)
-                        break
-                    # Fallback: any line containing "Mon dd, yyyy" can be parsed by dateutil
-                    if re.search(r"[A-Z][a-z]{2} \d{1,2}, \d{4}", buffer[-i]):
-                        raw_date = buffer[-i]
-                        break
+        start_marker_mode = (first_id_idx is not None and first_id_idx <= 2)
 
-                # If we have a buffer, parse it
+        if start_marker_mode:
+            current_id = None
+            buf: List[str] = []
+
+            for ln in lines:
+                m = id_pattern.search(ln)
+                if m:
+                    # finalize previous
+                    if buf and current_id:
+                        raw_date = infer_date(buf)
+                        bet = self._parse_block(buf, raw_date, current_id)
+                        if bet:
+                            bets.append(bet)
+                    # start new
+                    current_id = m.group(1)
+                    buf = []
+                    continue
+
+                buf.append(ln)
+
+            # trailing
+            if buf:
+                raw_date = infer_date(buf)
+                bet = self._parse_block(buf, raw_date, current_id or 'DK_UNKNOWN')
+                if bet:
+                    bets.append(bet)
+
+            return bets
+
+        # Default: END marker mode (DK id ends a block)
+        buffer: List[str] = []
+        for ln in lines:
+            m = id_pattern.search(ln)
+            if m:
+                bet_id = m.group(1)
                 if buffer:
+                    raw_date = infer_date(buffer)
                     bet = self._parse_block(buffer, raw_date, bet_id)
                     if bet:
                         bets.append(bet)
-
                 buffer = []
             else:
-                buffer.append(line)
+                buffer.append(ln)
 
-        # Handle trailing block when paste does not include a DK id line.
-        # (Common when copying multiple bets or partial slips.)
+        # trailing block without id
         if buffer:
-            raw_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            for i in range(1, min(len(buffer) + 1, 11)):
-                d_match = date_pattern.search(buffer[-i])
-                if d_match:
-                    raw_date = d_match.group(1)
-                    break
-                if re.search(r"[A-Z][a-z]{2} \d{1,2}, \d{4}", buffer[-i]):
-                    raw_date = buffer[-i]
-                    break
-            bet = self._parse_block(buffer, raw_date, bet_id="DK_UNKNOWN")
+            raw_date = infer_date(buffer)
+            bet = self._parse_block(buffer, raw_date, bet_id='DK_UNKNOWN')
             if bet:
                 bets.append(bet)
 
