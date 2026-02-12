@@ -31,6 +31,29 @@ class DraftKingsTextParser:
                     return buf[-j]
             return raw_date
 
+        # Robust block splitting: DK ids often appear inline (no newlines).
+        # We split the raw content by DK ids and treat each DK id as the block terminator.
+        raw = (content or '').replace('\r\n', '\n')
+        raw = raw.replace('\u2212', '-').replace('\u2013', '-').replace('\u2014', '-').replace('\u2212', '-')
+        id_inline = re.compile(r'(DK\d{10,})')
+        matches = list(id_inline.finditer(raw))
+        if matches:
+            prev = 0
+            for m in matches:
+                bet_id = m.group(1)
+                block_text = raw[prev:m.start()].strip()
+                prev = m.end()
+                if not block_text:
+                    continue
+                # Use any existing newlines; otherwise keep as one line.
+                buf = [ln.strip() for ln in block_text.split('\n') if ln.strip()] or [block_text]
+                raw_date = infer_date(buf)
+                bet = self._parse_block(buf, raw_date, bet_id)
+                if bet:
+                    bets.append(bet)
+            # Ignore trailing text after last DK id (usually empty)
+            return bets
+
         # Detect if DK ids are used as START markers (common for multi-bet paste)
         first_id_idx = None
         for idx, ln in enumerate(lines):
@@ -393,17 +416,25 @@ class DraftKingsTextParser:
             if len(summary) > 140:
                 summary = summary[:137] + "..."
             
-            from dateutil.parser import parse as parse_date_util
+            # Date parse (avoid python-dateutil dependency in serverless)
+            dt = None
             try:
-                # Try explicit format first
-                # Clean header junk from date string in case it leaked
-                date_str_clean = date_str.split('\n')[0].strip()
+                date_str_clean = str(date_str).split('\n')[0].strip()
                 dt = datetime.strptime(date_str_clean, "%b %d, %Y, %I:%M:%S %p")
-            except:
+            except Exception:
+                dt = None
+
+            if dt is None:
+                # fallback: parse "Feb 9, 2026" without time
                 try:
-                    dt = parse_date_util(date_str)
-                except:
-                     dt = datetime.now()
+                    m = re.search(r"([A-Z][a-z]{2} \d{1,2}, \d{4})", str(date_str))
+                    if m:
+                        dt = datetime.strptime(m.group(1), "%b %d, %Y")
+                except Exception:
+                    dt = None
+
+            if dt is None:
+                dt = datetime.now()
             
             description = summary
 
