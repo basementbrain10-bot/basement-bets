@@ -236,8 +236,11 @@ function App() {
             } catch (err) {
                 console.error("API Error", err);
                 if (err?.response?.status === 403) {
-                    localStorage.removeItem('basement_password');
+                    try { localStorage.removeItem('basement_password'); } catch (e) { }
                     setShowLogin(true);
+                    setError('Wrong password. Please log in again.');
+                } else {
+                    setError(err?.response?.data?.message || err?.message || 'Failed to load dashboard.');
                 }
             } finally {
                 setLoading(false);
@@ -290,7 +293,36 @@ function App() {
     // Actuals sub-tab (combined Performance + Transactions)
     const [actualsTab, setActualsTab] = useState('performance'); // performance | transactions
 
-    if (!stats) return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white font-mono animate-pulse">Loading Basement Bets...</div>;
+    if (!stats) {
+        if (loading) {
+            return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white font-mono animate-pulse">Loading Basement Bets...</div>;
+        }
+        // If we're not loading and still have no stats, something went wrong (often auth).
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen text-red-500 bg-slate-950 p-6 text-center">
+                <AlertCircle size={48} className="mb-4" />
+                <h2 className="text-2xl font-bold mb-2">Unable to load dashboard</h2>
+                <p className="text-gray-400 mb-6">Most common cause: wrong Basement password saved in your browser.</p>
+                <div className="flex flex-wrap gap-4 justify-center">
+                    <button
+                        onClick={() => {
+                            try { localStorage.removeItem('basement_password'); } catch (e) { }
+                            window.location.reload();
+                        }}
+                        className="px-6 py-2 bg-slate-100 hover:bg-white text-slate-950 rounded-lg font-bold transition"
+                    >
+                        Clear Password & Retry
+                    </button>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="px-6 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-white font-bold transition"
+                    >
+                        Retry
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <ErrorBoundary>
