@@ -1654,7 +1654,8 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
     const runAudit = async () => {
         setAuditLoading(true);
         try {
-            const { data } = await api.get('/api/audit/bets/sport-mismatches', { params: { days: 180, limit: 1200 } });
+            // Audit the full Transactions history (not just a recent slice)
+            const { data } = await api.get('/api/audit/bets/sport-mismatches', { params: { days: 3650, limit: 20000 } });
             setAuditItems(data?.items || []);
             setShowAudit(true);
         } catch (err) {

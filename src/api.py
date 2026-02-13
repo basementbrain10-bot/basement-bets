@@ -1084,10 +1084,7 @@ async def apply_bet_sport_fix(bet_id: int, request: Request, user: dict = Depend
 
 @app.post("/api/audit/bets/backfill-sport")
 async def backfill_bet_sport(days: int = 365, limit: int = 5000, user: dict = Depends(get_current_user)):
-    """Backfill/repair bet.sport by re-detecting from raw_text/selection/description.
-
-    This is useful when sportsbook copy-pastes contained the wrong sport label.
-    """
+    """Backfill/repair bet.sport by re-detecting from raw_text/selection/description."""
     try:
         uid = user.get("sub")
         from datetime import datetime, timedelta
@@ -1129,6 +1126,24 @@ async def backfill_bet_sport(days: int = 365, limit: int = 5000, user: dict = De
 
         invalidate_analytics_cache(uid)
         return {"status": "success", "scanned": scanned, "updated": updated}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/audit/bets/review-fill")
+async def review_fill_missing_fields(days: int = 3650, limit: int = 20000, dry_run: bool = True, user: dict = Depends(get_current_user)):
+    """Review all bets and backfill missing fields (sport/bet_type/selection).
+
+    dry_run=true returns proposed changes (capped) without writing.
+    """
+    try:
+        uid = user.get('sub')
+        from src.services.bet_review_agent import BetReviewAgent
+        agent = BetReviewAgent()
+        res = agent.backfill_missing_fields(user_id=uid, days_back=int(days), limit=int(limit), dry_run=bool(dry_run))
+        if not dry_run:
+            invalidate_analytics_cache(uid)
+        return {"status": "success", **res}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
