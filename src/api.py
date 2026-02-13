@@ -1165,6 +1165,13 @@ async def backfill_event_text(days: int = 3650, limit: int = 20000, force: bool 
         now = datetime.now()
         cutoff = (now - timedelta(days=int(days))).date().isoformat()
 
+        # Defensive migration: ensure column exists before we reference it
+        with get_db_connection() as conn:
+            try:
+                _exec(conn, "ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_text TEXT;")
+            except Exception:
+                pass
+
         q = """
         SELECT id, date, event_text, raw_text, description, selection
         FROM bets
