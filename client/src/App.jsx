@@ -1950,7 +1950,10 @@ function TransactionView({ bets, financials, reconciliation }) {
 
 
 
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-xl">
+            <div className="glass-card rounded-2xl overflow-hidden shadow-2xl relative">
+                {/* Subtle top gradient line */}
+                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-green-500/30 to-transparent" />
+
                 {/* Toolbar / Summary */}
                 <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/50 backdrop-blur">
                     <div className="text-gray-400 text-sm">
@@ -1978,27 +1981,27 @@ function TransactionView({ bets, financials, reconciliation }) {
                     const betRows = (sortedBets || []).filter(b => (b.category || '') !== 'Transaction');
                     const sum = betRows.reduce((acc, b) => acc + (Number(b.profit) || 0), 0);
                     return (
-                        <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/30 flex items-center justify-between text-xs">
-                            <div className="text-slate-500">Filtered bets: <span className="text-slate-200 font-bold">{betRows.length}</span></div>
-                            <div className="text-slate-500">Σ Profit/Loss: <span className={`font-mono font-bold ${sum >= 0 ? 'text-green-300' : 'text-red-300'}`}>{formatCurrency(sum)}</span></div>
+                        <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/40 flex items-center justify-between text-xs backdrop-blur-sm">
+                            <div className="text-gray-500 font-medium">Filtered: <span className="text-green-400 font-bold">{betRows.length}</span></div>
+                            <div className="text-gray-500 font-medium">Σ Profit/Loss: <span className={`font-mono font-bold ${sum >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatCurrency(sum)}</span></div>
                         </div>
                     );
                 })()}
 
-                <div>
-                    <table className="w-full text-left text-xs table-fixed">
+                <div className="scrollbar-refined overflow-x-auto">
+                    <table className="w-full text-left text-xs table-fixed border-separate border-spacing-0">
                         <thead className="bg-gray-800 text-gray-400 font-medium uppercase text-xs tracking-wider">
                             {/* Header Labels */}
                             <tr>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[84px]" onClick={() => requestSort('date')}>Date{getSortIcon('date')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[60px]" onClick={() => requestSort('provider')}>Book{getSortIcon('provider')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[64px]" onClick={() => requestSort('sport')}>Sport{getSortIcon('sport')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[70px]" onClick={() => requestSort('bet_type')}>Type{getSortIcon('bet_type')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[220px]" onClick={() => requestSort('selection')}>Selection{getSortIcon('selection')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[60px]" onClick={() => requestSort('odds')}>Odds{getSortIcon('odds')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[70px]" onClick={() => requestSort('wager')}>Wager{getSortIcon('wager')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-center cursor-pointer hover:bg-gray-800 select-none w-[64px]" onClick={() => requestSort('status')}>Status{getSortIcon('status')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[76px]" onClick={() => requestSort('profit')}>P/L{getSortIcon('profit')}</th>
+                                <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[84px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('date')}>Date{getSortIcon('date')}</th>
+                                <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[80px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('provider')}>Book{getSortIcon('provider')}</th>
+                                <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[64px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('sport')}>Sport{getSortIcon('sport')}</th>
+                                <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[70px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('bet_type')}>Type{getSortIcon('bet_type')}</th>
+                                <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[200px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('selection')}>Selection{getSortIcon('selection')}</th>
+                                <th className="px-3 py-3 border-b border-gray-700/50 text-right cursor-pointer hover:bg-gray-800/50 select-none w-[60px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('odds')}>Odds{getSortIcon('odds')}</th>
+                                <th className="px-3 py-3 border-b border-gray-700/50 text-right cursor-pointer hover:bg-gray-800/50 select-none w-[70px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('wager')}>Wager{getSortIcon('wager')}</th>
+                                <th className="px-3 py-3 border-b border-gray-700/50 text-center cursor-pointer hover:bg-gray-800/50 select-none w-[64px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('status')}>Status{getSortIcon('status')}</th>
+                                <th className="px-3 py-3 border-b border-gray-700/50 text-right cursor-pointer hover:bg-gray-800/50 select-none w-[76px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('profit')}>P/L{getSortIcon('profit')}</th>
                             </tr>
                             {/* Filter Row */}
                             <tr className="bg-gray-850">
@@ -2090,19 +2093,22 @@ function TransactionView({ bets, financials, reconciliation }) {
                                             setShowEdit(true);
                                         }}
                                     >
-                                        <td className="px-2 py-2 text-gray-300 font-mono text-[11px] whitespace-nowrap" title={formatDateMDY(bet.sort_date || bet.date)}>{formatDateMDY(bet.sort_date || bet.date)}</td>
-                                        <td className="px-2 py-2">
-                                            <span className="text-[11px] text-gray-300 uppercase font-bold">
-                                                {bet.provider === 'DraftKings' ? 'DK' : bet.provider === 'FanDuel' ? 'FD' : bet.provider}
+                                        <td className="px-3 py-3 text-gray-400 font-mono text-[10px] whitespace-nowrap opacity-60" title={formatDateMDY(bet.sort_date || bet.date)}>{formatDateMDY(bet.sort_date || bet.date)}</td>
+                                        <td className="px-3 py-3">
+                                            <span className={`text-[10px] px-2 py-0.5 rounded font-black tracking-tighter uppercase border transition-colors duration-200 ${bet.provider === 'DraftKings' ? "bg-green-500/10 text-green-400 border-green-500/20" :
+                                                bet.provider === 'FanDuel' ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+                                                    "bg-gray-800/40 text-gray-400 border-gray-700/50"
+                                                }`}>
+                                                {bet.provider}
                                             </span>
                                         </td>
-                                        <td className="px-2 py-2">
-                                            <span className="text-[11px] text-gray-300 uppercase font-bold">
+                                        <td className="px-3 py-3">
+                                            <span className="text-[10px] text-gray-300 uppercase font-black tracking-widest opacity-80">
                                                 {bet.sport}
                                             </span>
                                         </td>
-                                        <td className="px-2 py-2 text-gray-400 text-[11px]">{bet.bet_type}</td>
-                                        <td className="px-2 py-2 truncate text-gray-300 text-xs" title={bet.selection || bet.description}>
+                                        <td className="px-3 py-3 text-gray-500 text-[10px] font-medium tracking-tight whitespace-nowrap overflow-hidden">{bet.bet_type}</td>
+                                        <td className="px-3 py-3 truncate text-gray-200 text-xs font-bold tracking-tight" title={bet.selection || bet.description}>
                                             {(() => {
                                                 // Keep Selection column concise: just team(s) + bet, not slip metadata.
                                                 const raw = bet.display_selection || bet.selection || bet.description || '';
@@ -2118,22 +2124,23 @@ function TransactionView({ bets, financials, reconciliation }) {
                                             {bet.is_live && <span className="ml-2 text-[9px] bg-red-900/50 text-red-300 px-1 rounded border border-red-800">LIVE</span>}
                                             {bet.is_bonus && <span className="ml-2 text-[9px] bg-yellow-900/50 text-yellow-300 px-1 rounded border border-yellow-800">BONUS</span>}
                                         </td>
-                                        <td className="px-2 py-2 text-right font-mono text-gray-400 text-[11px] whitespace-nowrap">
+                                        <td className="px-3 py-3 text-right font-mono text-gray-400 text-[11px] whitespace-nowrap">
                                             {!isTxn ? (bet.odds ? (bet.odds > 0 ? `+${bet.odds}` : bet.odds) : '-') : '-'}
                                         </td>
-                                        <td className={`px-2 py-2 text-right font-medium text-[11px] whitespace-nowrap ${isTxn ? 'text-gray-400' : 'text-gray-300'}`}>
+                                        <td className={`px-3 py-3 text-right font-medium text-[11px] whitespace-nowrap ${isTxn ? 'text-gray-400' : 'text-gray-300'}`}>
                                             {formatCurrency(bet.wager)}
                                         </td>
-                                        <td className="px-2 py-2 text-center">
-                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border ${isTxn ? (isDeposit ? 'bg-green-900/20 text-green-400 border-green-900' : 'bg-gray-800 text-gray-400 border-gray-700') :
-                                                ['WON', 'WIN'].includes(bet.status) ? 'bg-green-900/20 text-green-400 border-green-900' :
-                                                    ['LOST', 'LOSE'].includes(bet.status) ? 'bg-red-900/20 text-red-400 border-red-900' :
-                                                        'bg-gray-800 text-gray-400 border-gray-700'
+                                        <td className="px-3 py-3 text-center">
+                                            <span className={`px-2 py-1 rounded text-[10px] font-black tracking-widest border transition-all duration-300 ${isTxn ? (isDeposit ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20') :
+                                                    ['WON', 'WIN'].includes(bet.status) ? 'bg-green-500/10 text-green-400 border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.1)]' :
+                                                        ['LOST', 'LOSE'].includes(bet.status) ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                                                            bet.status === 'PUSH' ? 'bg-gray-500/10 text-gray-400 border-gray-500/20' :
+                                                                'bg-blue-500/10 text-blue-400 border-blue-500/20'
                                                 }`}>
                                                 {isTxn ? (isDeposit ? 'DEP' : 'WDR') : bet.status}
                                             </span>
                                         </td>
-                                        <td className={`px-2 py-2 text-right font-bold text-[11px] whitespace-nowrap ${bet.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        <td className={`px-3 py-3 text-right font-bold text-[11px] whitespace-nowrap ${bet.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                             {(bet.profit !== undefined && bet.profit !== null) ? (bet.profit >= 0 ? '+' : '') + formatCurrency(bet.profit) : '-'}
                                         </td>
 
