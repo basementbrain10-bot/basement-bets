@@ -226,6 +226,7 @@ def init_bets_db():
         is_live BOOLEAN DEFAULT FALSE,
         is_bonus BOOLEAN DEFAULT FALSE,
         raw_text TEXT,
+        event_text TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, provider, description, date, wager)
     );
@@ -236,6 +237,7 @@ def init_bets_db():
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS is_live BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS is_bonus BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS raw_text TEXT;",
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_text TEXT;",  # parsed matchup for UI (reduces need to ship raw_text)
         # In case we ever need account_id if it was missing 
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS account_id TEXT;",
         # Sportsbook-native id for strong dedupe (e.g. FanDuel BET ID: O/...) 
@@ -1058,14 +1060,15 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
                         closing_odds=%s,
                         is_live=%s,
                         is_bonus=%s,
-                        raw_text=%s
+                        raw_text=%s,
+                        event_text=%s
                     WHERE id=%s
                     """,
                     (
                         doc.get('account_id'), doc.get('date'), doc.get('sport'), doc.get('bet_type'),
                         doc.get('wager'), doc.get('profit'), doc.get('status'), doc.get('description'),
                         doc.get('selection'), doc.get('odds'), doc.get('closing_odds'), doc.get('is_live'),
-                        doc.get('is_bonus'), doc.get('raw_text'), bet_id
+                        doc.get('is_bonus'), doc.get('raw_text'), doc.get('event_text'), bet_id
                     ),
                 )
                 conn.commit()
@@ -1079,11 +1082,11 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
     query = """
     INSERT INTO bets (
         user_id, account_id, provider, date, sport, bet_type, wager, profit, status, 
-        description, selection, odds, closing_odds, is_live, is_bonus, raw_text,
+        description, selection, odds, closing_odds, is_live, is_bonus, raw_text, event_text,
         external_id, validation_errors
     ) VALUES (
         :user_id, :account_id, :provider, :date, :sport, :bet_type, :wager, :profit, :status, 
-        :description, :selection, :odds, :closing_odds, :is_live, :is_bonus, :raw_text,
+        :description, :selection, :odds, :closing_odds, :is_live, :is_bonus, :raw_text, :event_text,
         :external_id, :validation_errors
     )
     ON CONFLICT (user_id, provider, description, date, wager) DO UPDATE SET
@@ -1093,11 +1096,37 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
         odds = EXCLUDED.odds,
         closing_odds = EXCLUDED.closing_odds,
         raw_text = EXCLUDED.raw_text,
+        event_text = COALESCE(EXCLUDED.event_text, bets.event_text),
         external_id = COALESCE(EXCLUDED.external_id, bets.external_id),
         validation_errors = EXCLUDED.validation_errors
     RETURNING id;
     """
     
+    # event_text is a lightweight, UI-friendly matchup string we persist at ingest time
+    # so we don't need to ship raw_text to the client (reduces Neon egress).
+    def _extract_event_text(d: dict) -> str | None:
+        try:
+            s = "\n".join([
+                str(d.get('raw_text') or ''),
+                str(d.get('description') or ''),
+                str(d.get('selection') or ''),
+            ])
+            s = re.sub(r"\s+", " ", s).strip()
+            if not s:
+                return None
+            m = re.search(r"(.+?)\s*(?:@|vs\.?|versus)\s*(.+?)(?:\s*\||\s*$)", s, flags=re.IGNORECASE)
+            if m:
+                a = (m.group(1) or '').strip()
+                b = (m.group(2) or '').strip()
+                if a and b:
+                    return f"{a} @ {b}"[:160]
+        except Exception:
+            return None
+        return None
+
+    if 'event_text' not in doc or not doc.get('event_text'):
+        doc['event_text'] = _extract_event_text(doc)
+
     # Ensure validation_errors is present in doc, default to None
     if 'validation_errors' not in doc:
         doc['validation_errors'] = None
@@ -1478,7 +1507,7 @@ def fetch_all_bets(user_id=None, limit=None):
         query = """
         SELECT id, user_id, account_id, provider, date, sport, bet_type,
                wager, profit, status, description, selection, odds, 
-               closing_odds, is_live, is_bonus, raw_text, created_at
+               closing_odds, is_live, is_bonus, event_text, created_at
         FROM bets
         WHERE user_id = %s
         ORDER BY date DESC
@@ -1495,7 +1524,7 @@ def fetch_all_bets(user_id=None, limit=None):
         query = """
         SELECT id, user_id, account_id, provider, date, sport, bet_type,
                wager, profit, status, description, selection, odds,
-               closing_odds, is_live, is_bonus, raw_text, created_at
+               closing_odds, is_live, is_bonus, event_text, created_at
         FROM bets
         ORDER BY date DESC
         """
@@ -1743,10 +1772,10 @@ def insert_bet(bet_data: dict):
     query = """
     INSERT INTO bets (user_id, account_id, provider, date, sport, bet_type,
                       wager, profit, status, description, selection, odds,
-                      closing_odds, is_live, is_bonus, raw_text)
+                      closing_odds, is_live, is_bonus, raw_text, event_text)
     VALUES (:user_id, :account_id, :provider, :date, :sport, :bet_type,
             :wager, :profit, :status, :description, :selection, :odds,
-            :closing_odds, :is_live, :is_bonus, :raw_text)
+            :closing_odds, :is_live, :is_bonus, :raw_text, :event_text)
     ON CONFLICT (user_id, provider, description, date, wager) DO UPDATE SET
         profit = EXCLUDED.profit,
         status = EXCLUDED.status,
@@ -1755,11 +1784,29 @@ def insert_bet(bet_data: dict):
     # Ensure all required fields
     defaults = {
         'account_id': None, 'selection': None, 'odds': None, 
-        'closing_odds': None, 'is_live': False, 'is_bonus': False, 'raw_text': None
+        'closing_odds': None, 'is_live': False, 'is_bonus': False, 'raw_text': None, 'event_text': None
     }
     for k, v in defaults.items():
         if k not in bet_data:
             bet_data[k] = v
+
+    # Fill event_text if missing
+    if not bet_data.get('event_text'):
+        try:
+            s = "\n".join([
+                str(bet_data.get('raw_text') or ''),
+                str(bet_data.get('description') or ''),
+                str(bet_data.get('selection') or ''),
+            ])
+            s = re.sub(r"\s+", " ", s).strip()
+            m = re.search(r"(.+?)\s*(?:@|vs\.?|versus)\s*(.+?)(?:\s*\||\s*$)", s, flags=re.IGNORECASE)
+            if m:
+                a = (m.group(1) or '').strip()
+                b = (m.group(2) or '').strip()
+                if a and b:
+                    bet_data['event_text'] = f"{a} @ {b}"[:160]
+        except Exception:
+            pass
     
     with get_db_connection() as conn:
         _exec(conn, query, bet_data)

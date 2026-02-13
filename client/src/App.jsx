@@ -1722,7 +1722,8 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
 
     const extractEvent = (bet) => {
         // Goal: show teams/matchup if we can infer it.
-        // Priority: raw_text (best) -> description -> selection.
+        // Priority: event_text (from DB) -> raw_text -> description -> selection.
+        if (bet?.event_text) return String(bet.event_text);
         const sources = [bet?.raw_text, bet?.description, bet?.selection].filter(Boolean).map(s => String(s));
         const joined = sources.join(' \n ');
         const raw = joined.replace(/\s+/g, ' ').trim();
