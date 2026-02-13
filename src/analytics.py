@@ -775,15 +775,10 @@ class AnalyticsEngine:
             except:
                 parsed_bets.append((b, None))
 
+        # Anchor is always "now" so "Last 7/30 days" means true calendar time.
+        # (The prior "historical mode" behavior caused confusing windows where old bets
+        # could appear inside "last 30d" if there was a long gap in activity.)
         anchor = now
-        if valid_dates:
-            last_bet_date = max(valid_dates)
-            # If last bet is older than 30 days, assume historical mode
-            if (now - last_bet_date).days > 30:
-                anchor = last_bet_date
-                # Adjust year filter if it matches current calendar year to anchor year
-                if year and year == now.year:
-                    year = anchor.year
 
         for b, bet_date in parsed_bets:
             if not bet_date: continue
