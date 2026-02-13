@@ -348,7 +348,7 @@ function App() {
                                 onClick={() => setShowAddBet(true)}
                                 className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg flex items-center gap-2 font-bold transition-all shadow-[0_0_15px_rgba(34,197,94,0.3)]"
                             >
-                                <PlusCircle size={18} /> Add Bet
+                                <PlusCircle size={18} /> Add Bet Slip
                             </button>
                         </div>
                     </header>
@@ -1961,7 +1961,7 @@ function TransactionView({ bets, financials, reconciliation }) {
                             onClick={() => setShowManualAdd(true)}
                             className="text-xs text-green-300 hover:text-green-200 font-medium px-3 py-1.5 rounded-lg border border-green-900/40 hover:bg-green-900/20 transition"
                         >
-                            + Add Bet
+                            + Add Bet Slip
                         </button>
                         <button
                             onClick={resetFilters}
@@ -1990,15 +1990,15 @@ function TransactionView({ bets, financials, reconciliation }) {
                         <thead className="bg-gray-800 text-gray-400 font-medium uppercase text-xs tracking-wider">
                             {/* Header Labels */}
                             <tr>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[76px]" onClick={() => requestSort('date')}>Date{getSortIcon('date')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[54px]" onClick={() => requestSort('provider')}>Book{getSortIcon('provider')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[56px]" onClick={() => requestSort('sport')}>Sport{getSortIcon('sport')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[62px]" onClick={() => requestSort('bet_type')}>Type{getSortIcon('bet_type')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none" onClick={() => requestSort('selection')}>Selection{getSortIcon('selection')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[54px]" onClick={() => requestSort('odds')}>Odds{getSortIcon('odds')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[62px]" onClick={() => requestSort('wager')}>Wager{getSortIcon('wager')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-center cursor-pointer hover:bg-gray-800 select-none w-[56px]" onClick={() => requestSort('status')}>Status{getSortIcon('status')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[68px]" onClick={() => requestSort('profit')}>P/L{getSortIcon('profit')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[84px]" onClick={() => requestSort('date')}>Date{getSortIcon('date')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[60px]" onClick={() => requestSort('provider')}>Book{getSortIcon('provider')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[64px]" onClick={() => requestSort('sport')}>Sport{getSortIcon('sport')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[70px]" onClick={() => requestSort('bet_type')}>Type{getSortIcon('bet_type')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[220px]" onClick={() => requestSort('selection')}>Selection{getSortIcon('selection')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[60px]" onClick={() => requestSort('odds')}>Odds{getSortIcon('odds')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[70px]" onClick={() => requestSort('wager')}>Wager{getSortIcon('wager')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-center cursor-pointer hover:bg-gray-800 select-none w-[64px]" onClick={() => requestSort('status')}>Status{getSortIcon('status')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[76px]" onClick={() => requestSort('profit')}>P/L{getSortIcon('profit')}</th>
                             </tr>
                             {/* Filter Row */}
                             <tr className="bg-gray-850">

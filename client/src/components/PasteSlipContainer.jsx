@@ -222,7 +222,7 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
     return (
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 backdrop-blur-sm">
             <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-white">Paste or Sync Bet Slip</h2>
+                <h2 className="text-xl font-semibold text-white">Add Bet Slip</h2>
                 <button
                     onClick={() => { setRawText(''); setParsedData(null); setBatchResults(null); setError(null); onClose(); }}
                     className="text-slate-400 hover:text-white transition-colors"
@@ -355,8 +355,8 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                             Run this on the Mac to process it, then click <span className="font-bold">Re-check status</span>.
                         </div>
                         <pre className="text-[11px] bg-black/30 border border-slate-700 rounded p-3 overflow-x-auto">cd ~/clawd/repos/basement-bets
-source .venv311/bin/activate
-python scripts/sync_worker.py --once</pre>
+                            source .venv311/bin/activate
+                            python scripts/sync_worker.py --once</pre>
                         <div className="flex gap-2">
                             <button
                                 onClick={async () => {
