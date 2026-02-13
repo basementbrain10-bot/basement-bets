@@ -376,7 +376,7 @@ function App() {
                     ) : (
                         <>
                             {actualsTab === 'transactions' ? (
-                                <TransactionView bets={bets} financials={financials} reconciliation={reconciliation} loading={loading} />
+                                <TransactionView bets={bets} setBets={setBets} financials={financials} reconciliation={reconciliation} loading={loading} />
                             ) : (
                                 <PerformanceView
                                     timeSeries={timeSeries}
@@ -1421,7 +1421,7 @@ function OddsTicker() {
     );
 }
 
-function TransactionView({ bets, financials, reconciliation, loading }) {
+function TransactionView({ bets, setBets, financials, reconciliation, loading }) {
     const [selectedIds, setSelectedIds] = useState([]);
     const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
@@ -1581,7 +1581,7 @@ function TransactionView({ bets, financials, reconciliation, loading }) {
         if (!editBet?.id) return;
         setIsUpdating(true);
         try {
-            await api.patch(`/api/bets/${editBet.id}`, {
+            const payload = {
                 provider: editBet.provider,
                 date: editBet.date,
                 sport: editBet.sport,
@@ -1593,11 +1593,35 @@ function TransactionView({ bets, financials, reconciliation, loading }) {
                 description: editBet.description,
                 selection: editBet.selection,
                 update_note: editNote,
-            });
+            };
+
+            await api.patch(`/api/bets/${editBet.id}`, payload);
+
+            // Optimistically update the row in-memory so the UI reflects the save immediately.
+            if (typeof setBets === 'function') {
+                setBets((prev) => (prev || []).map((b) => {
+                    if (Number(b.id) !== Number(editBet.id)) return b;
+                    const date = String(editBet.date || '').slice(0, 10);
+                    return {
+                        ...b,
+                        provider: editBet.provider,
+                        date,
+                        sort_date: date,
+                        sport: editBet.sport,
+                        bet_type: editBet.bet_type,
+                        wager: editBet.wager === '' ? b.wager : Number(editBet.wager),
+                        odds: editBet.odds === '' ? b.odds : Number(editBet.odds),
+                        profit: editBet.profit === '' ? b.profit : Number(editBet.profit),
+                        status: editBet.status,
+                        description: editBet.description,
+                        selection: editBet.selection,
+                    };
+                }));
+            }
+
             setShowEdit(false);
             setEditBet(null);
             setEditNote('');
-            window.location.reload();
         } catch (err) {
             console.error('Edit save failed', err);
             alert('Failed to update bet.');
@@ -1611,7 +1635,9 @@ function TransactionView({ bets, financials, reconciliation, loading }) {
         setIsUpdating(true);
         try {
             await api.delete(`/api/bets/${betId}`);
-            window.location.reload();
+            if (typeof setBets === 'function') {
+                setBets((prev) => (prev || []).filter((b) => Number(b.id) !== Number(betId)));
+            }
         } catch (err) {
             console.error("Delete Error:", err);
             alert("Failed to delete bet.");
@@ -1639,18 +1665,7 @@ function TransactionView({ bets, financials, reconciliation, loading }) {
                 raw_text: 'manual-ui'
             });
 
-            setShowManualAdd(false);
-            setManualBet({
-                sportsbook: manualBet.sportsbook,
-                sport: manualBet.sport,
-                market_type: manualBet.market_type,
-                event_name: "",
-                selection: "",
-                odds: "",
-                stake: "",
-                status: manualBet.status,
-                placed_at: new Date().toISOString().slice(0, 10)
-            });
+            // easiest: refresh to pick up the inserted bet + refreshed analytics
             window.location.reload();
         } catch (err) {
             console.error('Manual bet save failed', err);
@@ -2248,6 +2263,24 @@ function TransactionView({ bets, financials, reconciliation, loading }) {
                                     <tr
                                         key={bet.id || bet.txn_id}
                                         className={`transition duration-150 cursor-pointer border-b border-gray-800/30 ${isSelected ? 'bg-blue-500/10 hover:bg-blue-500/20' : 'hover:bg-gray-800/40'}`}
+                                        onClick={() => {
+                                            if (!bet.id) return;
+                                            setEditBet({
+                                                id: bet.id,
+                                                provider: bet.provider,
+                                                date: (bet.sort_date || bet.date || '').slice(0, 10),
+                                                sport: bet.sport,
+                                                bet_type: bet.bet_type,
+                                                wager: bet.wager,
+                                                odds: bet.odds,
+                                                profit: bet.profit,
+                                                status: bet.status,
+                                                description: bet.description,
+                                                selection: bet.selection,
+                                            });
+                                            setEditNote('');
+                                            setShowEdit(true);
+                                        }}
                                     >
                                         <td className="px-3 py-3 w-[40px] text-center" onClick={(e) => e.stopPropagation()}>
                                             <input
@@ -2263,24 +2296,6 @@ function TransactionView({ bets, financials, reconciliation, loading }) {
                                         <td
                                             className="px-3 py-3 text-gray-400 font-mono text-[10px] whitespace-nowrap opacity-60"
                                             title={formatDateMDY(bet.sort_date || bet.date)}
-                                            onClick={() => {
-                                                if (!bet.id) return;
-                                                setEditBet({
-                                                    id: bet.id,
-                                                    provider: bet.provider,
-                                                    date: (bet.sort_date || bet.date || '').slice(0, 10),
-                                                    sport: bet.sport,
-                                                    bet_type: bet.bet_type,
-                                                    wager: bet.wager,
-                                                    odds: bet.odds,
-                                                    profit: bet.profit,
-                                                    status: bet.status,
-                                                    description: bet.description,
-                                                    selection: bet.selection,
-                                                });
-                                                setEditNote('');
-                                                setShowEdit(true);
-                                            }}
                                         >
                                             {formatDateMDY(bet.sort_date || bet.date)}
                                         </td>
