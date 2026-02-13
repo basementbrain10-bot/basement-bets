@@ -1718,6 +1718,27 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
     };
 
     const statuses = ['All', 'PENDING', 'WON', 'LOST', 'PUSH'];
+
+    const extractEvent = (bet) => {
+        // Goal: show teams/matchup if we can infer it from description/selection.
+        // Examples:
+        //  - "Team A @ Team B" (preferred)
+        //  - "Team A vs Team B"
+        //  - "... | Team A @ Team B | ..."
+        const raw = String(bet?.description || bet?.selection || '').replace(/\s+/g, ' ').trim();
+        if (!raw) return '';
+
+        // Try to pull a clean matchup from within the string.
+        const m = raw.match(/([A-Za-z0-9\.'\-\s&]+?)\s*(?:@|vs\.?|versus)\s*([A-Za-z0-9\.'\-\s&]+?)(?:\s*\||\s*$)/i);
+        if (m) {
+            const a = (m[1] || '').trim();
+            const b = (m[2] || '').trim();
+            if (a && b) return `${a} @ ${b}`;
+        }
+
+        // Fallback: sometimes selection is just a single team.
+        return '';
+    };
     const filtered = bets.filter(b => {
         // Filter out internal Wallet Transfers
         if ((b.description || "").toLowerCase().includes("wallet transfer")) return false;
@@ -2305,6 +2326,7 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[80px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('provider')}>Book{getSortIcon('provider')}</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[64px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('sport')}>Sport{getSortIcon('sport')}</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[70px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('bet_type')}>Type{getSortIcon('bet_type')}</th>
+                                <th className="px-3 py-3 border-b border-gray-700/50 select-none w-[180px] text-gray-500 font-black uppercase tracking-tighter">Event</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[200px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('selection')}>Selection{getSortIcon('selection')}</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 text-right cursor-pointer hover:bg-gray-800/50 select-none w-[60px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('odds')}>Odds{getSortIcon('odds')}</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 text-right cursor-pointer hover:bg-gray-800/50 select-none w-[70px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('wager')}>Wager{getSortIcon('wager')}</th>
@@ -2361,6 +2383,7 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                                         onChange={e => setFilters({ ...filters, selection: e.target.value })}
                                     />
                                 </th>
+                                <th className="px-1 py-1"></th>
                                 <th className="px-1 py-1"></th>
                                 <th className="px-1 py-1"></th>
                                 <th className="px-1 py-1">
@@ -2436,6 +2459,11 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                                             </span>
                                         </td>
                                         <td className="px-3 py-3 text-gray-500 text-[10px] font-medium tracking-tight whitespace-nowrap overflow-hidden">{bet.bet_type}</td>
+
+                                        <td className="px-3 py-3 text-gray-400 text-[11px] font-medium tracking-tight truncate" title={extractEvent(bet)}>
+                                            {extractEvent(bet) || '—'}
+                                        </td>
+
                                         <td className="px-3 py-3 truncate text-gray-200 text-xs font-bold tracking-tight" title={bet.selection || bet.description}>
                                             {(() => {
                                                 // Keep Selection column concise: just team(s) + bet, not slip metadata.
