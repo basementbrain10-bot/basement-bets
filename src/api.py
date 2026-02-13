@@ -1148,6 +1148,67 @@ async def review_fill_missing_fields(days: int = 3650, limit: int = 20000, dry_r
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/api/audit/bets/backfill-event-text")
+async def backfill_event_text(days: int = 3650, limit: int = 20000, user: dict = Depends(get_current_user)):
+    """One-time backfill: populate bets.event_text from raw_text/description/selection.
+
+    This reduces Neon egress because list endpoints can ship event_text instead of raw_text.
+    """
+    try:
+        uid = user.get('sub')
+        from datetime import datetime, timedelta
+        from src.database import get_db_connection, _exec, update_bet_fields
+
+        now = datetime.now()
+        cutoff = (now - timedelta(days=int(days))).date().isoformat()
+
+        q = """
+        SELECT id, date, event_text, raw_text, description, selection
+        FROM bets
+        WHERE user_id = %s AND date >= %s
+        ORDER BY date DESC
+        LIMIT %s
+        """
+
+        with get_db_connection() as conn:
+            rows = _exec(conn, q, (uid, cutoff, int(limit))).fetchall()
+
+        import re
+
+        def extract_event_text(raw_text: str, description: str, selection: str) -> str | None:
+            s = "\n".join([str(raw_text or ''), str(description or ''), str(selection or '')])
+            s = re.sub(r"\s+", " ", s).strip()
+            if not s:
+                return None
+            m = re.search(r"(.+?)\s*(?:@|vs\.?|versus)\s*(.+?)(?:\s*\||\s*$)", s, flags=re.IGNORECASE)
+            if not m:
+                return None
+            a = (m.group(1) or '').strip()
+            b = (m.group(2) or '').strip()
+            if not a or not b:
+                return None
+            return f"{a} @ {b}"[:160]
+
+        scanned = 0
+        updated = 0
+        for r in rows:
+            b = dict(r)
+            scanned += 1
+            if b.get('event_text'):
+                continue
+            ev = extract_event_text(b.get('raw_text'), b.get('description'), b.get('selection'))
+            if not ev:
+                continue
+            ok = update_bet_fields(int(b['id']), {"event_text": ev}, user_id=uid, update_note='audit: backfill event_text')
+            if ok:
+                updated += 1
+
+        invalidate_analytics_cache(uid)
+        return {"status": "success", "scanned": scanned, "updated": updated}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 
 @app.post("/api/research/grade")
 async def grade_research_history():
