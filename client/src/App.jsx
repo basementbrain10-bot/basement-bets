@@ -1760,23 +1760,33 @@ function TransactionView({ bets, financials, reconciliation }) {
                             </div>
                         </div>
 
-                        <div className="mt-5 flex items-center justify-end gap-3">
+                        <div className="mt-5 flex items-center justify-between">
                             <button
                                 type="button"
-                                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-bold"
-                                onClick={() => { setShowEdit(false); setEditBet(null); }}
+                                className="px-3 py-2 bg-red-900/30 hover:bg-red-900/60 text-red-400 hover:text-red-300 rounded-lg text-sm font-bold border border-red-900/40 flex items-center gap-1.5 transition"
+                                onClick={() => { handleDelete(editBet.id); setShowEdit(false); setEditBet(null); }}
                                 disabled={isUpdating}
                             >
-                                Cancel
+                                <Trash size={14} /> Delete
                             </button>
-                            <button
-                                type="button"
-                                className="px-4 py-2 bg-green-600 hover:bg-green-500 text-black rounded-lg text-sm font-black"
-                                onClick={handleEditSave}
-                                disabled={isUpdating}
-                            >
-                                {isUpdating ? 'Saving…' : 'Save'}
-                            </button>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    type="button"
+                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-bold"
+                                    onClick={() => { setShowEdit(false); setEditBet(null); }}
+                                    disabled={isUpdating}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    className="px-4 py-2 bg-green-600 hover:bg-green-500 text-black rounded-lg text-sm font-black"
+                                    onClick={handleEditSave}
+                                    disabled={isUpdating}
+                                >
+                                    {isUpdating ? 'Saving…' : 'Save'}
+                                </button>
+                            </div>
                         </div>
                         <div className="mt-2 text-[10px] text-slate-500">
                             Saves directly to the database (persists for history + analytics).
@@ -1976,20 +1986,19 @@ function TransactionView({ bets, financials, reconciliation }) {
                 })()}
 
                 <div>
-                    <table className="w-full text-left text-[11px] table-fixed">
+                    <table className="w-full text-left text-xs table-fixed">
                         <thead className="bg-gray-800 text-gray-400 font-medium uppercase text-xs tracking-wider">
                             {/* Header Labels */}
                             <tr>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[72px]" onClick={() => requestSort('date')}>Date{getSortIcon('date')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[70px]" onClick={() => requestSort('provider')}>Book{getSortIcon('provider')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[52px]" onClick={() => requestSort('sport')}>Sport{getSortIcon('sport')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[56px]" onClick={() => requestSort('bet_type')}>Type{getSortIcon('bet_type')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[76px]" onClick={() => requestSort('date')}>Date{getSortIcon('date')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[54px]" onClick={() => requestSort('provider')}>Book{getSortIcon('provider')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[56px]" onClick={() => requestSort('sport')}>Sport{getSortIcon('sport')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[62px]" onClick={() => requestSort('bet_type')}>Type{getSortIcon('bet_type')}</th>
                                 <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none" onClick={() => requestSort('selection')}>Selection{getSortIcon('selection')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[50px]" onClick={() => requestSort('odds')}>Odds{getSortIcon('odds')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[56px]" onClick={() => requestSort('wager')}>Wager{getSortIcon('wager')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-center cursor-pointer hover:bg-gray-800 select-none w-[50px]" onClick={() => requestSort('status')}>Status{getSortIcon('status')}</th>
-                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[64px]" onClick={() => requestSort('profit')}>P/L{getSortIcon('profit')}</th>
-                                <th className="px-1 py-2 border-b border-gray-700 text-right w-[80px]">Actions</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[54px]" onClick={() => requestSort('odds')}>Odds{getSortIcon('odds')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[62px]" onClick={() => requestSort('wager')}>Wager{getSortIcon('wager')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-center cursor-pointer hover:bg-gray-800 select-none w-[56px]" onClick={() => requestSort('status')}>Status{getSortIcon('status')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[68px]" onClick={() => requestSort('profit')}>P/L{getSortIcon('profit')}</th>
                             </tr>
                             {/* Filter Row */}
                             <tr className="bg-gray-850">
@@ -2052,7 +2061,6 @@ function TransactionView({ bets, financials, reconciliation }) {
                                     </select>
                                 </th>
                                 <th className="px-1 py-1"></th>
-                                <th className="px-1 py-1"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-800">
@@ -2082,19 +2090,19 @@ function TransactionView({ bets, financials, reconciliation }) {
                                             setShowEdit(true);
                                         }}
                                     >
-                                        <td className="px-2 py-2 text-gray-300 font-mono text-[10px] whitespace-nowrap" title={formatDateMDY(bet.sort_date || bet.date)}>{formatDateMDY(bet.sort_date || bet.date)}</td>
+                                        <td className="px-2 py-2 text-gray-300 font-mono text-[11px] whitespace-nowrap" title={formatDateMDY(bet.sort_date || bet.date)}>{formatDateMDY(bet.sort_date || bet.date)}</td>
                                         <td className="px-2 py-2">
-                                            <span className="text-[10px] text-gray-300 uppercase font-bold">
+                                            <span className="text-[11px] text-gray-300 uppercase font-bold">
                                                 {bet.provider === 'DraftKings' ? 'DK' : bet.provider === 'FanDuel' ? 'FD' : bet.provider}
                                             </span>
                                         </td>
                                         <td className="px-2 py-2">
-                                            <span className="text-[10px] text-gray-300 uppercase font-bold">
+                                            <span className="text-[11px] text-gray-300 uppercase font-bold">
                                                 {bet.sport}
                                             </span>
                                         </td>
-                                        <td className="px-2 py-2 text-gray-400 text-[10px]">{bet.bet_type}</td>
-                                        <td className="px-2 py-2 truncate text-gray-300 text-[11px]" title={bet.selection || bet.description}>
+                                        <td className="px-2 py-2 text-gray-400 text-[11px]">{bet.bet_type}</td>
+                                        <td className="px-2 py-2 truncate text-gray-300 text-xs" title={bet.selection || bet.description}>
                                             {(() => {
                                                 // Keep Selection column concise: just team(s) + bet, not slip metadata.
                                                 const raw = bet.display_selection || bet.selection || bet.description || '';
@@ -2110,14 +2118,14 @@ function TransactionView({ bets, financials, reconciliation }) {
                                             {bet.is_live && <span className="ml-2 text-[9px] bg-red-900/50 text-red-300 px-1 rounded border border-red-800">LIVE</span>}
                                             {bet.is_bonus && <span className="ml-2 text-[9px] bg-yellow-900/50 text-yellow-300 px-1 rounded border border-yellow-800">BONUS</span>}
                                         </td>
-                                        <td className="px-2 py-2 text-right font-mono text-gray-400 text-[10px] whitespace-nowrap">
+                                        <td className="px-2 py-2 text-right font-mono text-gray-400 text-[11px] whitespace-nowrap">
                                             {!isTxn ? (bet.odds ? (bet.odds > 0 ? `+${bet.odds}` : bet.odds) : '-') : '-'}
                                         </td>
-                                        <td className={`px-2 py-2 text-right font-medium text-[10px] whitespace-nowrap ${isTxn ? 'text-gray-400' : 'text-gray-300'}`}>
+                                        <td className={`px-2 py-2 text-right font-medium text-[11px] whitespace-nowrap ${isTxn ? 'text-gray-400' : 'text-gray-300'}`}>
                                             {formatCurrency(bet.wager)}
                                         </td>
                                         <td className="px-2 py-2 text-center">
-                                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${isTxn ? (isDeposit ? 'bg-green-900/20 text-green-400 border-green-900' : 'bg-gray-800 text-gray-400 border-gray-700') :
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border ${isTxn ? (isDeposit ? 'bg-green-900/20 text-green-400 border-green-900' : 'bg-gray-800 text-gray-400 border-gray-700') :
                                                 ['WON', 'WIN'].includes(bet.status) ? 'bg-green-900/20 text-green-400 border-green-900' :
                                                     ['LOST', 'LOSE'].includes(bet.status) ? 'bg-red-900/20 text-red-400 border-red-900' :
                                                         'bg-gray-800 text-gray-400 border-gray-700'
@@ -2125,19 +2133,10 @@ function TransactionView({ bets, financials, reconciliation }) {
                                                 {isTxn ? (isDeposit ? 'DEP' : 'WDR') : bet.status}
                                             </span>
                                         </td>
-                                        <td className={`px-2 py-2 text-right font-bold text-[10px] whitespace-nowrap ${bet.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        <td className={`px-2 py-2 text-right font-bold text-[11px] whitespace-nowrap ${bet.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                             {(bet.profit !== undefined && bet.profit !== null) ? (bet.profit >= 0 ? '+' : '') + formatCurrency(bet.profit) : '-'}
                                         </td>
-                                        <td className="px-1 py-2 text-right whitespace-nowrap">
-                                            {!isTxn && (
-                                                <span className="inline-flex gap-0.5">
-                                                    <button onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'WON'); }} className="px-1 py-0.5 text-[10px] text-green-500 hover:bg-green-500/10 rounded" disabled={isUpdating}>W</button>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'LOST'); }} className="px-1 py-0.5 text-[10px] text-red-500 hover:bg-red-500/10 rounded" disabled={isUpdating}>L</button>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'PUSH'); }} className="px-1 py-0.5 text-[10px] text-yellow-500 hover:bg-yellow-500/10 rounded" disabled={isUpdating}>P</button>
-                                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(bet.id); }} className="px-1 py-0.5 text-gray-500 hover:text-red-400" disabled={isUpdating}><Trash size={10} /></button>
-                                                </span>
-                                            )}
-                                        </td>
+
                                     </tr>
                                 );
                             })}
