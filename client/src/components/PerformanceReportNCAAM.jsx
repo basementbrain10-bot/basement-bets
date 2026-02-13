@@ -76,7 +76,7 @@ export default function PerformanceReportNCAAM() {
       ) : (
         <>
           <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(['7d','30d']).map((k) => {
+            {(['7d', '30d']).map((k) => {
               const w = data?.windows?.[k];
               if (!w) return null;
               const rec = w.record || {};
@@ -190,6 +190,7 @@ export default function PerformanceReportNCAAM() {
                             if (name === 'roi_pct') return [`${fmtPct(v)}`, 'ROI'];
                             if (name === 'win_rate') return [`${Number(v).toFixed(1)}%`, 'Win%'];
                             if (name === 'n') return [v, 'N'];
+                            if (name === 'avg_confidence') return [`${Number(v).toFixed(1)}%`, 'Avg Conf'];
                             return [v, name];
                           }}
                           labelFormatter={() => ''}
@@ -233,7 +234,14 @@ export default function PerformanceReportNCAAM() {
                       <Tooltip
                         contentStyle={{ background: '#0b1220', border: '1px solid #334155', color: '#e2e8f0' }}
                         labelStyle={{ color: '#94a3b8' }}
-                        formatter={(v, name) => [v, name === 'cum_units' ? 'Cum Units' : name]}
+                        formatter={(v, name, props) => {
+                          const { payload } = props;
+                          if (name === 'cum_units') return [v, 'All (Cum Units)'];
+                          if (name === 'cum_units_high') return [`${v} (${payload.n_high} bets)`, 'High (Cum Units)'];
+                          if (name === 'cum_units_medium') return [`${v} (${payload.n_medium} bets)`, 'Medium (Cum Units)'];
+                          if (name === 'cum_units_low') return [`${v} (${payload.n_low} bets)`, 'Low (Cum Units)'];
+                          return [v, name];
+                        }}
                       />
                       <Line type="monotone" dataKey="cum_units" stroke="#22c55e" strokeWidth={2} dot={false} name="All" />
                       <Line type="monotone" dataKey="cum_units_high" stroke="#60a5fa" strokeWidth={2} dot={false} name="High" />
@@ -280,13 +288,13 @@ export default function PerformanceReportNCAAM() {
                             // p.day is YYYY-MM-DD (ET). Show as MM/DD/YYYY.
                             const [yy, mm, dd] = String(p.day || '').split('-');
                             if (yy && mm && dd) return `${mm}/${dd}/${yy}`;
-                          } catch (e) {}
+                          } catch (e) { }
                           return p.day;
                         })()}</td>
                         <td className="py-2 px-3 text-slate-200">{p.matchup}</td>
                         <td className="py-2 px-3 text-white font-bold">{p.selection}</td>
                         <td className="py-2 px-3 text-slate-300 font-mono">{fmtOdds(p.price)}</td>
-                        <td className="py-2 px-3 text-green-300 font-mono font-bold">{evPct}%</td>
+                        <td className="py-2 px-3 text-green-300 font-mono font-bold">{evPct >= 0 ? '+' : ''}{evPct.toFixed(1)}%</td>
                         <td className="py-2 px-3 text-slate-200 font-bold">{confLabel(p.confidence_0_100)}</td>
                         <td className="py-2 px-3 text-slate-300 font-mono">{p.clv_points === null || p.clv_points === undefined ? '—' : fmtNum(p.clv_points, 2)}</td>
                         <td className="py-2 px-3 text-slate-300 font-mono">{p.roi_per_unit === null || p.roi_per_unit === undefined ? '—' : fmtNum(p.roi_per_unit, 2)}</td>

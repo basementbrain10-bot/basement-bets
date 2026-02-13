@@ -162,7 +162,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 const n2b = normalizeConfidence(rec?.confidence_level || rec?.confidence_label || rec?.confidence);
                 if (n2b) return n2b;
             }
-        } catch (e) {}
+        } catch (e) { }
 
         // 3) recommendation_json: legacy recommendations array
         try {
@@ -172,7 +172,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 const n3 = normalizeConfidence(rec?.confidence_level || rec?.confidence_label || rec?.confidence);
                 if (n3) return n3;
             }
-        } catch (e) {}
+        } catch (e) { }
 
         // 4) last resort: infer from EV
         return inferConfidenceFromEv(h);
@@ -210,7 +210,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 const dd = String(parts[1]).padStart(2, '0');
                 return `${mm}/${dd}`;
             }
-        } catch (e) {}
+        } catch (e) { }
         return day;
     };
 
@@ -352,10 +352,30 @@ const ModelPerformanceAnalytics = ({ history }) => {
             }
         }
 
-        return { dayKeys, series };
+        const seriesTop6 = [];
+        for (const key of dayKeys) {
+            const rows = byDay[key] || [];
+            // Sort by EV/u desc
+            const sorted = [...rows].sort((a, b) => getEv(b) - getEv(a));
+            const top6 = sorted.slice(0, 6);
+
+            const w = top6.filter(r => {
+                const s = String(getResult(r)).toUpperCase();
+                return s === 'WON' || s === 'WIN';
+            }).length;
+            const l = top6.filter(r => {
+                const s = String(getResult(r)).toUpperCase();
+                return s === 'LOST' || s === 'LOSS';
+            }).length;
+            const decided = w + l;
+            const wr = decided > 0 ? (w / decided * 100) : null;
+            seriesTop6.push(wr);
+        }
+
+        return { dayKeys, series, seriesTop6 };
     })();
 
-    const renderLineChart = () => {
+    const renderConfidenceChart = () => {
         const { dayKeys, series } = dailyWinSeries;
         const bands = [
             { k: 'High', color: '#34d399' },
@@ -383,10 +403,13 @@ const ModelPerformanceAnalytics = ({ history }) => {
 
         const pathFor = (arr) => {
             let d = '';
+            let first = true;
             for (let i = 0; i < arr.length; i++) {
+                if (arr[i] === null || arr[i] === undefined) continue;
                 const x = xAt(i);
                 const y = yAt(arr[i]);
-                d += (i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
+                d += (first ? `M ${x} ${y}` : ` L ${x} ${y}`);
+                first = false;
             }
             return d;
         };
@@ -406,6 +429,88 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {/* series */}
                 {bands.map((b) => (
                     <path key={b.k} d={pathFor(series[b.k] || [])} fill="none" stroke={b.color} strokeWidth="2" />
+                ))}
+
+                {/* x labels (sparse) */}
+                {tickIdx.map((i) => (
+                    <text key={i} x={xAt(i)} y={height - 6} fontSize="9" fill="rgba(148,163,184,0.7)" textAnchor="middle">
+                        {(() => {
+                            const parts = String(dayKeys[i] || '').split('/');
+                            if (parts.length >= 2) {
+                                const mm = String(parts[0]).padStart(2, '0');
+                                const dd = String(parts[1]).padStart(2, '0');
+                                return `${mm}/${dd}`;
+                            }
+                            return dayKeys[i] || '';
+                        })()}
+                    </text>
+                ))}
+            </svg>
+        );
+    };
+
+    const renderTop6Chart = () => {
+        const { dayKeys, seriesTop6 } = dailyWinSeries;
+        const color = '#fbbf24'; // Amber/Gold for top picks
+
+        const width = 720;
+        const height = 180;
+        const padL = 34;
+        const padR = 12;
+        const padT = 12;
+        const padB = 28;
+
+        const n = dayKeys.length;
+        const xAt = (i) => {
+            if (n <= 1) return padL;
+            return padL + (i * (width - padL - padR)) / (n - 1);
+        };
+        const yAt = (pct) => {
+            const v = (pct === null || pct === undefined) ? 50 : pct;
+            const clamped = Math.max(0, Math.min(100, Number(v)));
+            return padT + ((100 - clamped) * (height - padT - padB)) / 100.0;
+        };
+
+        const pathFor = (arr) => {
+            let d = '';
+            let first = true;
+            for (let i = 0; i < arr.length; i++) {
+                if (arr[i] === null || arr[i] === undefined) continue;
+                const x = xAt(i);
+                const y = yAt(arr[i]);
+                d += (first ? `M ${x} ${y}` : ` L ${x} ${y}`);
+                first = false;
+            }
+            return d;
+        };
+
+        const tickIdx = [0, Math.floor((n - 1) / 2), n - 1].filter((v, i, a) => a.indexOf(v) === i);
+
+        return (
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-48">
+                {/* grid */}
+                {[0, 25, 50, 75, 100].map((p) => (
+                    <g key={p}>
+                        <line x1={padL} x2={width - padR} y1={yAt(p)} y2={yAt(p)} stroke="rgba(148,163,184,0.15)" strokeWidth="1" />
+                        <text x={2} y={yAt(p) + 3} fontSize="9" fill="rgba(148,163,184,0.7)">{p}%</text>
+                    </g>
+                ))}
+
+                {/* area gradient */}
+                <defs>
+                    <linearGradient id="top6Gradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={color} stopOpacity="0.1" />
+                        <stop offset="100%" stopColor={color} stopOpacity="0" />
+                    </linearGradient>
+                </defs>
+                <path d={`${pathFor(seriesTop6.map(v => v === null ? 50 : v))} L ${xAt(n - 1)} ${height - padB} L ${padL} ${height - padB} Z`} fill="url(#top6Gradient)" />
+
+                {/* series */}
+                <path d={pathFor(seriesTop6)} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />
+
+                {/* points */}
+                {seriesTop6.map((v, i) => (
+                    v !== null && <circle key={i} cx={xAt(i)} cy={yAt(v)} r="3" fill={color} />
                 ))}
 
                 {/* x labels (sparse) */}
@@ -521,10 +626,10 @@ const ModelPerformanceAnalytics = ({ history }) => {
                                         <td className="py-1 px-2 text-right text-slate-400 font-mono">{b.count}</td>
                                         <td className="py-1 px-2 text-right text-slate-400 font-mono">{b.wins}-{b.losses}</td>
                                         <td className={`py-1 px-2 text-right font-bold ${b.winRate >= 55 ? 'text-green-400' : b.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                            {b.winRate.toFixed(0)}%
+                                            {b.winRate.toFixed(1)}%
                                         </td>
                                         <td className={`py-1 pl-2 text-right font-mono ${b.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {b.roi >= 0 ? '+' : ''}{b.roi.toFixed(0)}%
+                                            {b.roi >= 0 ? '+' : ''}{b.roi.toFixed(1)}%
                                         </td>
                                     </tr>
                                 ))}
@@ -557,10 +662,10 @@ const ModelPerformanceAnalytics = ({ history }) => {
                                         <td className="py-1 px-2 text-right text-slate-400 font-mono">{c.count}</td>
                                         <td className="py-1 px-2 text-right text-slate-400 font-mono">{c.wins}-{c.losses}</td>
                                         <td className={`py-1 px-2 text-right font-bold ${c.winRate >= 55 ? 'text-green-400' : c.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                            {c.winRate.toFixed(0)}%
+                                            {c.winRate.toFixed(1)}%
                                         </td>
                                         <td className={`py-1 pl-2 text-right font-mono ${c.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {c.roi >= 0 ? '+' : ''}{c.roi.toFixed(0)}%
+                                            {c.roi >= 0 ? '+' : ''}{c.roi.toFixed(1)}%
                                         </td>
                                     </tr>
                                 ))}
@@ -624,12 +729,20 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Daily Win% by Confidence</h4>
                     <div className="text-[10px] text-slate-500 mb-2">Last 14 days • Win% computed on decided bets (W/L) per confidence band.</div>
                     <div className="rounded-lg border border-slate-800 bg-slate-950/20 p-2">
-                        {renderLineChart()}
+                        {renderConfidenceChart()}
                     </div>
                     <div className="mt-2 flex items-center gap-4 text-[11px] text-slate-400">
                         <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#34d399' }}></span>High</div>
                         <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#60a5fa' }}></span>Medium</div>
                         <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#f59e0b' }}></span>Low</div>
+                    </div>
+
+                    <div className="mt-8">
+                        <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Top 6 Recommended Win Rate</h4>
+                        <div className="text-[10px] text-slate-500 mb-2">Last 14 days • Win% of the 6 highest EV graded bets each day.</div>
+                        <div className="rounded-lg border border-slate-800 bg-slate-950/20 p-2">
+                            {renderTop6Chart()}
+                        </div>
                     </div>
                 </div>
 

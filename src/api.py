@@ -2222,6 +2222,10 @@ async def get_model_performance_scatter(days: int = 60, min_ev_per_unit: float =
         win_rate = (won / wl * 100.0) if wl else 0.0
         roi_vals = [roi_per_unit(x.get('outcome'), x.get('price')) for x in xs]
         roi_pct = (sum(roi_vals) / decided * 100.0) if decided else 0.0
+        
+        conf_vals = [float(x.get('confidence_0_100') or 0) for x in xs]
+        avg_conf = (sum(conf_vals) / decided) if decided else 0.0
+
         out.append({
             "sport": sport,
             "market_type": mt,
@@ -2231,6 +2235,7 @@ async def get_model_performance_scatter(days: int = 60, min_ev_per_unit: float =
             "push": push,
             "win_rate": round(win_rate, 2),
             "roi_pct": round(roi_pct, 2),
+            "avg_confidence": round(avg_conf, 1)
         })
 
     # stable sort

@@ -991,7 +991,7 @@ const Research = ({ onAddBet }) => {
                                         const days = [...new Set(hist.map(h => etDay(h?.analyzed_at || h?.created_at)).filter(Boolean))].sort();
                                         const lastDay = days.length ? days[days.length - 1] : null;
                                         const dayRows = lastDay ? hist.filter(h => etDay(h?.analyzed_at || h?.created_at) === lastDay) : [];
-                                        const graded = dayRows.filter(h => ['WON','LOST','PUSH'].includes(normOutcome(h)));
+                                        const graded = dayRows.filter(h => ['WON', 'LOST', 'PUSH'].includes(normOutcome(h)));
                                         const w = graded.filter(h => normOutcome(h) === 'WON').length;
                                         const l = graded.filter(h => normOutcome(h) === 'LOST').length;
                                         const p = graded.filter(h => normOutcome(h) === 'PUSH').length;
@@ -1025,7 +1025,7 @@ const Research = ({ onAddBet }) => {
                                             try {
                                                 const [yy, mm, dd] = String(ymd || '').split('-');
                                                 if (yy && mm && dd) return `${mm}/${dd}/${yy}`;
-                                            } catch (e) {}
+                                            } catch (e) { }
                                             return ymd || '—';
                                         };
 
@@ -1193,9 +1193,14 @@ const Research = ({ onAddBet }) => {
                                                         <td className={`py-2 px-4 font-bold ${getEdgeColor(item.edge ?? mainRec.edge ?? item.ev_per_unit, item.league)}`}>
                                                             {(() => {
                                                                 const v = item.edge ?? mainRec.edge;
-                                                                if (v !== null && v !== undefined && v !== '') return v;
-                                                                const ev = Number(item.ev_per_unit ?? mainRec.ev_per_unit ?? item.ev);
-                                                                if (Number.isFinite(ev)) return `${(ev * 100).toFixed(1)}%`;
+                                                                const ev = Number(item.ev_per_unit ?? mainRec.ev_per_unit ?? item.ev ?? (v && !String(v).includes('%') ? v : null));
+                                                                if (Number.isFinite(ev)) {
+                                                                    const val = ev > 1 ? ev / 100 : ev; // Handle internal 0.1 vs 10 diffs if any
+                                                                    // Most likely ev_per_unit is 0.05 for 5%.
+                                                                    const pct = val * 100;
+                                                                    return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+                                                                }
+                                                                if (v && String(v).includes('%')) return v;
                                                                 return '—';
                                                             })()}
                                                         </td>
