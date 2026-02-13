@@ -1478,11 +1478,12 @@ def fetch_all_bets(user_id=None, limit=None):
         query = """
         SELECT id, user_id, account_id, provider, date, sport, bet_type,
                wager, profit, status, description, selection, odds, 
-               closing_odds, is_live, is_bonus, created_at
+               closing_odds, is_live, is_bonus, raw_text, created_at
         FROM bets
         WHERE user_id = %s
         ORDER BY date DESC
         """
+        # include raw_text so the UI can infer the matchup/event for display
         params = [user_id]
         if limit:
             query += " LIMIT %s"
@@ -1494,7 +1495,7 @@ def fetch_all_bets(user_id=None, limit=None):
         query = """
         SELECT id, user_id, account_id, provider, date, sport, bet_type,
                wager, profit, status, description, selection, odds,
-               closing_odds, is_live, is_bonus, created_at
+               closing_odds, is_live, is_bonus, raw_text, created_at
         FROM bets
         ORDER BY date DESC
         """

@@ -1721,15 +1721,15 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
     const statuses = ['All', 'PENDING', 'WON', 'LOST', 'PUSH'];
 
     const extractEvent = (bet) => {
-        // Goal: show teams/matchup if we can infer it from description/selection.
-        // Examples:
-        //  - "Team A @ Team B" (preferred)
-        //  - "Team A vs Team B"
-        //  - "... | Team A @ Team B | ..."
-        const raw = String(bet?.description || bet?.selection || '').replace(/\s+/g, ' ').trim();
+        // Goal: show teams/matchup if we can infer it.
+        // Priority: raw_text (best) -> description -> selection.
+        const sources = [bet?.raw_text, bet?.description, bet?.selection].filter(Boolean).map(s => String(s));
+        const joined = sources.join(' \n ');
+        const raw = joined.replace(/\s+/g, ' ').trim();
         if (!raw) return '';
 
         // Try to pull a clean matchup from within the string.
+        // Matches: "Team A @ Team B" or "Team A vs Team B" (optionally followed by pipes)
         const m = raw.match(/([A-Za-z0-9\.'\-\s&]+?)\s*(?:@|vs\.?|versus)\s*([A-Za-z0-9\.'\-\s&]+?)(?:\s*\||\s*$)/i);
         if (m) {
             const a = (m[1] || '').trim();
@@ -1737,7 +1737,21 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
             if (a && b) return `${a} @ ${b}`;
         }
 
-        // Fallback: sometimes selection is just a single team.
+        // Secondary: look line-by-line for a matchup string (raw_text retains line breaks)
+        for (const src of sources) {
+            const lines = String(src).split(/\n/).map(l => l.trim()).filter(Boolean);
+            for (const ln of lines) {
+                if (ln.includes('@') || /\b(vs\.?|versus)\b/i.test(ln)) {
+                    const mm = ln.match(/(.+?)\s*(?:@|vs\.?|versus)\s*(.+)/i);
+                    if (mm) {
+                        const a = (mm[1] || '').trim();
+                        const b = (mm[2] || '').trim();
+                        if (a && b) return `${a} @ ${b}`;
+                    }
+                }
+            }
+        }
+
         return '';
     };
     const filtered = bets.filter(b => {
