@@ -1518,6 +1518,11 @@ def fetch_all_bets(user_id=None, limit=None):
             query += " LIMIT %s"
             params.append(limit)
         with get_db_connection() as conn:
+            # Defensive migration: prod DB may lag new columns.
+            try:
+                _exec(conn, "ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_text TEXT;")
+            except Exception:
+                pass
             cursor = _exec(conn, query, tuple(params))
             return [dict(r) for r in cursor.fetchall()]
     else:
@@ -1531,6 +1536,11 @@ def fetch_all_bets(user_id=None, limit=None):
         if limit:
             query += f" LIMIT {int(limit)}"
         with get_db_connection() as conn:
+            # Defensive migration: prod DB may lag new columns.
+            try:
+                _exec(conn, "ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_text TEXT;")
+            except Exception:
+                pass
             cursor = _exec(conn, query)
             return [dict(r) for r in cursor.fetchall()]
 
