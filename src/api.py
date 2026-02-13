@@ -1149,8 +1149,11 @@ async def review_fill_missing_fields(days: int = 3650, limit: int = 20000, dry_r
 
 
 @app.post("/api/audit/bets/backfill-event-text")
-async def backfill_event_text(days: int = 3650, limit: int = 20000, user: dict = Depends(get_current_user)):
-    """One-time backfill: populate bets.event_text from raw_text/description/selection.
+async def backfill_event_text(days: int = 3650, limit: int = 20000, force: bool = False, user: dict = Depends(get_current_user)):
+    """One-time backfill: populate/repair bets.event_text from raw_text/description/selection.
+
+    - force=false (default): only fills missing event_text
+    - force=true: also repairs obviously malformed event_text
 
     This reduces Neon egress because list endpoints can ship event_text instead of raw_text.
     """
@@ -1216,22 +1219,52 @@ async def backfill_event_text(days: int = 3650, limit: int = 20000, user: dict =
                 return None
             return f"{a} @ {b}"[:160]
 
+        def looks_bad(ev: str) -> bool:
+            if not ev:
+                return True
+            s = str(ev)
+            if '@' not in s:
+                return True
+            # Tails like "TeamB -3.5" or "Over 147.5" should not be present in event_text
+            if re.search(r"\s+[+-]\d+(?:\.\d+)?\b", s):
+                return True
+            if re.search(r"\b(over|under)\b\s*\d+(?:\.\d+)?\b", s, re.IGNORECASE):
+                return True
+            # Repeated away/home team tokens (common failure): "A @ B B -3.5"
+            parts = [p.strip().lower() for p in s.split('@')]
+            if len(parts) == 2:
+                away, home = parts
+                if home and away and home.split(' ')[0] in away:
+                    return True
+            return False
+
         scanned = 0
         updated = 0
         for r in rows:
             b = dict(r)
             scanned += 1
-            if b.get('event_text'):
+
+            cur = b.get('event_text')
+            if cur and (not force) and (not looks_bad(cur)):
                 continue
+            if cur and (not force):
+                continue
+
+            if cur and force and (not looks_bad(cur)):
+                continue
+
             ev = extract_event_text(b.get('raw_text'), b.get('description'), b.get('selection'))
             if not ev:
                 continue
+            if cur and str(cur).strip() == ev.strip():
+                continue
+
             ok = update_bet_fields(int(b['id']), {"event_text": ev}, user_id=uid, update_note='audit: backfill event_text')
             if ok:
                 updated += 1
 
         invalidate_analytics_cache(uid)
-        return {"status": "success", "scanned": scanned, "updated": updated}
+        return {"status": "success", "scanned": scanned, "updated": updated, "force": bool(force)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
