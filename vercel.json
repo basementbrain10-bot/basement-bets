@@ -28,6 +28,14 @@
         {
             "path": "/api/jobs/ingest_results/NCAAM",
             "schedule": "30 7 * * *"
+        },
+        {
+            "path": "/api/jobs/reconcile",
+            "schedule": "45 7 * * *"
+        },
+        {
+            "path": "/api/jobs/grade_predictions",
+            "schedule": "0 8 * * *"
         }
     ]
 }

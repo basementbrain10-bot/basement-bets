@@ -974,6 +974,30 @@ def update_bet_status(bet_id: int, status: str, user_id: str | None = None) -> b
         print(f"[DB] update_bet_status error: {e}")
         return False
 
+def bulk_update_bet_status(bet_ids: list[int], status: str, user_id: str | None = None) -> int:
+    """Update status for multiple bets and sync their transactions."""
+    st = (status or '').upper()
+    if st not in ('WON', 'LOST', 'PUSH', 'PENDING'):
+        return 0
+    q = "UPDATE bets SET status=%s WHERE id=ANY(%s) AND (%s IS NULL OR user_id=%s)"
+    try:
+        with get_db_connection() as conn:
+            # Postgres ANY expects a list/tuple for the second param
+            cur = _exec(conn, q, (st, list(bet_ids), user_id, user_id))
+            conn.commit()
+            count = cur.rowcount
+            
+        if count > 0:
+            for bid in bet_ids:
+                try:
+                    _sync_transaction_for_bet(bid)
+                except:
+                    pass
+        return count
+    except Exception as e:
+        print(f"[DB] bulk_update_bet_status error: {e}")
+        return 0
+
 def insert_bet_v2(doc: dict, legs: list = None) -> int:
     """
     Inserts a bet into the 'bets' table with support for legs (currently ignored/summarized).
@@ -1694,6 +1718,21 @@ def delete_bet(bet_id: int, user_id: str | None = None) -> bool:
     except Exception as e:
         print(f"[DB] delete_bet error: {e}")
         return False
+
+def bulk_delete_bets(bet_ids: list[int], user_id: str | None = None) -> int:
+    """Delete multiple bets and their associated transactions."""
+    q_bet = "DELETE FROM bets WHERE id=ANY(%s) AND (%s IS NULL OR user_id=%s)"
+    q_txn = "DELETE FROM transactions WHERE txn_id=ANY(%s) AND (%s IS NULL OR user_id=%s)"
+    txn_ids = [f"bet_{bid}" for bid in bet_ids]
+    try:
+        with get_db_connection() as conn:
+            _exec(conn, q_txn, (txn_ids, user_id, user_id))
+            cur = _exec(conn, q_bet, (list(bet_ids), user_id, user_id))
+            conn.commit()
+            return cur.rowcount
+    except Exception as e:
+        print(f"[DB] bulk_delete_bets error: {e}")
+        return 0
 
 
 def insert_bet(bet_data: dict):

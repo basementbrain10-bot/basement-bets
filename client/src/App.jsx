@@ -116,6 +116,7 @@ function App() {
     const [edgeBreakdown, setEdgeBreakdown] = useState([]);
     const [showAddBet, setShowAddBet] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     // Auth State
     const [showLogin, setShowLogin] = useState(() => {
@@ -238,7 +239,8 @@ function App() {
                     localStorage.removeItem('basement_password');
                     setShowLogin(true);
                 }
-                setError(err.message || "Failed to load dashboard data.");
+            } finally {
+                setLoading(false);
             }
         };
         fetchData();
@@ -374,7 +376,7 @@ function App() {
                     ) : (
                         <>
                             {actualsTab === 'transactions' ? (
-                                <TransactionView bets={bets} financials={financials} reconciliation={reconciliation} />
+                                <TransactionView bets={bets} financials={financials} reconciliation={reconciliation} loading={loading} />
                             ) : (
                                 <PerformanceView
                                     timeSeries={timeSeries}
@@ -1419,7 +1421,25 @@ function OddsTicker() {
     );
 }
 
-function TransactionView({ bets, financials, reconciliation }) {
+function TransactionView({ bets, financials, reconciliation, loading }) {
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+
+    const SkeletonRow = () => (
+        <tr className="animate-pulse border-b border-gray-800/20">
+            <td className="px-3 py-4 w-[40px]"><div className="h-4 bg-gray-800/50 rounded w-4" /></td>
+            <td className="px-3 py-4 w-[84px]"><div className="h-2 bg-gray-800/50 rounded w-16" /></td>
+            <td className="px-3 py-4 w-[80px]"><div className="h-4 bg-gray-800/50 rounded w-14" /></td>
+            <td className="px-3 py-4 w-[64px]"><div className="h-4 bg-gray-800/50 rounded w-10" /></td>
+            <td className="px-3 py-4 w-[70px]"><div className="h-4 bg-gray-800/50 rounded w-12" /></td>
+            <td className="px-3 py-4 w-[200px]"><div className="h-4 bg-gray-800/50 rounded w-40" /></td>
+            <td className="px-3 py-4 w-[60px] text-right"><div className="h-4 bg-gray-800/50 rounded w-8 ml-auto" /></td>
+            <td className="px-3 py-4 w-[70px] text-right"><div className="h-4 bg-gray-800/50 rounded w-12 ml-auto" /></td>
+            <td className="px-3 py-4 w-[64px] text-center"><div className="h-5 bg-gray-800/50 rounded w-16 mx-auto" /></td>
+            <td className="px-3 py-4 w-[76px] text-right"><div className="h-4 bg-gray-800/50 rounded w-14 ml-auto" /></td>
+        </tr>
+    );
+
     const [filters, setFilters] = useState({
         date: "",
         sportsbook: "All",
@@ -1428,6 +1448,63 @@ function TransactionView({ bets, financials, reconciliation }) {
         selection: "",
         status: "All"
     });
+
+    const sevenDayData = React.useMemo(() => {
+        const days = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            days.push(d.toISOString().slice(0, 10));
+        }
+
+        let cumulative = 0;
+        return days.map(day => {
+            const dayProfit = bets
+                .filter(b => b.date.includes(day) && (b.category || '') !== 'Transaction')
+                .reduce((sum, b) => sum + (Number(b.profit) || 0), 0);
+            cumulative += dayProfit;
+            return {
+                name: day.slice(5), // MM-DD
+                profit: cumulative
+            };
+        });
+    }, [bets]);
+
+    const handleBulkStatusUpdate = async (newStatus) => {
+        if (!confirm(`Mark ${selectedIds.length} bets as ${newStatus}?`)) return;
+        setIsBulkUpdating(true);
+        try {
+            await api.post('/api/bets/bulk-status', {
+                bet_ids: selectedIds,
+                status: newStatus
+            });
+            setSelectedIds([]);
+            window.location.reload();
+        } catch (err) {
+            console.error(err);
+            alert("Bulk update failed.");
+        } finally {
+            setIsBulkUpdating(false);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!confirm(`Delete ${selectedIds.length} bets forever?`)) return;
+        setIsBulkUpdating(true);
+        try {
+            await api.post('/api/bets/bulk-delete', {
+                bet_ids: selectedIds
+            });
+            setSelectedIds([]);
+            window.location.reload();
+        } catch (err) {
+            console.error(err);
+            alert("Bulk delete failed.");
+        } finally {
+            setIsBulkUpdating(false);
+        }
+    };
+
 
     // Optional prefill from other charts (e.g., Performance scatter)
     useEffect(() => {
@@ -1955,23 +2032,84 @@ function TransactionView({ bets, financials, reconciliation }) {
                 <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-green-500/30 to-transparent" />
 
                 {/* Toolbar / Summary */}
-                <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/50 backdrop-blur">
-                    <div className="text-gray-400 text-sm">
-                        Showing <span className="text-white font-bold">{filtered.length}</span> of {bets.length} transactions
+                <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/50 backdrop-blur min-h-[72px]">
+                    <div className="flex items-center gap-4">
+                        <div className="text-gray-400 text-sm">
+                            Showing <span className="text-white font-bold">{filtered.length}</span> of {bets.length} transactions
+                        </div>
+                        {!loading && bets.length > 0 && (
+                            <div className="h-10 w-32 hidden md:block opacity-80 hover:opacity-100 transition-opacity">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={sevenDayData}>
+                                        <defs>
+                                            <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor={sevenDayData[6]?.profit >= 0 ? "#4ade80" : "#f87171"} stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor={sevenDayData[6]?.profit >= 0 ? "#4ade80" : "#f87171"} stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <Area
+                                            type="monotone"
+                                            dataKey="profit"
+                                            stroke={sevenDayData[6]?.profit >= 0 ? "#4ade80" : "#f87171"}
+                                            strokeWidth={2}
+                                            fillOpacity={1}
+                                            fill="url(#trendGradient)"
+                                            isAnimationActive={false}
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                                <div className="text-[8px] text-gray-500 font-bold uppercase tracking-tighter text-center -mt-1">7D Trend</div>
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setShowManualAdd(true)}
-                            className="text-xs text-green-300 hover:text-green-200 font-medium px-3 py-1.5 rounded-lg border border-green-900/40 hover:bg-green-900/20 transition"
-                        >
-                            + Add Bet Slip
-                        </button>
-                        <button
-                            onClick={resetFilters}
-                            className="text-xs text-blue-400 hover:text-blue-300 font-medium px-3 py-1.5 rounded-lg border border-blue-900/30 hover:bg-blue-900/20 transition"
-                        >
-                            Clear Filters
-                        </button>
+                        {selectedIds.length > 0 ? (
+                            <div className="flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/20 px-2 py-1 rounded-lg animate-in slide-in-from-right-2">
+                                <span className="text-[10px] font-black text-blue-400 mr-1 uppercase">{selectedIds.length} Selected</span>
+                                <button
+                                    onClick={() => handleBulkStatusUpdate('WON')}
+                                    disabled={isBulkUpdating}
+                                    className="text-[10px] bg-green-600/20 hover:bg-green-600/40 text-green-400 font-bold px-2 py-1 rounded border border-green-500/20 transition"
+                                >
+                                    WON
+                                </button>
+                                <button
+                                    onClick={() => handleBulkStatusUpdate('LOST')}
+                                    disabled={isBulkUpdating}
+                                    className="text-[10px] bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold px-2 py-1 rounded border border-red-500/20 transition"
+                                >
+                                    LOST
+                                </button>
+                                <button
+                                    onClick={handleBulkDelete}
+                                    disabled={isBulkUpdating}
+                                    className="text-[10px] bg-gray-800 hover:bg-red-900/40 text-gray-400 hover:text-red-300 font-bold px-2 py-1 rounded border border-gray-700 transition"
+                                >
+                                    <Trash size={12} />
+                                </button>
+                                <button
+                                    onClick={() => setSelectedIds([])}
+                                    className="ml-1 text-gray-500 hover:text-white"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={() => setShowManualAdd(true)}
+                                    className="text-xs text-green-300 hover:text-green-200 font-medium px-3 py-1.5 rounded-lg border border-green-900/40 hover:bg-green-900/20 transition"
+                                >
+                                    + Add Bet Slip
+                                </button>
+                                <button
+                                    onClick={resetFilters}
+                                    className="text-xs text-blue-400 hover:text-blue-300 font-medium px-3 py-1.5 rounded-lg border border-blue-900/30 hover:bg-blue-900/20 transition"
+                                >
+                                    Clear Filters
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -1992,7 +2130,18 @@ function TransactionView({ bets, financials, reconciliation }) {
                     <table className="w-full text-left text-xs table-fixed border-separate border-spacing-0">
                         <thead className="bg-gray-800 text-gray-400 font-medium uppercase text-xs tracking-wider">
                             {/* Header Labels */}
-                            <tr>
+                            <tr className="bg-gray-900/20 backdrop-blur-sm">
+                                <th className="px-3 py-2 border-b border-gray-800 w-[40px] text-center">
+                                    <input
+                                        type="checkbox"
+                                        className="h-3 w-3 rounded border-gray-700 bg-gray-900 text-blue-500 focus:ring-0 focus:ring-offset-0"
+                                        checked={selectedIds.length > 0 && selectedIds.length === (sortedBets || []).length}
+                                        onChange={(e) => {
+                                            if (e.target.checked) setSelectedIds((sortedBets || []).map(b => b.id).filter(Boolean));
+                                            else setSelectedIds([]);
+                                        }}
+                                    />
+                                </th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[84px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('date')}>Date{getSortIcon('date')}</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[80px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('provider')}>Book{getSortIcon('provider')}</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[64px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('sport')}>Sport{getSortIcon('sport')}</th>
@@ -2005,6 +2154,7 @@ function TransactionView({ bets, financials, reconciliation }) {
                             </tr>
                             {/* Filter Row */}
                             <tr className="bg-gray-850">
+                                <th className="px-1 py-1"></th> {/* Empty cell for the new checkbox column */}
                                 <th className="px-1 py-1">
                                     <input
                                         type="text"
@@ -2067,33 +2217,52 @@ function TransactionView({ bets, financials, reconciliation }) {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-800">
-                            {sortedBets.map((bet) => {
-                                const isTxn = bet.category === 'Transaction';
-                                const isDeposit = bet.bet_type === 'Deposit' || (bet.bet_type === 'Other' && bet.amount > 0);
+                            {loading ? (
+                                Array(10).fill(0).map((_, i) => <SkeletonRow key={i} />)
+                            ) : sortedBets.map((bet) => {
+                                const isTxn = (bet.category === 'Transaction');
+                                const isDeposit = isTxn && (Number(bet.wager) < 0 || (bet.description || '').toLowerCase().includes('deposit'));
+                                const isSelected = selectedIds.includes(bet.id);
                                 return (
                                     <tr
                                         key={bet.id || bet.txn_id}
-                                        className="hover:bg-gray-800/50 transition duration-150 cursor-pointer"
-                                        onClick={() => {
-                                            if (!bet.id) return;
-                                            setEditBet({
-                                                id: bet.id,
-                                                provider: bet.provider,
-                                                date: (bet.sort_date || bet.date || '').slice(0, 10),
-                                                sport: bet.sport,
-                                                bet_type: bet.bet_type,
-                                                wager: bet.wager,
-                                                odds: bet.odds,
-                                                profit: bet.profit,
-                                                status: bet.status,
-                                                description: bet.description,
-                                                selection: bet.selection,
-                                            });
-                                            setEditNote('');
-                                            setShowEdit(true);
-                                        }}
+                                        className={`transition duration-150 cursor-pointer border-b border-gray-800/30 ${isSelected ? 'bg-blue-500/10 hover:bg-blue-500/20' : 'hover:bg-gray-800/40'}`}
                                     >
-                                        <td className="px-3 py-3 text-gray-400 font-mono text-[10px] whitespace-nowrap opacity-60" title={formatDateMDY(bet.sort_date || bet.date)}>{formatDateMDY(bet.sort_date || bet.date)}</td>
+                                        <td className="px-3 py-3 w-[40px] text-center" onClick={(e) => e.stopPropagation()}>
+                                            <input
+                                                type="checkbox"
+                                                className="h-3 w-3 rounded border-gray-700 bg-gray-900 text-blue-500 focus:ring-0 focus:ring-offset-0"
+                                                checked={isSelected}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setSelectedIds(prev => [...prev, bet.id]);
+                                                    else setSelectedIds(prev => prev.filter(id => id !== bet.id));
+                                                }}
+                                            />
+                                        </td>
+                                        <td
+                                            className="px-3 py-3 text-gray-400 font-mono text-[10px] whitespace-nowrap opacity-60"
+                                            title={formatDateMDY(bet.sort_date || bet.date)}
+                                            onClick={() => {
+                                                if (!bet.id) return;
+                                                setEditBet({
+                                                    id: bet.id,
+                                                    provider: bet.provider,
+                                                    date: (bet.sort_date || bet.date || '').slice(0, 10),
+                                                    sport: bet.sport,
+                                                    bet_type: bet.bet_type,
+                                                    wager: bet.wager,
+                                                    odds: bet.odds,
+                                                    profit: bet.profit,
+                                                    status: bet.status,
+                                                    description: bet.description,
+                                                    selection: bet.selection,
+                                                });
+                                                setEditNote('');
+                                                setShowEdit(true);
+                                            }}
+                                        >
+                                            {formatDateMDY(bet.sort_date || bet.date)}
+                                        </td>
                                         <td className="px-3 py-3">
                                             <span className={`text-[10px] px-2 py-0.5 rounded font-black tracking-tighter uppercase border transition-colors duration-200 ${bet.provider === 'DraftKings' ? "bg-green-500/10 text-green-400 border-green-500/20" :
                                                 bet.provider === 'FanDuel' ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
@@ -2132,10 +2301,10 @@ function TransactionView({ bets, financials, reconciliation }) {
                                         </td>
                                         <td className="px-3 py-3 text-center">
                                             <span className={`px-2 py-1 rounded text-[10px] font-black tracking-widest border transition-all duration-300 ${isTxn ? (isDeposit ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-gray-500/10 text-gray-400 border-gray-500/20') :
-                                                    ['WON', 'WIN'].includes(bet.status) ? 'bg-green-500/10 text-green-400 border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.1)]' :
-                                                        ['LOST', 'LOSE'].includes(bet.status) ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                                            bet.status === 'PUSH' ? 'bg-gray-500/10 text-gray-400 border-gray-500/20' :
-                                                                'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                                ['WON', 'WIN'].includes(bet.status) ? 'bg-green-500/10 text-green-400 border-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.1)]' :
+                                                    ['LOST', 'LOSE'].includes(bet.status) ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                                                        bet.status === 'PUSH' ? 'bg-gray-500/10 text-gray-400 border-gray-500/20' :
+                                                            'bg-blue-500/10 text-blue-400 border-blue-500/20'
                                                 }`}>
                                                 {isTxn ? (isDeposit ? 'DEP' : 'WDR') : bet.status}
                                             </span>

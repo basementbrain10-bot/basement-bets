@@ -999,6 +999,39 @@ async def settle_bet(bet_id: int, request: Request, user: dict = Depends(get_cur
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/api/bets/bulk-status")
+async def bulk_status_update(request: Request, user: dict = Depends(get_current_user)):
+    try:
+        data = await request.json()
+        bet_ids = data.get("bet_ids", [])
+        status = data.get("status")
+        if not bet_ids or status not in ['WON', 'LOST', 'PUSH', 'PENDING']:
+            raise HTTPException(status_code=400, detail="Invalid request data")
+            
+        uid = user.get("sub")
+        from src.database import bulk_update_bet_status
+        count = bulk_update_bet_status(bet_ids, status, user_id=uid)
+        invalidate_analytics_cache(uid)
+        return {"status": "success", "updated_count": count}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/bets/bulk-delete")
+async def bulk_delete(request: Request, user: dict = Depends(get_current_user)):
+    try:
+        data = await request.json()
+        bet_ids = data.get("bet_ids", [])
+        if not bet_ids:
+            raise HTTPException(status_code=400, detail="No bet IDs provided")
+            
+        uid = user.get("sub")
+        from src.database import bulk_delete_bets
+        count = bulk_delete_bets(bet_ids, user_id=uid)
+        invalidate_analytics_cache(uid)
+        return {"status": "success", "deleted_count": count}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.delete("/api/bets/{bet_id}")
 async def remove_bet(bet_id: int, user: dict = Depends(get_current_user)):
     try:
@@ -2472,8 +2505,8 @@ async def trigger_settlement_reconcile(request: Request, league: Optional[str] =
         print(f"[JOB ERROR] Settlement reconciliation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/jobs/grade_predictions")
-async def trigger_prediction_grading(fast: bool = True, backfill_days: int = 3, max_clv_rows: int = 250, max_grade_rows: int = 500, skip_clv: bool = False):
+@app.api_route("/api/jobs/grade_predictions", methods=["GET", "POST"])
+async def trigger_prediction_grading(request: Request, fast: bool = True, backfill_days: int = 3, max_clv_rows: int = 250, max_grade_rows: int = 500, skip_clv: bool = False, authorized: bool = Depends(verify_cron_secret)):
     """Cron/manual: grade model_predictions using local game_results.
 
     Default mode is **fast/bounded** to avoid Vercel function timeouts.
