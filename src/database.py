@@ -1116,7 +1116,10 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
             x = re.split(r"\s+\b(over|under)\b\s*\d+(?:\.\d+)?\b", x, flags=re.IGNORECASE, maxsplit=1)[0]
             x = re.split(r"\s+\bml\b", x, flags=re.IGNORECASE, maxsplit=1)[0]
             x = re.split(r"\s+\|", x, maxsplit=1)[0]
-            return re.sub(r"\s+", " ", x).strip()
+            x = re.sub(r"\s+", " ", x).strip()
+            # Collapse duplicated tokens like "Minnesota Minnesota"
+            x = re.sub(r"\b([A-Za-z]{3,})\s+\1\b", r"\1", x, flags=re.IGNORECASE)
+            return x.strip()
 
         try:
             raw_text = str(d.get('raw_text') or '')

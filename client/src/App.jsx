@@ -1765,6 +1765,8 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                 let b = m[2].trim();
                 b = b.replace(/\s+[+-]\d+(?:\.\d+)?\b.*$/, '').trim();
                 b = b.replace(/\s+(over|under)\s*\d+(?:\.\d+)?\b.*$/i, '').trim();
+                // collapse duplicated tokens like "Minnesota Minnesota"
+                b = b.replace(/\b([A-Za-z]{3,})\s+\1\b/gi, '$1').trim();
                 return `${a} @ ${b}`;
             }
             return ev;
