@@ -150,14 +150,12 @@ function App() {
         }
     };
 
-    if (showLogin) {
-        return <LoginModal onSubmit={handleLogin} />;
-    }
-
     // StrictMode guard - prevents double initial fetch in development
     const didLoad = useRef(false);
 
     useEffect(() => {
+        // If user is not authenticated, don't fetch dashboard yet.
+        if (showLogin) return;
         if (didLoad.current) return;
         didLoad.current = true;
 
@@ -326,6 +324,7 @@ function App() {
 
     return (
         <ErrorBoundary>
+            {showLogin && <LoginModal onSubmit={handleLogin} />}
             {/* <StagingBanner /> */}
             <div className="min-h-screen bg-slate-950 text-white p-8 font-sans selection:bg-green-500 selection:text-black">
                 <div className="max-w-7xl mx-auto">
@@ -1886,9 +1885,9 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                                         (auditItems || []).map((it) => (
                                             <tr key={it.bet_id} className="hover:bg-slate-800/40">
                                                 <td className="px-3 py-2 font-mono text-[11px] text-slate-300 whitespace-nowrap">{it.date}</td>
-                                                <td className="px-3 py-2 text-slate-200">{it.matchup || '—'}{it.is_bonus ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded border border-yellow-800 bg-yellow-900/30 text-yellow-200">BONUS</span> : null}</td>
-                                                <td className="px-3 py-2 text-slate-400">{it.provider || '—'}</td>
-                                                <td className="px-3 py-2 text-slate-400">{it.bet_type || '—'}</td>
+                                                <td className="px-3 py-2 text-slate-200">{it.matchup || '-'}{it.is_bonus ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded border border-yellow-800 bg-yellow-900/30 text-yellow-200">BONUS</span> : null}</td>
+                                                <td className="px-3 py-2 text-slate-400">{it.provider || '-'}</td>
+                                                <td className="px-3 py-2 text-slate-400">{it.bet_type || '-'}</td>
                                                 <td className="px-3 py-2">
                                                     <span className="text-[10px] px-2 py-1 rounded border border-slate-700 bg-slate-950 text-slate-200 font-bold">{it.sport}</span>
                                                 </td>
@@ -2509,7 +2508,7 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                                         <td className="px-3 py-3 text-gray-500 text-[10px] font-medium tracking-tight whitespace-nowrap overflow-hidden">{bet.bet_type}</td>
 
                                         <td className="px-3 py-3 text-gray-400 text-[11px] font-medium tracking-tight truncate" title={extractEvent(bet)}>
-                                            {extractEvent(bet) || '—'}
+                                            {extractEvent(bet) || '-'}
                                         </td>
 
                                         <td className="px-3 py-3 truncate text-gray-200 text-xs font-bold tracking-tight" title={bet.selection || bet.description}>
