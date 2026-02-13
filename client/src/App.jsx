@@ -100,6 +100,9 @@ class ErrorBoundary extends React.Component {
 
 function App() {
     const [view, setView] = useState('research'); // research | actuals
+    // Actuals sub-tab (combined Performance + Transactions)
+    const [actualsTab, setActualsTab] = useState('performance'); // performance | transactions
+
     const [stats, setStats] = useState(null);
     const [bets, setBets] = useState([]);
     const [sportBreakdown, setSportBreakdown] = useState([]);
@@ -288,8 +291,7 @@ function App() {
         </div>
     );
 
-    // Actuals sub-tab (combined Performance + Transactions)
-    const [actualsTab, setActualsTab] = useState('performance'); // performance | transactions
+    // Actuals sub-tab state moved above (before any conditional returns) to avoid hook-order issues.
 
     if (!stats) {
         if (loading) {
