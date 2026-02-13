@@ -154,14 +154,14 @@ function App() {
         return <LoginModal onSubmit={handleLogin} />;
     }
 
-    // StrictMode guard — prevents double initial fetch in development
+    // StrictMode guard - prevents double initial fetch in development
     const didLoad = useRef(false);
 
     useEffect(() => {
         if (didLoad.current) return;
         didLoad.current = true;
 
-        // Single batch fetch — replaces 16 parallel API calls
+        // Single batch fetch - replaces 16 parallel API calls
         const fetchData = async () => {
             try {
                 const { data: d } = await api.get('/api/dashboard');
@@ -840,7 +840,7 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                 {/* What's driving results */}
                 <div className="mt-6">
                     <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-black text-slate-200 uppercase tracking-widest">What’s driving results (last 30d vs prior 30d)</h4>
+                        <h4 className="text-sm font-black text-slate-200 uppercase tracking-widest">What's driving results (last 30d vs prior 30d)</h4>
                         <div className="text-xs text-slate-500">Sorted by last 30d ROI (then 30d volume)</div>
                     </div>
 
@@ -858,7 +858,7 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                                             <div className="text-xs text-slate-500">No segments meet the min-N.</div>
                                         ) : data.map((r, i) => (
                                             <div key={i} className="flex items-center justify-between text-sm">
-                                                <div className="text-slate-200 font-bold truncate pr-3">{r.sport} — <span className="text-slate-400 font-normal">{r.bet_type}</span></div>
+                                                <div className="text-slate-200 font-bold truncate pr-3">{r.sport} - <span className="text-slate-400 font-normal">{r.bet_type}</span></div>
                                                 <div className={`font-mono font-bold ${Number(r.profit_30d || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{formatCurrency(Number(r.profit_30d || 0))}</div>
                                             </div>
                                         ))}
@@ -885,9 +885,9 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                                 const top = rows.slice().sort((a, b) => Math.abs(Number(b.roi_delta || 0)) - Math.abs(Number(a.roi_delta || 0))).slice(0, 9);
                                 return top.map((r, i) => (
                                     <div key={i} className="bg-slate-900/30 border border-slate-800 rounded-xl p-3">
-                                        <div className="text-slate-200 font-bold text-sm truncate">{r.sport} — <span className="text-slate-400 font-normal">{r.bet_type}</span></div>
+                                        <div className="text-slate-200 font-bold text-sm truncate">{r.sport} - <span className="text-slate-400 font-normal">{r.bet_type}</span></div>
                                         <div className={`mt-1 font-mono font-black ${(Number(r.roi_delta || 0) >= 0) ? 'text-green-300' : 'text-red-300'}`}>{Number(r.roi_delta) >= 0 ? '+' : ''}{Number(r.roi_delta).toFixed(1)}%</div>
-                                        <div className="text-[10px] text-slate-500">ROI 30d: {r.roi_30d === null ? '—' : `${Number(r.roi_30d).toFixed(1)}%`} • prev: {r.roi_prev30d === null ? '—' : `${Number(r.roi_prev30d).toFixed(1)}%`} • N={r.bets_30d || 0}</div>
+                                        <div className="text-[10px] text-slate-500">ROI 30d: {r.roi_30d === null ? '-' : `${Number(r.roi_30d).toFixed(1)}%`} • prev: {r.roi_prev30d === null ? '-' : `${Number(r.roi_prev30d).toFixed(1)}%`} • N={r.bets_30d || 0}</div>
                                     </div>
                                 ));
                             })()}
@@ -929,16 +929,16 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                                         const roiDeltaCls = roiDelta === null ? 'text-slate-500' : roiDelta >= 0 ? 'text-green-400' : 'text-red-400';
                                         return (
                                             <tr key={i} className="hover:bg-slate-800/30">
-                                                <td className="py-2 px-3 text-slate-200 font-bold">{r.sport} — <span className="text-slate-400 font-normal">{r.bet_type}</span></td>
+                                                <td className="py-2 px-3 text-slate-200 font-bold">{r.sport} - <span className="text-slate-400 font-normal">{r.bet_type}</span></td>
                                                 <td className="py-2 px-3 text-right text-slate-300 font-mono">{r.bets}</td>
-                                                <td className="py-2 px-3 text-right text-slate-300 font-mono">{r.avg_odds === null ? '—' : (r.avg_odds > 0 ? `+${r.avg_odds}` : String(r.avg_odds))}</td>
+                                                <td className="py-2 px-3 text-right text-slate-300 font-mono">{r.avg_odds === null ? '-' : (r.avg_odds > 0 ? `+${r.avg_odds}` : String(r.avg_odds))}</td>
                                                 <td className="py-2 px-3 text-right text-slate-300 font-mono">{formatCurrency(r.avg_stake || 0)}</td>
                                                 <td className={`py-2 px-3 text-right font-mono ${(r.profit_per_bet || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{formatCurrency(r.profit_per_bet || 0)}</td>
                                                 <td className={`py-2 px-3 text-right font-mono ${Number(r.roi || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{r.roi.toFixed(1)}%</td>
                                                 <td className="py-2 px-3 text-right text-slate-300 font-mono">{Number(r.actual_win_rate || 0).toFixed(1)}%</td>
-                                                <td className={`py-2 px-3 text-right font-mono ${Number(r.profit_30d || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{r.profit_30d === null ? '—' : formatCurrency(r.profit_30d)}</td>
-                                                <td className="py-2 px-3 text-right text-slate-300 font-mono">{r.roi_30d === null ? '—' : `${Number(r.roi_30d).toFixed(1)}%`}</td>
-                                                <td className={`py-2 px-3 text-right font-mono ${roiDeltaCls}`}>{roiDelta === null ? '—' : `${roiDelta >= 0 ? '+' : ''}${roiDelta.toFixed(1)}%`}</td>
+                                                <td className={`py-2 px-3 text-right font-mono ${Number(r.profit_30d || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{r.profit_30d === null ? '-' : formatCurrency(r.profit_30d)}</td>
+                                                <td className="py-2 px-3 text-right text-slate-300 font-mono">{r.roi_30d === null ? '-' : `${Number(r.roi_30d).toFixed(1)}%`}</td>
+                                                <td className={`py-2 px-3 text-right font-mono ${roiDeltaCls}`}>{roiDelta === null ? '-' : `${roiDelta >= 0 ? '+' : ''}${roiDelta.toFixed(1)}%`}</td>
                                             </tr>
                                         );
                                     })}
@@ -1528,6 +1528,11 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
     const [editBet, setEditBet] = useState(null);
     const [editNote, setEditNote] = useState('');
 
+    // Auditor UI (sport mismatches)
+    const [showAudit, setShowAudit] = useState(false);
+    const [auditLoading, setAuditLoading] = useState(false);
+    const [auditItems, setAuditItems] = useState([]);
+
     const [manualBet, setManualBet] = useState({
         sportsbook: "DraftKings",
         sport: "NFL",
@@ -1646,6 +1651,43 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
         }
     };
 
+    const runAudit = async () => {
+        setAuditLoading(true);
+        try {
+            const { data } = await api.get('/api/audit/bets/sport-mismatches', { params: { days: 180, limit: 1200 } });
+            setAuditItems(data?.items || []);
+            setShowAudit(true);
+        } catch (err) {
+            console.error('Audit failed', err);
+            alert('Audit failed. See console.');
+        } finally {
+            setAuditLoading(false);
+        }
+    };
+
+    const applyAuditFix = async (item) => {
+        const betId = item?.bet_id;
+        const sport = item?.suggested_sport;
+        if (!betId || !sport) return;
+        try {
+            await api.post(`/api/audit/bets/${betId}/apply-sport`, { sport });
+
+            // Update UI row immediately
+            if (typeof setBets === 'function') {
+                setBets((prev) => (prev || []).map((b) => {
+                    if (Number(b.id) !== Number(betId)) return b;
+                    return { ...b, sport };
+                }));
+            }
+
+            // Remove from audit list
+            setAuditItems((prev) => (prev || []).filter((x) => Number(x.bet_id) !== Number(betId)));
+        } catch (err) {
+            console.error('Apply audit fix failed', err);
+            alert('Failed to apply fix.');
+        }
+    };
+
     const submitManualBet = async () => {
         setIsUpdating(true);
         try {
@@ -1732,6 +1774,77 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
 
     return (
         <div className="space-y-8">
+            {showAudit && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                    <div className="w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <div>
+                                <div className="text-white font-bold">Sport Auditor</div>
+                                <div className="text-xs text-slate-400">Flags bets where sport disagrees with matched event league (teams + date window).</div>
+                            </div>
+                            <button type="button" className="text-gray-400 hover:text-white" onClick={() => setShowAudit(false)}>✕</button>
+                        </div>
+
+                        <div className="mb-3 flex items-center justify-between">
+                            <div className="text-xs text-slate-400">Found <span className="text-white font-bold">{(auditItems || []).length}</span> potential mismatches.</div>
+                            <button
+                                type="button"
+                                onClick={runAudit}
+                                disabled={auditLoading}
+                                className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition ${auditLoading ? 'text-gray-500 border-gray-800 bg-gray-900/40 animate-pulse' : 'text-amber-300 hover:text-amber-200 border-amber-900/40 hover:bg-amber-900/20'}`}
+                            >
+                                {auditLoading ? 'Re-running…' : 'Re-run'}
+                            </button>
+                        </div>
+
+                        <div className="max-h-[60vh] overflow-auto border border-slate-800 rounded-lg">
+                            <table className="w-full text-xs">
+                                <thead className="sticky top-0 bg-slate-950/90 backdrop-blur border-b border-slate-800">
+                                    <tr className="text-slate-400">
+                                        <th className="text-left px-3 py-2">Date</th>
+                                        <th className="text-left px-3 py-2">Matchup</th>
+                                        <th className="text-left px-3 py-2">Book</th>
+                                        <th className="text-left px-3 py-2">Type</th>
+                                        <th className="text-left px-3 py-2">Current</th>
+                                        <th className="text-left px-3 py-2">Suggested</th>
+                                        <th className="text-left px-3 py-2">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800">
+                                    {(auditItems || []).length === 0 ? (
+                                        <tr><td className="px-3 py-6 text-slate-500" colSpan={7}>No mismatches found.</td></tr>
+                                    ) : (
+                                        (auditItems || []).map((it) => (
+                                            <tr key={it.bet_id} className="hover:bg-slate-800/40">
+                                                <td className="px-3 py-2 font-mono text-[11px] text-slate-300 whitespace-nowrap">{it.date}</td>
+                                                <td className="px-3 py-2 text-slate-200">{it.matchup || '—'}{it.is_bonus ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded border border-yellow-800 bg-yellow-900/30 text-yellow-200">BONUS</span> : null}</td>
+                                                <td className="px-3 py-2 text-slate-400">{it.provider || '—'}</td>
+                                                <td className="px-3 py-2 text-slate-400">{it.bet_type || '—'}</td>
+                                                <td className="px-3 py-2">
+                                                    <span className="text-[10px] px-2 py-1 rounded border border-slate-700 bg-slate-950 text-slate-200 font-bold">{it.sport}</span>
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <span className="text-[10px] px-2 py-1 rounded border border-amber-900/40 bg-amber-900/20 text-amber-200 font-bold">{it.suggested_sport}</span>
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => applyAuditFix(it)}
+                                                        className="text-[11px] px-2 py-1 rounded border border-green-900/40 bg-green-900/20 text-green-200 hover:bg-green-900/35"
+                                                    >
+                                                        Apply
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {showEdit && editBet && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
                     <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-5">
@@ -2138,6 +2251,16 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                                 >
                                     + Add Bet Slip
                                 </button>
+
+                                <button
+                                    onClick={runAudit}
+                                    disabled={auditLoading}
+                                    className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition ${auditLoading ? 'text-gray-500 border-gray-800 bg-gray-900/40 animate-pulse' : 'text-amber-300 hover:text-amber-200 border-amber-900/40 hover:bg-amber-900/20'}`}
+                                    title="Scan for bets whose sport looks wrong (based on matching teams to events)"
+                                >
+                                    {auditLoading ? 'Auditing…' : 'Audit sport'}
+                                </button>
+
                                 <button
                                     onClick={resetFilters}
                                     className="text-xs text-blue-400 hover:text-blue-300 font-medium px-3 py-1.5 rounded-lg border border-blue-900/30 hover:bg-blue-900/20 transition"
