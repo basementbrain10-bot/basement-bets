@@ -85,11 +85,6 @@ class FanDuelParser:
             formatted_date = date_str
 
         # 2. Wager and Return
-        # Search for lines starting with $
-        # $10.00\nTOTAL WAGER
-        # $0.00\nRETURNED
-        # or $23.20\nWON ON FANDUEL
-        
         wager = 0.0
         return_amount = 0.0
         status = "LOST" # Default
@@ -97,44 +92,58 @@ class FanDuelParser:
         # Find "TOTAL WAGER" and look at line before
         for i, line in enumerate(block):
             if "TOTAL WAGER" in line:
-                # Wager is usually line before
                 wager_line = block[i-1]
                 wager = float(wager_line.replace('$', '').replace(',', ''))
             
             if "WON ON FANDUEL" in line or "RETURNED" in line:
-                # Return is line before
                 ret_line = block[i-1]
                 return_amount = float(ret_line.replace('$', '').replace(',', ''))
         
         profit = return_amount - wager
         
         # Status Logic
-        if return_amount > 0.01: # Check for > 0 essentially, strictly profit > -wager
-             # If return < wager it's usually "Cashed Out" or partial win, but usually FD says "WON" if you get paid.
-             # Strict logic: if profit >= 0, WON. If return > 0 but profit < 0, maybe "CASHED OUT" or "PARTIAL".
-             # For now, let's treat any return > 0 as "WON" (or at least "NOT LOST")?
-             # Actually, usually "WON ON FANDUEL" implies a win. "RETURNED" usually implies 0.00 (Loss) or Push (Return = Wager).
+        if return_amount > 0.01:
              if abs(profit) < 0.01:
                  status = "PUSH"
              elif profit > 0:
                  status = "WON"
              else:
-                 status = "LOST" # Or cashed out for loss
+                 status = "LOST"
         else:
              status = "LOST"
 
-        # 3. Bet Type & Sport
-        bet_type = "ML"
+        # 3. Bet Type — scan ALL lines for keywords (not just block[0])
+        bet_type = None
+        bet_type_keywords = {
+            "SPREAD BETTING": "Spread", "SPREAD": "Spread", "POINT SPREAD": "Spread",
+            "MONEYLINE": "ML", "MONEY LINE": "ML",
+            "TOTAL POINTS": "Over/Under", "OVER/UNDER": "Over/Under",
+            "OVER / UNDER": "Over/Under",
+            "PROP": "Prop", "PLAYER PROP": "Prop",
+            "PARLAY": None,  # handled separately for leg count
+            "ROUND ROBIN": "Round Robin",
+        }
+        # Also check for parlay in first line
         first_line_up = block[0].upper()
         if "PARLAY" in first_line_up or "LEG" in first_line_up:
             match = re.search(r'(\d+)', block[0])
             bet_type = f"{match.group(1)} leg parlay" if match else "parlay"
         elif "ROUND ROBIN" in first_line_up:
             bet_type = "Round Robin"
-        elif any(x in first_line_up for x in ["TOTAL", "OVER", "UNDER"]):
-            bet_type = "Over/Under"
-        elif "MONEYLINE" in first_line_up:
-            bet_type = "ML"
+
+        if not bet_type:
+            # Scan all lines for bet type keywords
+            for line in block:
+                line_up = line.strip().upper()
+                for keyword, bt in bet_type_keywords.items():
+                    if keyword in line_up and bt:
+                        bet_type = bt
+                        break
+                if bet_type:
+                    break
+
+        if not bet_type:
+            bet_type = "ML"  # Final fallback
         
         # Matchup Detection
         matchup = block[0] 
@@ -146,12 +155,6 @@ class FanDuelParser:
         description = matchup
 
         # Sport Inference (Heuristic)
-        # Look for keywords in the whole block
-        # NFL: "Quarterback", "Passing", "Rushing", "Touchdown", or team names (49ers, Chiefs)
-        # NBA: "Points", "Assists", "Rebounds", "Spurs", "Pacers"
-        # MLB: "Innings", "Strikeouts", "Dodgers", "Yankees"
-        # NCAA: "Universities" (look for heuristics)
-        
         sport = "Unknown"
         text_to_scan = (full_text + " " + matchup).lower()
         
@@ -172,43 +175,76 @@ class FanDuelParser:
         elif any(t in text_to_scan for t in soccer_t): sport = "SOCCER"
         
         # 4. Odds
-        # Look for the first line starting with "+" or "-" that represents the total odds.
-        # Often line 2 or 3.
-        # Special case: Profit Boost.
-        # +214
-        # +320
-        # profit boost
-        # 50%
-        
         odds = None
-        # Try to find the odds in the first few lines
-        # Usually it's the total odds for the bet
         for line in block[0:6]:
             if re.match(r'^[+-]\d+$', line):
-                # Found an odds line.
-                # If there are two, one might be the original, one boosted.
-                # If "profit boost" follows, the second one is likely result?
-                # FD usually lists: "Original Odds" then "Boosted Odds"
-                # Ex: +214, +320.
-                # So we take the last one found in the top header section?
                 odds = int(line)
         
-        # 5. Selection / Description
-        # Just grab the block text excluding footer.
-        # Maybe filter out common noise lines like "Finished", "profit boost", etc.
-        selection_lines = []
+        # 5. Selection — only team name(s) + bet line. No odds, no bet type labels, no scores.
+        # Noise patterns to exclude from selection
+        _noise_patterns = [
+            r'^[+-]\d+$',              # Odds like +13.5, -120 (standalone)
+            r'^BET ID:',               # Footer
+            r'^PLACED:',               # Footer
+            r'TOTAL WAGER',            # Footer
+            r'WON ON FANDUEL',         # Footer
+            r'RETURNED',               # Footer
+            r'^\$',                    # Dollar amounts
+            r'^Finished$',             # Game finished marker
+            r'^\d+$',                  # Bare numbers (scores)
+            r'^profit boost',          # Promo label
+            r'^\d+%$',                 # Boost percent
+        ]
+        # Bet type labels to exclude
+        _bet_type_labels = [
+            "SPREAD BETTING", "SPREAD", "POINT SPREAD",
+            "MONEYLINE", "MONEY LINE", "ML",
+            "TOTAL POINTS", "OVER/UNDER", "OVER / UNDER",
+            "PROP", "PLAYER PROP",
+            "PARLAY", "ROUND ROBIN",
+        ]
+        
+        selection_parts = []
         for line in block:
-            if "BET ID:" in line: break
-            if "TOTAL WAGER" in line: break
-            if "$" in line: continue 
-            if "Finished" in line: continue
-            if "profit boost" in line: continue
-            if "%" in line and len(line) < 5: continue # boost %
-            if line == bet_type: continue
-            
-            selection_lines.append(line)
-            
-        selection = ", ".join(selection_lines[:5]) # First 5 lines as summary
+            line_s = line.strip()
+            if not line_s:
+                continue
+            line_up = line_s.upper()
+
+            # Skip noise
+            skip = False
+            for p in _noise_patterns:
+                if re.search(p, line_s, re.IGNORECASE):
+                    skip = True
+                    break
+            if skip:
+                continue
+
+            # Skip bet type labels
+            if line_up in _bet_type_labels or any(line_up == lbl for lbl in _bet_type_labels):
+                continue
+
+            # Skip if it's just a standalone odds value like "-120"
+            if re.match(r'^[+-]\d{2,}$', line_s):
+                continue
+
+            selection_parts.append(line_s)
+        
+        # Build selection: team name + line (e.g. "La Salle +13.5")
+        # For spreads/totals, combine team name with the spread/total line
+        selection = ""
+        if selection_parts:
+            # Check if second part looks like a spread/total line (+13.5, -3, O 45.5, etc.)
+            if len(selection_parts) >= 2 and re.match(r'^[+-]?\d+\.?\d*$', selection_parts[1]):
+                # Team + line (e.g. "La Salle" + "+13.5" → "La Salle +13.5")
+                selection = f"{selection_parts[0]} {selection_parts[1]}"
+            else:
+                # Just use first selection part (team name for ML, or full text)
+                selection = selection_parts[0]
+
+        if not selection:
+            selection = matchup
+
         description = matchup
 
         # 6. Live / Bonus
@@ -230,3 +266,4 @@ class FanDuelParser:
             "is_bonus": is_bonus,
             "raw_text": full_text
         }
+

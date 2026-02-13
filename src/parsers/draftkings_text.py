@@ -301,15 +301,15 @@ class DraftKingsTextParser:
                      else: bet_type = "Straight" # Default fallback
 
 
-            # 3. Selection Identification
-            selection_lines = []
-            filter_patterns = [
-                r'^\d+$', # Single numbers (scorecard)
-                r'^Final Score', 
+            # 3. Selection Identification — only team name(s) + bet line
+            # Aggressively filter: no odds, no bet type labels, no scores, no noise
+            selection_noise_patterns = [
+                r'^\d+$',                    # Single numbers (scorecard)
+                r'^Final Score',
                 r'^View Picks',
-                r'^\w{3} \d{1,2}, \d{4}', # Date inside block
+                r'^\w{3} \d{1,2}, \d{4}',   # Date inside block
                 r'Parlay Boost',
-                r'^T$', # Single T from scorecard
+                r'^T$',
                 r'^Paste Bet Slip',
                 r'^Sportsbook',
                 r'^Bankroll Account',
@@ -329,21 +329,62 @@ class DraftKingsTextParser:
                 r'^\d+ Picks',
                 r'^Information$',
                 r'^Down$',
-                r'^KING OF THE ENDZONE$'
+                r'^KING OF THE ENDZONE$',
+                r'^Finished$',
+                r'^Final$',
+                r'Wager:',
+                r'Paid:',
+                r'Payout:',
+                r'^\$',                      # Dollar amounts
+            ]
+            # Bet type labels to exclude from selection
+            bet_type_labels_upper = [
+                "WINNER (ML)", "ML", "MONEYLINE", "MONEY LINE",
+                "SPREAD", "POINT SPREAD", "SPREAD BETTING",
+                "TOTAL", "TOTAL (OVER/UNDER)", "TOTAL OVER/UNDER",
+                "OVER / UNDER", "OVER/UNDER", "OVER", "UNDER",
+                "STRAIGHT", "PROP", "PLAYER PROP",
+                "SGP", "SAME GAME PARLAY", "PARLAY",
+                "TEASER", "ROUND ROBIN", "PICK",
             ]
             
+            selection_parts = []
             for i, l in enumerate(lines):
-                if i in [header_idx, status_idx, wager_idx, matchup_idx, paid_idx]: continue
+                if i in [header_idx, status_idx, wager_idx, matchup_idx, paid_idx]:
+                    continue
                 
-                # Filter noise
+                # Filter noise patterns
                 is_noise = False
-                for p in filter_patterns:
-                    if re.search(p, l): is_noise = True; break
-                if is_noise: continue
+                for p in selection_noise_patterns:
+                    if re.search(p, l):
+                        is_noise = True
+                        break
+                if is_noise:
+                    continue
                 
-                selection_lines.append(l)
+                # Filter bet type labels (exact match, case-insensitive)
+                l_upper = l.strip().upper()
+                if l_upper in bet_type_labels_upper:
+                    continue
+
+                # Filter standalone odds (3+ digits with sign, e.g. +150, -110)
+                if re.match(r'^[+-]\d{3,}$', l.strip()):
+                    continue
+
+                # Filter lines that are ONLY a keyword embedded in longer text like "2 Picks"
+                if re.match(r'^\d+\s+(Picks|Legs?)$', l.strip(), re.IGNORECASE):
+                    continue
+                
+                selection_parts.append(l)
             
-            selection = ", ".join(selection_lines) if selection_lines else ""
+            # Build selection: combine team name with spread/total line
+            selection = ""
+            if selection_parts:
+                if len(selection_parts) >= 2 and re.match(r'^[+-]?\d+\.?\d*$', selection_parts[1]):
+                    # Team + line (e.g. "Ohio State" + "-6.5" → "Ohio State -6.5")
+                    selection = f"{selection_parts[0]} {selection_parts[1]}"
+                else:
+                    selection = selection_parts[0]
             
             # Construct Matchup from detected Teams if implicit
             if not matchup and len(teams_found) >= 2:
@@ -351,6 +392,7 @@ class DraftKingsTextParser:
             
             if not matchup: matchup = selection or "Unknown Matchup"
             if not selection: selection = matchup
+
 
             # Fallback Odds Scan
             if odds is None:
