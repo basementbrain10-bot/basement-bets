@@ -417,7 +417,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
         const tickIdx = [0, Math.floor((n - 1) / 2), n - 1].filter((v, i, a) => a.indexOf(v) === i);
 
         return (
-            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56">
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-72">
                 {/* grid */}
                 {[0, 25, 50, 75, 100].map((p) => (
                     <g key={p}>
@@ -429,6 +429,18 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {/* series */}
                 {bands.map((b) => (
                     <path key={b.k} d={pathFor(series[b.k] || [])} fill="none" stroke={b.color} strokeWidth="2" />
+                ))}
+
+                {/* hover points (native tooltip via <title>) */}
+                {bands.map((b) => (
+                    (series[b.k] || []).map((v, i) => {
+                        if (v === null || v === undefined) return null;
+                        return (
+                            <circle key={`${b.k}-${i}`} cx={xAt(i)} cy={yAt(v)} r="4" fill={b.color} fillOpacity="0.75">
+                                <title>{`${dayKeys[i]} • ${b.k} • ${Number(v).toFixed(1)}% win`}</title>
+                            </circle>
+                        );
+                    })
                 ))}
 
                 {/* x labels (sparse) */}
@@ -487,7 +499,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
         const tickIdx = [0, Math.floor((n - 1) / 2), n - 1].filter((v, i, a) => a.indexOf(v) === i);
 
         return (
-            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-48">
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-64">
                 {/* grid */}
                 {[0, 25, 50, 75, 100].map((p) => (
                     <g key={p}>
@@ -508,9 +520,13 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {/* series */}
                 <path d={pathFor(seriesTop6)} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />
 
-                {/* points */}
+                {/* points (native tooltip via <title>) */}
                 {seriesTop6.map((v, i) => (
-                    v !== null && <circle key={i} cx={xAt(i)} cy={yAt(v)} r="3" fill={color} />
+                    v !== null && (
+                        <circle key={i} cx={xAt(i)} cy={yAt(v)} r="4" fill={color} fillOpacity="0.8">
+                            <title>{`${dayKeys[i]} • Top 6 • ${Number(v).toFixed(1)}% win`}</title>
+                        </circle>
+                    )
                 ))}
 
                 {/* x labels (sparse) */}
