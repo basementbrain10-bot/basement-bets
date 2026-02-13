@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from './api/axios';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell,
-    ScatterChart, Scatter, ZAxis, ReferenceLine
+    ScatterChart, Scatter, ZAxis, ReferenceLine, AreaChart, Area
 } from 'recharts';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, BarChart3, LayoutDashboard, Search, X, PlusCircle, Trash, RefreshCw, AlertCircle, Filter, Table } from 'lucide-react';
 
