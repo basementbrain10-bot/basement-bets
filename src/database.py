@@ -1112,7 +1112,7 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
         def _clean_team_side(x: str) -> str:
             x = (x or '').strip()
             # Remove trailing line/total fragments and odds.
-            x = re.split(r"\s+[+-]\d+(?:\.\d+)?\b", x, maxsplit=1)[0]
+            x = re.split(r"\s+[+\-−–]\d+(?:\.\d+)?\b", x, maxsplit=1)[0]
             x = re.split(r"\s+\b(over|under)\b\s*\d+(?:\.\d+)?\b", x, flags=re.IGNORECASE, maxsplit=1)[0]
             x = re.split(r"\s+\bml\b", x, flags=re.IGNORECASE, maxsplit=1)[0]
             x = re.split(r"\s+\|", x, maxsplit=1)[0]

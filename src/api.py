@@ -1188,7 +1188,7 @@ async def backfill_event_text(days: int = 3650, limit: int = 20000, force: bool 
         def extract_event_text(raw_text: str, description: str, selection: str) -> str | None:
             def clean_side(x: str) -> str:
                 x = (x or '').strip()
-                x = re.split(r"\s+[+-]\d+(?:\.\d+)?\b", x, maxsplit=1)[0]
+                x = re.split(r"\s+[+\-−–]\d+(?:\.\d+)?\b", x, maxsplit=1)[0]
                 x = re.split(r"\s+\b(over|under)\b\s*\d+(?:\.\d+)?\b", x, flags=re.IGNORECASE, maxsplit=1)[0]
                 x = re.split(r"\s+\bml\b", x, flags=re.IGNORECASE, maxsplit=1)[0]
                 x = re.split(r"\s+\|", x, maxsplit=1)[0]
@@ -1235,7 +1235,7 @@ async def backfill_event_text(days: int = 3650, limit: int = 20000, force: bool 
             if '@' not in s:
                 return True
             # Tails like "TeamB -3.5" or "Over 147.5" should not be present in event_text
-            if re.search(r"\s+[+-]\d+(?:\.\d+)?\b", s):
+            if re.search(r"\s+[+\-−–]\d+(?:\.\d+)?\b", s):
                 return True
             if re.search(r"\b(over|under)\b\s*\d+(?:\.\d+)?\b", s, re.IGNORECASE):
                 return True
