@@ -1756,7 +1756,19 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
     const extractEvent = (bet) => {
         // Goal: show teams/matchup if we can infer it.
         // Priority: event_text (from DB) -> raw_text -> description -> selection.
-        if (bet?.event_text) return String(bet.event_text);
+        if (bet?.event_text) {
+            // Clean up occasional cases like "Maryland @ Minnesota Minnesota -3.5"
+            const ev = String(bet.event_text);
+            const m = ev.match(/(.+?)\s*@\s*(.+)/);
+            if (m) {
+                const a = m[1].trim();
+                let b = m[2].trim();
+                b = b.replace(/\s+[+-]\d+(?:\.\d+)?\b.*$/, '').trim();
+                b = b.replace(/\s+(over|under)\s*\d+(?:\.\d+)?\b.*$/i, '').trim();
+                return `${a} @ ${b}`;
+            }
+            return ev;
+        }
         const sources = [bet?.raw_text, bet?.description, bet?.selection].filter(Boolean).map(s => String(s));
         const joined = sources.join(' \n ');
         const raw = joined.replace(/\s+/g, ' ').trim();

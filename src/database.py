@@ -1105,21 +1105,52 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
     # event_text is a lightweight, UI-friendly matchup string we persist at ingest time
     # so we don't need to ship raw_text to the client (reduces Neon egress).
     def _extract_event_text(d: dict) -> str | None:
+        """Extract a clean matchup like "Maryland @ Minnesota".
+
+        Important: avoid appending the pick/line (e.g. "Minnesota -3.5").
+        """
+        def _clean_team_side(x: str) -> str:
+            x = (x or '').strip()
+            # Remove trailing line/total fragments and odds.
+            x = re.split(r"\s+[+-]\d+(?:\.\d+)?\b", x, maxsplit=1)[0]
+            x = re.split(r"\s+\b(over|under)\b\s*\d+(?:\.\d+)?\b", x, flags=re.IGNORECASE, maxsplit=1)[0]
+            x = re.split(r"\s+\bml\b", x, flags=re.IGNORECASE, maxsplit=1)[0]
+            x = re.split(r"\s+\|", x, maxsplit=1)[0]
+            return re.sub(r"\s+", " ", x).strip()
+
         try:
-            s = "\n".join([
-                str(d.get('raw_text') or ''),
-                str(d.get('description') or ''),
-                str(d.get('selection') or ''),
-            ])
+            raw_text = str(d.get('raw_text') or '')
+            description = str(d.get('description') or '')
+            selection = str(d.get('selection') or '')
+
+            # 1) Best: find an explicit matchup line in raw_text
+            for src in (raw_text, description, selection):
+                if not src:
+                    continue
+                for ln in str(src).splitlines():
+                    ln = ln.strip()
+                    if not ln:
+                        continue
+                    if ('@' in ln) or re.search(r"\b(vs\.?|versus)\b", ln, re.IGNORECASE):
+                        m = re.search(r"(.+?)\s*(?:@|vs\.?|versus)\s*(.+)$", ln, flags=re.IGNORECASE)
+                        if m:
+                            a = _clean_team_side(m.group(1))
+                            b = _clean_team_side(m.group(2))
+                            if a and b:
+                                return f"{a} @ {b}"[:160]
+
+            # 2) Fallback: regex over combined text
+            s = "\n".join([raw_text, description, selection])
             s = re.sub(r"\s+", " ", s).strip()
             if not s:
                 return None
             m = re.search(r"(.+?)\s*(?:@|vs\.?|versus)\s*(.+?)(?:\s*\||\s*$)", s, flags=re.IGNORECASE)
-            if m:
-                a = (m.group(1) or '').strip()
-                b = (m.group(2) or '').strip()
-                if a and b:
-                    return f"{a} @ {b}"[:160]
+            if not m:
+                return None
+            a = _clean_team_side(m.group(1))
+            b = _clean_team_side(m.group(2))
+            if a and b:
+                return f"{a} @ {b}"[:160]
         except Exception:
             return None
         return None
