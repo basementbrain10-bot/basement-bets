@@ -1681,7 +1681,7 @@ def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None, upd
     """
     allowed = {
         'provider', 'date', 'sport', 'bet_type', 'wager', 'odds', 'profit', 'status',
-        'description', 'selection'
+        'description', 'selection', 'event_text'
     }
 
     # Always write audit fields on a successful update

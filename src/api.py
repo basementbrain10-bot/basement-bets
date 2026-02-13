@@ -962,7 +962,7 @@ async def update_bet(bet_id: int, request: Request, user: dict = Depends(get_cur
 
         allowed = {
             'provider', 'date', 'sport', 'bet_type', 'wager', 'odds', 'profit', 'status',
-            'description', 'selection'
+            'description', 'selection', 'event_text'
         }
         fields = {k: payload.get(k) for k in allowed if k in payload}
         update_note = payload.get('update_note') or payload.get('audit_note')
