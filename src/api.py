@@ -368,6 +368,69 @@ async def get_reconciliation(user: dict = Depends(get_current_user)):
     engine = get_analytics_engine(user_id=user_id)
     return engine.get_reconciliation_view(user_id=user_id)
 
+# ---------------------------------------------------------------------------
+# BATCH DASHBOARD — single request replaces 16 parallel calls
+# ---------------------------------------------------------------------------
+@app.get("/api/dashboard")
+async def get_dashboard(user: dict = Depends(get_current_user)):
+    """
+    Returns all data needed for the initial dashboard load in a single response.
+    Replaces 16 parallel API calls (×2 in StrictMode) with 1.
+    """
+    from src.database import fetch_latest_balance_snapshots
+
+    user_id = user.get("sub")
+    engine = get_analytics_engine(user_id=user_id)
+
+    current_year = datetime.now().year
+
+    # All computations share the cached engine (60s TTL), no extra DB hits
+    bets_all = engine.get_all_bets(user_id=user_id)
+    settled = [b for b in bets_all if (b.get('status') or '').upper() not in ('PENDING', 'OPEN')]
+
+    return {
+        "stats": engine.get_summary(user_id=user_id),
+        "bets": settled,
+        "sport_breakdown": engine.get_breakdown("sport", user_id=user_id),
+        "player_breakdown": engine.get_player_performance(user_id=user_id),
+        "monthly_breakdown": engine.get_monthly_performance(user_id=user_id),
+        "bet_type_breakdown": engine.get_breakdown("bet_type", user_id=user_id),
+        "balance_snapshots": fetch_latest_balance_snapshots(user_id=str(user_id)),
+        "financials": engine.get_financial_summary(user_id=user_id),
+        "reconciliation": engine.get_reconciliation_view(user_id=user_id),
+        "time_series": engine.get_time_series_settled_equity(user_id=user_id),
+        "drawdown": engine.get_drawdown_metrics(user_id=user_id),
+        "edge_breakdown": engine.get_edge_analysis(user_id=user_id),
+        "period_stats": {
+            "7d": engine.get_period_stats(days=7, user_id=user_id),
+            "30d": engine.get_period_stats(days=30, user_id=user_id),
+            "ytd": engine.get_period_stats(year=current_year, user_id=user_id),
+            "all": engine.get_period_stats(user_id=user_id),
+        }
+    }
+
+# ---------------------------------------------------------------------------
+# DETAIL ENDPOINTS — heavy data fetched on demand only
+# ---------------------------------------------------------------------------
+@app.get("/api/bets/{bet_id}")
+async def get_bet_detail(bet_id: int, user: dict = Depends(get_current_user)):
+    """Return full bet row including raw_text (detail/expand view)."""
+    from src.database import fetch_bet_detail
+    user_id = user.get("sub")
+    row = fetch_bet_detail(bet_id, user_id=user_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Bet not found")
+    return row
+
+@app.get("/api/research/history/{prediction_id}")
+async def get_research_detail(prediction_id: str, user: dict = Depends(get_current_user)):
+    """Return full model prediction including inputs_json, outputs_json, narrative_json."""
+    from src.database import fetch_model_prediction_detail
+    row = fetch_model_prediction_detail(prediction_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+    return row
+
 
 @app.get("/api/financials/inplay/series")
 async def get_inplay_series(days: int = 90, user: dict = Depends(get_current_user)):

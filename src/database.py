@@ -690,25 +690,69 @@ def insert_odds_snapshot(snap: dict) -> bool:
 def store_odds_snapshots(snaps: list) -> int:
     """
     Bulk insert odds snapshots. Returns count of successfully inserted snapshots.
+    Uses a single connection + execute_values for efficiency.
     """
     if not snaps: return 0
-    count = 0
+    import hashlib
+
+    # Prepare rows in Python — compute snapshot_key without hitting DB
+    rows = []
     for s in snaps:
-        # map any alternate keys to DB schema
+        event_id = s.get('event_id')
+        if not event_id:
+            continue
         if "line" in s and "line_value" not in s:
             s["line_value"] = s.pop("line")
-        # ensure captured_at exists and is datetime
         if not s.get("captured_at"):
             s["captured_at"] = datetime.now(timezone.utc)
-            
-        try:
-            if insert_odds_snapshot(s):
-                count += 1
-        except ValueError as e:
-            print(f"[DB] store_odds_snapshots skipped: {e}")
-        except Exception as e:
-            print(f"[DB] store_odds_snapshots error: {e}")
-    return count
+
+        captured_at = s['captured_at']
+        if hasattr(captured_at, 'replace'):
+            captured_key = captured_at.replace(second=0, microsecond=0).isoformat()
+        else:
+            captured_key = str(captured_at)[:16]
+
+        parts = [
+            str(event_id),
+            str(s.get('book') or ''),
+            str(s.get('market_type') or ''),
+            str(s.get('side') or ''),
+            str(s.get('line_value') or ''),
+            str(s.get('price') or ''),
+            captured_key
+        ]
+        snapshot_key = hashlib.sha256("|".join(parts).encode()).hexdigest()
+
+        rows.append((
+            event_id,
+            s.get('book'),
+            s.get('market_type'),
+            s.get('side'),
+            s.get('line_value'),
+            s.get('price'),
+            captured_at,
+            snapshot_key
+        ))
+
+    if not rows:
+        return 0
+
+    sql = """
+    INSERT INTO odds_snapshots (event_id, book, market_type, side, line_value, price, captured_at, snapshot_key)
+    VALUES %s
+    ON CONFLICT (snapshot_key) DO NOTHING
+    """
+    try:
+        with get_db_connection() as conn:
+            from psycopg2.extras import execute_values
+            cur = conn.cursor()
+            execute_values(cur, sql, rows, page_size=200)
+            count = cur.rowcount
+            conn.commit()
+            return count
+    except Exception as e:
+        print(f"[DB] store_odds_snapshots bulk error: {e}")
+        return 0
 
 def upsert_game_result(res: dict):
     query = """
@@ -1096,12 +1140,22 @@ def fetch_model_history(limit=100, league=None, user_id=None, recommended_only: 
 
     where_sql = (" WHERE " + " AND ".join(conditions)) if conditions else ""
 
+    # Lightweight columns — excludes inputs_json, outputs_json, narrative_json
+    _LIGHT_COLS = """m.id, m.event_id, m.user_id, m.analyzed_at, m.model_version,
+        m.market_type, m.pick, m.bet_line, m.bet_price, m.book,
+        m.mu_market, m.mu_torvik, m.mu_final, m.sigma,
+        m.win_prob, m.ev_per_unit, m.confidence_0_100,
+        m.outcome, m.close_line, m.close_price,
+        m.selection, m.price, m.fair_line, m.edge_points,
+        m.open_line, m.open_price, m.clv_points, m.clv_price_delta,
+        m.clv_method, m.close_captured_at, m.prediction_key"""
+
     if recommended_only and dedupe:
         # Dedupe: keep only the latest rec per game+market.
         # Postgres DISTINCT ON keeps first row per group based on ORDER BY.
         query = f"""
         WITH base AS (
-            SELECT m.*, e.league as sport, e.home_team, e.away_team, e.start_time
+            SELECT {_LIGHT_COLS}, e.league as sport, e.home_team, e.away_team, e.start_time
             FROM model_predictions m
             JOIN events e ON m.event_id = e.id
             {where_sql}
@@ -1124,7 +1178,7 @@ def fetch_model_history(limit=100, league=None, user_id=None, recommended_only: 
 
     # Non-deduped path
     base_query = f"""
-    SELECT m.*, e.league as sport, e.home_team, e.away_team, e.start_time
+    SELECT {_LIGHT_COLS}, e.league as sport, e.home_team, e.away_team, e.start_time
     FROM model_predictions m
     JOIN events e ON m.event_id = e.id
     {where_sql}
@@ -1136,6 +1190,31 @@ def fetch_model_history(limit=100, league=None, user_id=None, recommended_only: 
     with get_db_connection() as conn:
         cursor = _exec(conn, base_query, tuple(params))
         return [dict(r) for r in cursor.fetchall()]
+
+
+def fetch_bet_detail(bet_id: int, user_id: str = None):
+    """Fetch a single bet with ALL columns including raw_text (detail view)."""
+    q = "SELECT * FROM bets WHERE id = %s"
+    params = [bet_id]
+    if user_id:
+        q += " AND user_id = %s"
+        params.append(user_id)
+    with get_db_connection() as conn:
+        row = _exec(conn, q, tuple(params)).fetchone()
+        return dict(row) if row else None
+
+
+def fetch_model_prediction_detail(prediction_id: str):
+    """Fetch a single model prediction with ALL columns including JSON blobs (detail view)."""
+    q = """
+    SELECT m.*, e.league as sport, e.home_team, e.away_team, e.start_time
+    FROM model_predictions m
+    JOIN events e ON m.event_id = e.id
+    WHERE m.id = %s
+    """
+    with get_db_connection() as conn:
+        row = _exec(conn, q, (prediction_id,)).fetchone()
+        return dict(row) if row else None
 
 
 def get_clv_report(limit=50):

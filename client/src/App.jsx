@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from './api/axios';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell,
@@ -64,7 +64,7 @@ const formatDateMDY = (s) => {
                 timeZone: 'America/New_York'
             });
         }
-    } catch (e) {}
+    } catch (e) { }
     return String(s);
 };
 
@@ -153,87 +153,29 @@ function App() {
         return <LoginModal onSubmit={handleLogin} />;
     }
 
+    // StrictMode guard — prevents double initial fetch in development
+    const didLoad = useRef(false);
+
     useEffect(() => {
-        // Fetch Data
+        if (didLoad.current) return;
+        didLoad.current = true;
+
+        // Single batch fetch — replaces 16 parallel API calls
         const fetchData = async () => {
             try {
-                // Helper to get data or default
-                const getVal = (res, defaultVal) => res.status === 'fulfilled' ? res.value.data : defaultVal;
+                const { data: d } = await api.get('/api/dashboard');
 
-                // Parallelize API calls
-                const results = await Promise.allSettled([
-                    api.get('/api/stats'),
-                    api.get('/api/bets'),
-                    api.get('/api/breakdown/sport'),
-                    api.get('/api/breakdown/player'),
-                    api.get('/api/breakdown/monthly'),
-                    api.get('/api/breakdown/bet_type'),
-                    api.get('/api/balances/snapshots/latest'),
-                    api.get('/api/financials'),
-                    api.get('/api/financials/reconciliation'),
-                    api.get('/api/analytics/series'),
-                    api.get('/api/analytics/drawdown'),
-                    api.get('/api/breakdown/edge')
-                ]);
+                setStats(d.stats || { total_bets: 0, total_profit: 0, win_rate: 0, roi: 0 });
+                setBets(d.bets || []);
+                setSportBreakdown(d.sport_breakdown || []);
+                setPlayerBreakdown(d.player_breakdown || []);
+                setMonthlyBreakdown(d.monthly_breakdown || []);
 
-                // Check for 403 or 500 in results to alert user
-                const failed = results.find(r => r.status === 'rejected');
-                if (failed) {
-                    const reason = failed.reason;
-                    if (reason && ((reason.response && reason.response.status === 403) || (reason.message && reason.message.includes("403")))) {
-                        localStorage.removeItem('basement_password'); // Force clear storage
-                        setShowLogin(true);
-                    }
-                    // Since we catch globally in axios for 403, this is likely 500 or Network
-                    // throw failed.reason;
-                }
-
-                // Fetch Period Stats in parallel
-                const currentYear = new Date().getFullYear();
-                const periodResults = await Promise.allSettled([
-                    api.get('/api/stats/period?days=7'),
-                    api.get('/api/stats/period?days=30'),
-                    api.get(`/api/stats/period?year=${currentYear}`),
-                    api.get('/api/stats/period')
-                ]);
-
-                setStats(getVal(results[0], { total_bets: 0, total_profit: 0, win_rate: 0, roi: 0 }));
-                setBets(getVal(results[1], []));
-                setSportBreakdown(getVal(results[2], []));
-                setPlayerBreakdown(getVal(results[3], []));
-                setMonthlyBreakdown(getVal(results[4], []));
-
-                // Manual Fallback for Bet Type Wins if API returns 0s
-                const rawBets = getVal(results[1], []);
-                const apiBetBreakdown = getVal(results[5], []);
-
-                // Re-calculate wins from raw bets to be safe
-                const calculatedBreakdown = {};
-                apiBetBreakdown.forEach(b => {
-                    calculatedBreakdown[b.bet_type] = { ...b };
-                });
+                // Re-calculate bet type breakdown from raw bets (matches previous behavior)
+                const rawBets = d.bets || [];
+                const apiBetBreakdown = d.bet_type_breakdown || [];
 
                 if (rawBets.length > 0) {
-                    rawBets.forEach(bet => {
-                        const type = bet.bet_type || 'Unknown';
-                        if (!calculatedBreakdown[type]) {
-                            calculatedBreakdown[type] = { bet_type: type, bets: 0, wins: 0, profit: 0, wager: 0, roi: 0 };
-                        }
-
-                        // Force recalculation
-                        // We trust total count and profit from API, but Wins might be 0 due to backend bug?
-                        // Actually, let's just re-aggregate wins here.
-                        if (bet.status && bet.status.toUpperCase() === 'WON') {
-                            // Note: API returns aggregated wins. If we just += 1 here, we might double count if we started with API val.
-                            // But since user says API returns 0 wins...
-                            // Let's rely on our calc if API says 0.
-                            if (calculatedBreakdown[type].wins === 0) {
-                                // Just increment local counter (we need a separate tracker or assume 0 start)
-                            }
-                        }
-                    });
-
-                    // Better approach: Re-build breakdown completely from raw bets to guarantee accuracy
                     const freshBreakdown = {};
                     rawBets.forEach(bet => {
                         const type = bet.bet_type || 'Unknown';
@@ -248,7 +190,6 @@ function App() {
                         }
                     });
 
-                    // Convert to array and calc rates, filtering out financials
                     const finalBreakdown = Object.values(freshBreakdown)
                         .filter(item => item.bet_type !== 'Deposit' && item.bet_type !== 'Withdrawal' && item.bet_type !== 'Other')
                         .map(item => ({
@@ -262,11 +203,11 @@ function App() {
                     setBetTypeBreakdown(apiBetBreakdown);
                 }
 
-                // Balances now come from explicit balance snapshots (source-of-truth)
-                const rawSnaps = getVal(results[6], {});
+                // Balances from explicit snapshots
+                const rawSnaps = d.balance_snapshots || {};
                 const mapped = {};
                 try {
-                    Object.entries(rawSnaps || {}).forEach(([provider, snap]) => {
+                    Object.entries(rawSnaps).forEach(([provider, snap]) => {
                         if (!provider) return;
                         mapped[provider] = {
                             balance: snap?.balance ?? 0,
@@ -274,23 +215,29 @@ function App() {
                             source: snap?.source || 'manual'
                         };
                     });
-                } catch (e) {}
+                } catch (e) { }
                 setBalances(mapped);
-                setFinancials(getVal(results[7], { total_in_play: 0, total_deposited: 0, total_withdrawn: 0, realized_profit: 0 }));
-                setReconciliation(getVal(results[8], null));
-                setTimeSeries(getVal(results[9], []));
-                setDrawdown(getVal(results[10], { max_drawdown: 0.0, current_drawdown: 0.0, peak_profit: 0.0 }));
-                setEdgeBreakdown(getVal(results[11], []));
+                setFinancials(d.financials || { total_in_play: 0, total_deposited: 0, total_withdrawn: 0, realized_profit: 0 });
+                setReconciliation(d.reconciliation || null);
+                setTimeSeries(d.time_series || []);
+                setDrawdown(d.drawdown || { max_drawdown: 0.0, current_drawdown: 0.0, peak_profit: 0.0 });
+                setEdgeBreakdown(d.edge_breakdown || []);
 
+                const ps = d.period_stats || {};
+                const defaultPeriod = { net_profit: 0, roi: 0, wins: 0, losses: 0, total_bets: 0, actual_win_rate: 0, implied_win_rate: 0 };
                 setPeriodStats({
-                    '7d': getVal(periodResults[0], { net_profit: 0, roi: 0, wins: 0, losses: 0, total_bets: 0, actual_win_rate: 0, implied_win_rate: 0 }),
-                    '30d': getVal(periodResults[1], { net_profit: 0, roi: 0, wins: 0, losses: 0, total_bets: 0, actual_win_rate: 0, implied_win_rate: 0 }),
-                    'ytd': getVal(periodResults[2], { net_profit: 0, roi: 0, wins: 0, losses: 0, total_bets: 0, actual_win_rate: 0, implied_win_rate: 0 }),
-                    'all': getVal(periodResults[3], { net_profit: 0, roi: 0, wins: 0, losses: 0, total_bets: 0, actual_win_rate: 0, implied_win_rate: 0 })
+                    '7d': ps['7d'] || defaultPeriod,
+                    '30d': ps['30d'] || defaultPeriod,
+                    'ytd': ps['ytd'] || defaultPeriod,
+                    'all': ps['all'] || defaultPeriod
                 });
 
             } catch (err) {
                 console.error("API Error", err);
+                if (err?.response?.status === 403) {
+                    localStorage.removeItem('basement_password');
+                    setShowLogin(true);
+                }
                 setError(err.message || "Failed to load dashboard data.");
             }
         };
@@ -437,7 +384,7 @@ function App() {
                                     bets={bets}
                                     reconciliation={reconciliation}
                                     onOpenTransactions={(prefill) => {
-                                        try { localStorage.setItem('txn_prefill', JSON.stringify(prefill || {})); } catch (e) {}
+                                        try { localStorage.setItem('txn_prefill', JSON.stringify(prefill || {})); } catch (e) { }
                                         setView('actuals');
                                         setActualsTab('transactions');
                                     }}
@@ -487,7 +434,7 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
         const msDay = 24 * 60 * 60 * 1000;
         const cutoff = segmentWindow === '30d' ? new Date(now.getTime() - 30 * msDay)
             : segmentWindow === '90d' ? new Date(now.getTime() - 90 * msDay)
-            : null;
+                : null;
 
         const inWindow = (b) => {
             if (!cutoff) return true;
@@ -1529,7 +1476,7 @@ function TransactionView({ bets, financials, reconciliation }) {
                 sportsbook: p?.sportsbook ? String(p.sportsbook) : f.sportsbook,
                 selection: p?.selection ? String(p.selection) : f.selection,
             }));
-        } catch (e) {}
+        } catch (e) { }
     }, []);
 
     const [showManualAdd, setShowManualAdd] = useState(false);
