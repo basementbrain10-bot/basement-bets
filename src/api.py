@@ -1046,6 +1046,42 @@ async def remove_bet(bet_id: int, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.get("/api/audit/bets/sport-mismatches")
+async def audit_bet_sport_mismatches(days: int = 60, limit: int = 800, user: dict = Depends(get_current_user)):
+    """Auditor agent: find bets whose `sport` appears wrong by matching teams to the canonical events table."""
+    try:
+        uid = user.get("sub")
+        from src.services.bet_auditor_agent import BetAuditorAgent
+        agent = BetAuditorAgent()
+        items = agent.audit_sport_mismatches(user_id=uid, days_back=int(days), limit=int(limit))
+        return {"status": "success", "items": items}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/audit/bets/{bet_id}/apply-sport")
+async def apply_bet_sport_fix(bet_id: int, request: Request, user: dict = Depends(get_current_user)):
+    """Apply a sport correction (writes to DB + invalidates analytics cache)."""
+    try:
+        uid = user.get("sub")
+        payload = await request.json()
+        sport = str(payload.get('sport') or '').upper().strip()
+        if not sport:
+            raise HTTPException(status_code=400, detail="Missing sport")
+
+        from src.database import update_bet_fields
+        ok = update_bet_fields(int(bet_id), {"sport": sport}, user_id=uid, update_note="audit: sport corrected")
+        if not ok:
+            raise HTTPException(status_code=404, detail="Bet not found")
+
+        invalidate_analytics_cache(uid)
+        return {"status": "success"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 
 @app.post("/api/research/grade")
 async def grade_research_history():
