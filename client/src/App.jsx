@@ -601,39 +601,6 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                             <DollarSign className="text-green-400" /> Sportsbook Financials
                         </h3>
 
-                        {/* In-play audit (snapshot + bet P/L = in play) */}
-                        {(() => {
-                            const rows = reconciliation?.providers || [];
-                            const dk = rows.find(r => String(r.provider || '').toLowerCase().includes('draftkings'));
-                            if (!dk) return null;
-                            return (
-                                <div className="mb-4 bg-slate-800/20 border border-slate-800 rounded-xl p-4">
-                                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black mb-2">DraftKings in-play audit</div>
-                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3">
-                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Latest snapshot</div>
-                                            <div className="mt-1 text-white font-black text-lg">{dk.latest_reported_balance === null || dk.latest_reported_balance === undefined ? '—' : formatCurrency(dk.latest_reported_balance)}</div>
-                                            <div className="text-[10px] text-slate-500">{dk.latest_balance_date || ''}</div>
-                                        </div>
-                                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3">
-                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Bet P/L (since snapshot)</div>
-                                            <div className={`mt-1 font-black text-lg ${Number(dk.bet_profit_total || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{formatCurrency(Number(dk.bet_profit_total || 0))}</div>
-                                            <div className="text-[10px] text-slate-500">N={dk.bet_count || 0} bets</div>
-                                        </div>
-                                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3">
-                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Computed in play</div>
-                                            <div className="mt-1 text-white font-black text-lg">{formatCurrency(Number(dk.computed_balance || 0))}</div>
-                                            <div className="text-[10px] text-slate-500">snapshot + Σ(P/L)</div>
-                                        </div>
-                                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3">
-                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Discrepancy</div>
-                                            <div className={`mt-1 font-black text-lg ${dk.discrepancy === null || dk.discrepancy === undefined ? 'text-slate-300' : Math.abs(Number(dk.discrepancy)) < 1 ? 'text-green-300' : 'text-amber-300'}`}>{dk.discrepancy === null || dk.discrepancy === undefined ? '—' : formatCurrency(Number(dk.discrepancy))}</div>
-                                            <div className="text-[10px] text-slate-500">status: {dk.status}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })()}
 
                         <table className="w-full text-left text-sm">
                             <thead>
@@ -2008,129 +1975,84 @@ function TransactionView({ bets, financials, reconciliation }) {
                     );
                 })()}
 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm whitespace-nowrap">
+                <div>
+                    <table className="w-full text-left text-[11px] table-fixed">
                         <thead className="bg-gray-800 text-gray-400 font-medium uppercase text-xs tracking-wider">
                             {/* Header Labels */}
                             <tr>
-                                <th
-                                    className="px-6 py-3 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none"
-                                    onClick={() => requestSort('date')}
-                                >
-                                    Date {getSortIcon('date')}
-                                </th>
-                                <th
-                                    className="px-6 py-3 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none"
-                                    onClick={() => requestSort('provider')}
-                                >
-                                    Sportsbook {getSortIcon('provider')}
-                                </th>
-                                <th
-                                    className="px-6 py-3 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none"
-                                    onClick={() => requestSort('sport')}
-                                >
-                                    Sport {getSortIcon('sport')}
-                                </th>
-                                <th
-                                    className="px-6 py-3 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none"
-                                    onClick={() => requestSort('bet_type')}
-                                >
-                                    Type {getSortIcon('bet_type')}
-                                </th>
-                                <th
-                                    className="px-6 py-3 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none"
-                                    onClick={() => requestSort('selection')}
-                                >
-                                    Selection {getSortIcon('selection')}
-                                </th>
-                                <th
-                                    className="px-6 py-3 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none"
-                                    onClick={() => requestSort('odds')}
-                                >
-                                    Odds {getSortIcon('odds')}
-                                </th>
-                                <th
-                                    className="px-6 py-3 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none"
-                                    onClick={() => requestSort('wager')}
-                                >
-                                    Wager {getSortIcon('wager')}
-                                </th>
-                                <th
-                                    className="px-6 py-3 border-b border-gray-700 text-center cursor-pointer hover:bg-gray-800 select-none"
-                                    onClick={() => requestSort('status')}
-                                >
-                                    Status {getSortIcon('status')}
-                                </th>
-                                <th
-                                    className="px-6 py-3 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none"
-                                    onClick={() => requestSort('profit')}
-                                >
-                                    Profit / Loss {getSortIcon('profit')}
-                                </th>
-                                <th className="px-6 py-3 border-b border-gray-700 text-right">Actions</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[72px]" onClick={() => requestSort('date')}>Date{getSortIcon('date')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[70px]" onClick={() => requestSort('provider')}>Book{getSortIcon('provider')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[52px]" onClick={() => requestSort('sport')}>Sport{getSortIcon('sport')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none w-[56px]" onClick={() => requestSort('bet_type')}>Type{getSortIcon('bet_type')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 cursor-pointer hover:bg-gray-800 select-none" onClick={() => requestSort('selection')}>Selection{getSortIcon('selection')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[50px]" onClick={() => requestSort('odds')}>Odds{getSortIcon('odds')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[56px]" onClick={() => requestSort('wager')}>Wager{getSortIcon('wager')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-center cursor-pointer hover:bg-gray-800 select-none w-[50px]" onClick={() => requestSort('status')}>Status{getSortIcon('status')}</th>
+                                <th className="px-2 py-2 border-b border-gray-700 text-right cursor-pointer hover:bg-gray-800 select-none w-[64px]" onClick={() => requestSort('profit')}>P/L{getSortIcon('profit')}</th>
+                                <th className="px-1 py-2 border-b border-gray-700 text-right w-[80px]">Actions</th>
                             </tr>
                             {/* Filter Row */}
                             <tr className="bg-gray-850">
-                                <th className="px-2 py-2">
+                                <th className="px-1 py-1">
                                     <input
                                         type="text"
-                                        placeholder="Filter Date..."
-                                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:border-blue-500 outline-none"
+                                        placeholder="Date"
+                                        className="w-full bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-white focus:border-blue-500 outline-none"
                                         value={filters.date}
                                         onChange={e => setFilters({ ...filters, date: e.target.value })}
                                     />
                                 </th>
-                                <th className="px-2 py-2">
+                                <th className="px-1 py-1">
                                     <select
-                                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:border-blue-500 outline-none"
+                                        className="w-full bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-white focus:border-blue-500 outline-none"
                                         value={filters.sportsbook}
                                         onChange={e => setFilters({ ...filters, sportsbook: e.target.value })}
                                     >
-                                        <option value="All">All Books</option>
+                                        <option value="All">All</option>
                                         {sportsbooks.filter(s => s !== 'All').map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 </th>
-                                <th className="px-2 py-2">
+                                <th className="px-1 py-1">
                                     <select
-                                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:border-blue-500 outline-none"
+                                        className="w-full bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-white focus:border-blue-500 outline-none"
                                         value={filters.sport}
                                         onChange={e => setFilters({ ...filters, sport: e.target.value })}
                                     >
-                                        <option value="All">All Sports</option>
+                                        <option value="All">All</option>
                                         {sports.filter(s => s !== 'All').map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 </th>
-                                <th className="px-2 py-2">
+                                <th className="px-1 py-1">
                                     <select
-                                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:border-blue-500 outline-none"
+                                        className="w-full bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-white focus:border-blue-500 outline-none"
                                         value={filters.type}
                                         onChange={e => setFilters({ ...filters, type: e.target.value })}
                                     >
                                         {types.map(t => <option key={t} value={t}>{t}</option>)}
                                     </select>
                                 </th>
-                                <th className="px-2 py-2">
+                                <th className="px-1 py-1">
                                     <input
                                         type="text"
-                                        placeholder="Search Selection..."
-                                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:border-blue-500 outline-none"
+                                        placeholder="Search..."
+                                        className="w-full bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-white focus:border-blue-500 outline-none"
                                         value={filters.selection}
                                         onChange={e => setFilters({ ...filters, selection: e.target.value })}
                                     />
                                 </th>
-                                <th className="px-2 py-2"></th> {/* Odds */}
-                                <th className="px-2 py-2"></th> {/* Wager */}
-                                <th className="px-2 py-2">
+                                <th className="px-1 py-1"></th>
+                                <th className="px-1 py-1"></th>
+                                <th className="px-1 py-1">
                                     <select
-                                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:border-blue-500 outline-none"
+                                        className="w-full bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-white focus:border-blue-500 outline-none"
                                         value={filters.status}
                                         onChange={e => setFilters({ ...filters, status: e.target.value })}
                                     >
                                         {statuses.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                                 </th>
-                                <th className="px-2 py-2"></th> {/* Profit */}
-                                <th className="px-2 py-2"></th> {/* Actions */}
+                                <th className="px-1 py-1"></th>
+                                <th className="px-1 py-1"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-800">
@@ -2160,19 +2082,19 @@ function TransactionView({ bets, financials, reconciliation }) {
                                             setShowEdit(true);
                                         }}
                                     >
-                                        <td className="px-6 py-3 text-gray-300 font-mono text-xs" title={formatDateMDY(bet.sort_date || bet.date)}>{formatDateMDY(bet.sort_date || bet.date)}</td>
-                                        <td className="px-6 py-3">
-                                            <span className="px-2 py-1 rounded text-[10px] text-gray-300 border border-gray-700 bg-gray-800 shadow-sm uppercase font-bold tracking-wider">
-                                                {bet.provider}
+                                        <td className="px-2 py-2 text-gray-300 font-mono text-[10px] whitespace-nowrap" title={formatDateMDY(bet.sort_date || bet.date)}>{formatDateMDY(bet.sort_date || bet.date)}</td>
+                                        <td className="px-2 py-2">
+                                            <span className="text-[10px] text-gray-300 uppercase font-bold">
+                                                {bet.provider === 'DraftKings' ? 'DK' : bet.provider === 'FanDuel' ? 'FD' : bet.provider}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-3">
-                                            <span className="px-2 py-1 rounded text-[10px] text-gray-300 border border-gray-700 bg-gray-800 shadow-sm uppercase font-bold tracking-wider">
+                                        <td className="px-2 py-2">
+                                            <span className="text-[10px] text-gray-300 uppercase font-bold">
                                                 {bet.sport}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-3 text-gray-400 text-xs">{bet.bet_type}</td>
-                                        <td className="px-6 py-3 max-w-xs truncate text-gray-300 text-xs" title={bet.selection || bet.description}>
+                                        <td className="px-2 py-2 text-gray-400 text-[10px]">{bet.bet_type}</td>
+                                        <td className="px-2 py-2 truncate text-gray-300 text-[11px]" title={bet.selection || bet.description}>
                                             {(() => {
                                                 // Keep Selection column concise: just team(s) + bet, not slip metadata.
                                                 const raw = bet.display_selection || bet.selection || bet.description || '';
@@ -2188,71 +2110,32 @@ function TransactionView({ bets, financials, reconciliation }) {
                                             {bet.is_live && <span className="ml-2 text-[9px] bg-red-900/50 text-red-300 px-1 rounded border border-red-800">LIVE</span>}
                                             {bet.is_bonus && <span className="ml-2 text-[9px] bg-yellow-900/50 text-yellow-300 px-1 rounded border border-yellow-800">BONUS</span>}
                                         </td>
-                                        <td className="px-6 py-3 text-right font-mono text-gray-400 text-xs">
-                                            {!isTxn ? (
-                                                <>
-                                                    {bet.odds ? (bet.odds > 0 ? `+${bet.odds}` : bet.odds) : '-'}
-                                                    {bet.closing_odds && (
-                                                        <div className="flex flex-col items-end mt-1">
-                                                            <span className="text-[10px] text-gray-500 font-mono">
-                                                                CL: {bet.closing_odds > 0 ? '+' : ''}{bet.closing_odds}
-                                                            </span>
-                                                            <span className={`text-[10px] font-bold ${calculateCLV(bet.odds, bet.closing_odds) > 0 ? 'text-green-400' : 'text-red-400'
-                                                                }`}>
-                                                                {calculateCLV(bet.odds, bet.closing_odds) > 0 ? '+' : ''}{calculateCLV(bet.odds, bet.closing_odds).toFixed(1)}% CLV
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </>
-                                            ) : '-'}
+                                        <td className="px-2 py-2 text-right font-mono text-gray-400 text-[10px] whitespace-nowrap">
+                                            {!isTxn ? (bet.odds ? (bet.odds > 0 ? `+${bet.odds}` : bet.odds) : '-') : '-'}
                                         </td>
-                                        <td className={`px-6 py-3 text-right font-medium text-xs ${isTxn ? 'text-gray-400' : 'text-gray-300'}`}>
+                                        <td className={`px-2 py-2 text-right font-medium text-[10px] whitespace-nowrap ${isTxn ? 'text-gray-400' : 'text-gray-300'}`}>
                                             {formatCurrency(bet.wager)}
                                         </td>
-                                        <td className="px-6 py-3 text-center">
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${isTxn ? (isDeposit ? 'bg-green-900/20 text-green-400 border-green-900' : 'bg-gray-800 text-gray-400 border-gray-700') :
+                                        <td className="px-2 py-2 text-center">
+                                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${isTxn ? (isDeposit ? 'bg-green-900/20 text-green-400 border-green-900' : 'bg-gray-800 text-gray-400 border-gray-700') :
                                                 ['WON', 'WIN'].includes(bet.status) ? 'bg-green-900/20 text-green-400 border-green-900' :
                                                     ['LOST', 'LOSE'].includes(bet.status) ? 'bg-red-900/20 text-red-400 border-red-900' :
                                                         'bg-gray-800 text-gray-400 border-gray-700'
                                                 }`}>
-                                                {isTxn ? (isDeposit ? 'DEPOSIT' : 'WITHDRAWAL') : bet.status}
+                                                {isTxn ? (isDeposit ? 'DEP' : 'WDR') : bet.status}
                                             </span>
                                         </td>
-                                        <td className={`px-6 py-3 text-right font-bold text-xs ${bet.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        <td className={`px-2 py-2 text-right font-bold text-[10px] whitespace-nowrap ${bet.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                             {(bet.profit !== undefined && bet.profit !== null) ? (bet.profit >= 0 ? '+' : '') + formatCurrency(bet.profit) : '-'}
                                         </td>
-                                        <td className="px-6 py-3 text-right space-x-2">
+                                        <td className="px-1 py-2 text-right whitespace-nowrap">
                                             {!isTxn && (
-                                                <>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'WON'); }}
-                                                        className="p-1 text-green-500 hover:bg-green-500/10 rounded border border-green-500/20 title='Settle as Win'"
-                                                        disabled={isUpdating}
-                                                    >
-                                                        W
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'LOST'); }}
-                                                        className="p-1 text-red-500 hover:bg-red-500/10 rounded border border-red-500/20 title='Settle as Loss'"
-                                                        disabled={isUpdating}
-                                                    >
-                                                        L
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'PUSH'); }}
-                                                        className="p-1 text-yellow-500 hover:bg-yellow-500/10 rounded border border-yellow-500/20 title='Settle as Push'"
-                                                        disabled={isUpdating}
-                                                    >
-                                                        P
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDelete(bet.id); }}
-                                                        className="p-1 text-gray-500 hover:text-red-400 title='Delete'"
-                                                        disabled={isUpdating}
-                                                    >
-                                                        <Trash size={12} />
-                                                    </button>
-                                                </>
+                                                <span className="inline-flex gap-0.5">
+                                                    <button onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'WON'); }} className="px-1 py-0.5 text-[10px] text-green-500 hover:bg-green-500/10 rounded" disabled={isUpdating}>W</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'LOST'); }} className="px-1 py-0.5 text-[10px] text-red-500 hover:bg-red-500/10 rounded" disabled={isUpdating}>L</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleSettle(bet.id, 'PUSH'); }} className="px-1 py-0.5 text-[10px] text-yellow-500 hover:bg-yellow-500/10 rounded" disabled={isUpdating}>P</button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(bet.id); }} className="px-1 py-0.5 text-gray-500 hover:text-red-400" disabled={isUpdating}><Trash size={10} /></button>
+                                                </span>
                                             )}
                                         </td>
                                     </tr>

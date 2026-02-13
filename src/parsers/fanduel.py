@@ -154,25 +154,10 @@ class FanDuelParser:
         
         description = matchup
 
-        # Sport Inference (Heuristic)
-        sport = "Unknown"
-        text_to_scan = (full_text + " " + matchup).lower()
-        
-        nfl_t = ["passing", "rushing", "touchdown", "receptions", "quarterback", "nfl", "chiefs", "bills", "49ers", "ravens", "lions", "packers", "bears", "qb", "yardage", "interception"]
-        nba_t = ["points", "assists", "rebounds", "nba", "lakers", "celtics", "warriors", "threes", "bucks", "mavs", "block", "steals"]
-        ncaam_t = ["ncaam", "ncaa basketball", "purdue", "kansas", "duke", "unc", "marquette", "gonzaga", "ncaa", "uconn", "kentucky", "jayhawks", "college basketball", "march madness"]
-        ncaaf_t = ["ncaaf", "cfb", "alabama", "georgia", "texas", "ohio state", "michigan", "bowl game", "college football"]
-        mlb_t = ["mlb", "dodgers", "yankees", "red sox", "runs", "innings", "strikeouts", "stolen base", "home run"]
-        nhl_t = ["nhl", "puck line", "bruins", "leafs", "rangers", "goals", "goalie", "slapshot", "icing"]
-        soccer_t = ["soccer", "epl", "chelsea", "liverpool", "arsenal", "man city", "champions league", "premier league", "la liga", "bundesliga"]
-
-        if any(t in text_to_scan for t in nfl_t): sport = "NFL"
-        elif any(t in text_to_scan for t in nba_t): sport = "NBA"
-        elif any(t in text_to_scan for t in ncaam_t): sport = "NCAAM"
-        elif any(t in text_to_scan for t in ncaaf_t): sport = "NCAAF"
-        elif any(t in text_to_scan for t in mlb_t): sport = "MLB"
-        elif any(t in text_to_scan for t in nhl_t): sport = "NHL"
-        elif any(t in text_to_scan for t in soccer_t): sport = "SOCCER"
+        # Sport Inference — use shared detector
+        from src.parsers.sport_detection import detect_sport
+        text_to_scan = full_text + " " + matchup
+        sport = detect_sport(text_to_scan)
         
         # 4. Odds
         odds = None

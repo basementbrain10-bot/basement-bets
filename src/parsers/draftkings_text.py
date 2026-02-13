@@ -210,13 +210,9 @@ class DraftKingsTextParser:
             # Matchup & Team Detection
             teams_found = []
             
-            # Team Keywords (Expanded)
-            nfl_teams = ["chiefs", "bills", "ravens", "lions", "packers", "buccaneers", "49ers", "cowboys", "eagles", "nfl", "touchdown", "rushing", "passing", "qb", "yardage", "interception", "chargers", "patriots", "steelers", "bengals", "browns", "titans", "colts", "jaguars", "texans", "broncos", "raiders", "giants", "commanders", "rams", "cardinals", "seahawks", "saints", "falcons", "panthers", "vikings", "bears", "dolphins", "jets", "niners"]
-            nba_teams = ["lakers", "celtics", "warriors", "bucks", "suns", "mavs", "knicks", "nba", "rebounds", "assists", "points", "threes", "block", "steals", "sixers", "nets", "raptors", "bulls", "cavs", "pistons", "pacers", "heat", "magic", "hawks", "hornets", "wizards", "nuggets", "wolves", "thunder", "blazers", "jazz", "kings", "clippers", "rockets", "spurs", "grizzlies", "pelicans"]
-            ncaam_teams = ["purdue", "kansas", "duke", "unc", "marquette", "gonzaga", "uconn", "kentucky", "jayhawks", "ncaam", "ncaa", "basketball", "college basketball", "march madness", "iu indianapolis", "detroit mercy", "crimson tide", "wildcats", "spartans", "wolverines", "buckeyes", "hoosiers", "boilermakers", "illini", "badgers", "gophers", "huskies", "hawkeyes", "longhorns", "sooners", "cowboys", "bears", "cyclones", "raiders", "tigers", "bulldogs", "volunteers", "gamecocks", "commodity", "commodores"]
-            mlb_teams = ["dodgers", "yankees", "red sox", "cubs", "astros", "braves", "mlb", "innings", "runs", "strikeouts", "stolen base", "home run"]
-            nhl_teams = ["bruins", "leafs", "rangers", "oilers", "golden knights", "nhl", "puck line", "goalie", "slapshot", "icing"]
-            soccer_teams = ["liverpool", "arsenal", "chelsea", "man city", "real madrid", "barcelona", "soccer", "epl", "champions league", "premier league", "la liga", "bundesliga", "man united", "tottenham", "bayern", "dormund"]
+            # Team Keywords — use shared sport detection module
+            from src.parsers.sport_detection import detect_sport, NCAAM_TEAMS, NFL_TEAMS, NBA_TEAMS, MLB_KEYWORDS, NHL_KEYWORDS, SOCCER_KEYWORDS
+            all_team_keywords = NCAAM_TEAMS + NFL_TEAMS + NBA_TEAMS + MLB_KEYWORDS + NHL_KEYWORDS + SOCCER_KEYWORDS
 
             for l in lines:
                 l_lower = l.lower()
@@ -226,7 +222,7 @@ class DraftKingsTextParser:
                     matchup_idx = i
                 
                 # Team Scanning (if no typical matchup line found)
-                for t in nfl_teams + nba_teams + ncaam_teams + mlb_teams + nhl_teams + soccer_teams:
+                for t in all_team_keywords:
                     if t in l_lower and len(t) > 3: # Avoid short noise
                         # Store the actual team name (title cased), not the full line
                         team_name = t.title()
@@ -480,16 +476,8 @@ class DraftKingsTextParser:
             
             description = summary
 
-            # 5. Sport Inference
-            sport = "Unknown"
-            text_to_scan = (" ".join(lines) + " " + selection + " " + matchup).lower()
-            
-            if any(t in text_to_scan for t in nfl_teams): sport = "NFL"
-            elif any(t in text_to_scan for t in nba_teams): sport = "NBA"
-            elif any(t in text_to_scan for t in ncaam_teams): sport = "NCAAM"
-            elif any(t in text_to_scan for t in mlb_teams): sport = "MLB"
-            elif any(t in text_to_scan for t in nhl_teams): sport = "NHL"
-            elif any(t in text_to_scan for t in soccer_teams): sport = "SOCCER"
+            # 5. Sport Inference — use shared detector
+            sport = detect_sport(" ".join(lines) + " " + selection + " " + matchup)
 
             return {
                 "provider": "DraftKings",
