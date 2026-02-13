@@ -1082,6 +1082,57 @@ async def apply_bet_sport_fix(bet_id: int, request: Request, user: dict = Depend
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/api/audit/bets/backfill-sport")
+async def backfill_bet_sport(days: int = 365, limit: int = 5000, user: dict = Depends(get_current_user)):
+    """Backfill/repair bet.sport by re-detecting from raw_text/selection/description.
+
+    This is useful when sportsbook copy-pastes contained the wrong sport label.
+    """
+    try:
+        uid = user.get("sub")
+        from datetime import datetime, timedelta
+        from src.parsers.sport_detection import detect_sport
+        from src.database import get_db_connection, _exec, update_bet_fields
+
+        now = datetime.now()
+        cutoff = (now - timedelta(days=int(days))).date().isoformat()
+
+        q = """
+        SELECT id, date, sport, raw_text, selection, description, provider
+        FROM bets
+        WHERE user_id = %s AND date >= %s
+        ORDER BY date DESC
+        LIMIT %s
+        """
+
+        with get_db_connection() as conn:
+            rows = _exec(conn, q, (uid, cutoff, int(limit))).fetchall()
+
+        updated = 0
+        scanned = 0
+        for r in rows:
+            b = dict(r)
+            scanned += 1
+            text = " ".join([
+                str(b.get('raw_text') or ''),
+                str(b.get('selection') or ''),
+                str(b.get('description') or ''),
+                str(b.get('provider') or ''),
+            ])
+            suggested = detect_sport(text)
+            current = str(b.get('sport') or '').upper().strip()
+
+            if suggested and suggested != 'Unknown' and suggested != current:
+                ok = update_bet_fields(int(b['id']), {"sport": suggested}, user_id=uid, update_note="audit: backfill sport")
+                if ok:
+                    updated += 1
+
+        invalidate_analytics_cache(uid)
+        return {"status": "success", "scanned": scanned, "updated": updated}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 
 @app.post("/api/research/grade")
 async def grade_research_history():

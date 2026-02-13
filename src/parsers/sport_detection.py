@@ -118,15 +118,15 @@ NCAAM_TEAMS = [
 
 # ─── NBA ───
 NBA_TEAMS = [
+    # Keep this list primarily to team / league identifiers.
+    # (Generic stat words like "points" caused false NBA detection for non-NBA bets.)
     "nba", "lakers", "celtics", "warriors", "bucks", "76ers", "sixers",
     "nets", "knicks", "heat", "bulls", "cavaliers", "cavs",
     "mavericks", "mavs", "rockets", "spurs", "clippers",
-    "nuggets", "jazz", "timberwolves", "wolves", "pelicans",
+    "nuggets", "jazz", "timberwolves", "pelicans",
     "thunder", "blazers", "trail blazers", "kings", "suns",
     "hornets", "hawks", "magic", "wizards", "pistons",
     "pacers", "raptors", "grizzlies",
-    "points", "assists", "rebounds", "threes", "3-pointers",
-    "steals", "blocks",
 ]
 
 # ─── NFL ───
@@ -186,7 +186,8 @@ SOCCER_KEYWORDS = [
     "soccer", "epl", "chelsea", "liverpool", "arsenal",
     "man city", "manchester city", "man united", "manchester united",
     "tottenham", "crystal palace", "west ham", "everton",
-    "newcastle", "brighton", "wolverhampton", "wolves",
+    "newcastle", "brighton", "wolverhampton",
+    # NOTE: "wolves" is ambiguous (NBA Timberwolves / EPL Wolves). We avoid using it alone.
     "aston villa", "fulham", "bournemouth", "brentford",
     "nottingham forest", "leicester", "ipswich", "southampton",
     "champions league", "premier league", "la liga",
@@ -198,38 +199,43 @@ SOCCER_KEYWORDS = [
 
 
 def detect_sport(text: str) -> str:
+    """Detect sport from free text (selection, description, matchup, raw_text).
+
+    IMPORTANT:
+    - Prefer team-name evidence over generic league tokens. In real-world slip
+      exports, a wrong sport label (e.g. "NBA") can leak into the copied text.
+    - Keep outputs aligned with the rest of the app: EPL (not SOCCER).
+
+    Returns one of: NFL, NBA, NCAAM, NCAAF, MLB, NHL, EPL, Unknown.
     """
-    Detect the sport from free text (selection, description, matchup, raw_text).
-    Returns one of: NFL, NBA, NCAAM, NCAAF, MLB, NHL, SOCCER, Unknown.
-    """
-    t = text.lower()
-    
-    # Check NCAAM first (most specific — many team names overlap with NCAAF/NBA)
+    t = (text or "").lower()
+
+    # 1) Strongest: explicit team-name matches
     if any(team in t for team in NCAAM_TEAMS):
         return "NCAAM"
-    
+
+    # Soccer / EPL (put before NBA/NFL so "Crystal Palace" etc wins even if "NBA" appears)
+    if any(kw in t for kw in SOCCER_KEYWORDS):
+        return "EPL"
+
     # NFL
     if any(kw in t for kw in NFL_TEAMS):
         return "NFL"
-    
+
     # NBA
     if any(kw in t for kw in NBA_TEAMS):
         return "NBA"
-    
+
     # NCAAF
     if any(kw in t for kw in NCAAF_KEYWORDS):
         return "NCAAF"
-    
+
     # MLB
     if any(kw in t for kw in MLB_KEYWORDS):
         return "MLB"
-    
+
     # NHL
     if any(kw in t for kw in NHL_KEYWORDS):
         return "NHL"
-    
-    # Soccer
-    if any(kw in t for kw in SOCCER_KEYWORDS):
-        return "SOCCER"
-    
+
     return "Unknown"

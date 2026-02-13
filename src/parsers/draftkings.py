@@ -119,46 +119,13 @@ class DraftKingsParser:
         else:
             bet["bet_type"] = "Straight/Other"
 
-        # 5. Sport Inference (Heuristic)
-        text_lower = raw_text.lower()
-        nfl_teams = ["rams", "panthers", "lions", "vikings", "bengals", "browns", "dolphins", "bills", "falcons", "commanders", "packers", "eagles", "broncos", "colts", "cardinals"]
-        ncaa_teams = ["xavier", "providence", "dayton", "kansas", "purdue", "vanderbilt", "georgia", "ole miss", "ohio state", "miami fl", "indiana", "old dominion", "iowa", "notre dame", "clemson", "georgia tech", "oregon", "penn state", "florida", "lsu"]
-        mlb_teams = ["reds", "dodgers", "runs - 1st inning"]
-
-        found_sport = False
-        for t in nfl_teams:
-            if t in text_lower:
-                bet["sport"] = "NFL"
-                found_sport = True
-                break
-        
-        if not found_sport:
-            for t in ncaa_teams:
-                if t in text_lower:
-                    # Distinction Logic
-                    score_nums = re.findall(r"\n(\d{2,3})\n", raw_text)
-                    if score_nums and any(int(s) > 60 for s in score_nums):
-                         bet["sport"] = "NCAA Basketball"
-                    else:
-                        bet["sport"] = "NCAA (Generic)"
-                    found_sport = True
-                    break
-        
-        if not found_sport:
-            for t in mlb_teams:
-                if t in text_lower:
-                    bet["sport"] = "MLB"
-                    found_sport = True
-                    break
-        
-        # Double check score inference
-        if bet["sport"] == "NCAA (Generic)":
-             if re.search(r" 1\s+2\s+3\s+4\s+T", raw_text): 
-                 bet["sport"] = "NCAA Football"
-             elif re.search(r" 1\s+2\s+T", raw_text): 
-                 bet["sport"] = "NCAA Basketball"
-
-        if bet["sport"] == "Unknown" and ("lions" in text_lower or "chiefs" in text_lower):
-             bet["sport"] = "NFL"
+        # 5. Sport Inference
+        # Use shared detector (more consistent + handles soccer/EPL)
+        try:
+            from src.parsers.sport_detection import detect_sport
+            bet["sport"] = detect_sport(raw_text + " " + bet.get("selection", "") + " " + bet.get("description", ""))
+        except Exception:
+            # Fallback to unknown if detector not available
+            bet["sport"] = bet.get("sport") or "Unknown"
 
         return bet
