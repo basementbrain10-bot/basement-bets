@@ -383,6 +383,48 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
 
     const resetFilters = () => setFilters({ date: "", sportsbook: "All", sport: "All", type: "All", selection: "", status: "All" });
 
+    const normalizedFinancials = React.useMemo(() => {
+        const bd = (financials?.breakdown || []).map(x => ({ ...x }));
+
+        const normName = (p) => {
+            const v = String(p || '').trim();
+            const low = v.toLowerCase();
+            if (!v) return 'Other';
+            if (low.includes('barstool')) return 'Other';
+            if (low === 'other') return 'Other';
+            return v;
+        };
+
+        const agg = {};
+        for (const r of bd) {
+            const k = normName(r.provider);
+            if (!agg[k]) {
+                agg[k] = {
+                    provider: k,
+                    deposited: 0,
+                    withdrawn: 0,
+                    net_profit: 0,
+                    in_play: 0,
+                    ledger_in_play: 0,
+                    ledger_delta: 0,
+                    computed_in_play: 0,
+                    computed_delta: 0,
+                };
+            }
+            agg[k].deposited += Number(r.deposited || 0);
+            agg[k].withdrawn += Number(r.withdrawn || 0);
+            agg[k].net_profit += Number(r.net_profit || 0);
+            agg[k].in_play += Number(r.in_play || 0);
+            agg[k].ledger_in_play += Number((r.ledger_in_play ?? r.in_play) || 0);
+            agg[k].ledger_delta += Number(r.ledger_delta || 0);
+            agg[k].computed_in_play += Number(r.computed_in_play || 0);
+            agg[k].computed_delta += Number(r.computed_delta || 0);
+        }
+
+        const breakdown = Object.values(agg).sort((a, b) => String(a.provider).localeCompare(String(b.provider)));
+        return { ...financials, breakdown };
+    }, [financials]);
+
     return (
         <div className="space-y-8">
             <SportAuditorModal
@@ -419,9 +461,9 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                 onClose={() => setShowManualAdd(false)}
             />
             {/* Sportsbook Balance Summary Tiles */}
-            {financials?.breakdown && (
+            {normalizedFinancials?.breakdown && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    {financials.breakdown
+                    {normalizedFinancials.breakdown
                         .filter(prov => prov.provider === 'DraftKings' || prov.provider === 'FanDuel')
                         .map((prov) => (
                             <div key={prov.provider} className={`bg-slate-900 border rounded-xl p-5 ${prov.provider === 'DraftKings' ? 'border-orange-600/30' : 'border-blue-600/30'}`}>
@@ -439,7 +481,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                         ))}
                     {/* Total In Play Tile (Calculated) */}
                     {(() => {
-                        const calculatedTotal = financials.breakdown
+                        const calculatedTotal = normalizedFinancials.breakdown
                             .filter(prov => prov.provider === 'DraftKings' || prov.provider === 'FanDuel')
                             .reduce((sum, p) => sum + ((p.ledger_in_play ?? p.in_play) || 0), 0);
 
@@ -456,6 +498,54 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                             </div>
                         );
                     })()}
+                </div>
+            )}
+
+
+            {/* Sportsbook Financials (ledger baseline; Barstool + Other merged into Other) */}
+            {normalizedFinancials?.breakdown && (
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl mb-8 p-6">
+                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                        <DollarSign className="text-green-400" /> Sportsbook Financials
+                    </h3>
+                    <div className="text-[10px] text-gray-600 text-center mb-4 uppercase tracking-widest opacity-50">
+                        Baseline balances from latest snapshots; new settled bets apply as ledger delta.
+                    </div>
+
+                    <table className="w-full text-left text-sm">
+                        <thead>
+                            <tr className="text-gray-400 border-b border-gray-700">
+                                <th className="pb-2">Sportsbook</th>
+                                <th className="pb-2 text-right">In Play</th>
+                                <th className="pb-2 text-right">Ledger Δ</th>
+                                <th className="pb-2 text-right">Total Deposited</th>
+                                <th className="pb-2 text-right">Total Withdrawn</th>
+                                <th className="pb-2 text-right">Realized Profit</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                            {normalizedFinancials.breakdown.map((prov) => {
+                                const inPlay = Number((prov.ledger_in_play ?? prov.in_play) || 0);
+                                const delta = Number(prov.ledger_delta || 0);
+                                return (
+                                    <tr key={prov.provider} className="hover:bg-gray-800/30">
+                                        <td className="py-3 font-bold text-white">{prov.provider}</td>
+                                        <td className={`py-3 text-right font-bold ${inPlay >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {formatCurrency(inPlay)}
+                                        </td>
+                                        <td className={`py-3 text-right font-mono font-bold ${delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {formatCurrency(delta)}
+                                        </td>
+                                        <td className="py-3 text-right text-gray-400">{formatCurrency(prov.deposited)}</td>
+                                        <td className="py-3 text-right text-gray-400">{formatCurrency(prov.withdrawn)}</td>
+                                        <td className={`py-3 text-right font-bold ${Number(prov.net_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                            {formatCurrency(prov.net_profit)}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
                 </div>
             )}
 

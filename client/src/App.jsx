@@ -595,92 +595,9 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Financial Overview tiles removed for Performance tab (focus on betting performance) */}
 
-            {/* Sportsbook Balance Summary Tiles */}
-            {financials?.breakdown && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    {financials.breakdown
-                        .filter(prov => prov.provider === 'DraftKings' || prov.provider === 'FanDuel')
-                        .map((prov) => (
-                            <div key={prov.provider} className={`bg-slate-900 border rounded-xl p-5 ${prov.provider === 'DraftKings' ? 'border-orange-600/30' : 'border-blue-600/30'}`}>
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className={`text-sm font-bold uppercase tracking-wider ${prov.provider === 'DraftKings' ? 'text-orange-400' : 'text-blue-400'}`}>
-                                        {prov.provider}
-                                    </span>
-                                    <DollarSign className={`w-5 h-5 ${prov.provider === 'DraftKings' ? 'text-orange-400' : 'text-blue-400'}`} />
-                                </div>
-                                <div className="text-3xl font-bold text-white mb-1">
-                                    {formatCurrency((prov.ledger_in_play ?? prov.in_play) || 0)}
-                                </div>
-                                <div className="text-xs text-gray-400">Current Balance</div>
-                            </div>
-                        ))}
-                    {/* Total In Play Tile (Calculated) */}
-                    {(() => {
-                        const calculatedTotal = financials.breakdown
-                            .filter(prov => prov.provider === 'DraftKings' || prov.provider === 'FanDuel')
-                            .reduce((sum, p) => sum + ((p.ledger_in_play ?? p.in_play) || 0), 0);
+            {/* Sportsbook financials moved to Transactions tab */}
 
-                        return (
-                            <div className="bg-slate-900 border border-green-600/30 rounded-xl p-5">
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-sm font-bold uppercase tracking-wider text-green-400">Total In Play</span>
-                                    <Activity className="w-5 h-5 text-green-400" />
-                                </div>
-                                <div className="text-3xl font-bold text-white mb-1">
-                                    {formatCurrency(calculatedTotal)}
-                                </div>
-                                <div className="text-xs text-gray-400">All Sportsbooks</div>
-                            </div>
-                        );
-                    })()}
-                </div>
-            )}
-
-            {/* Audit Message */}
-            <div className="text-[10px] text-gray-600 text-center mb-8 uppercase tracking-widest opacity-50">
-                Data Integrity Audit: Totals calculated from individual sportsbook balances.
-            </div>
-
-            {/* Provider Breakdown Table */}
-            {
-                financials?.breakdown && (
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl mb-8 p-6">
-                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                            <DollarSign className="text-green-400" /> Sportsbook Financials
-                        </h3>
-
-
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="text-gray-400 border-b border-gray-700">
-                                    <th className="pb-2">Sportsbook</th>
-                                    <th className="pb-2 text-right">In Play</th>
-                                    <th className="pb-2 text-right">Total Deposited</th>
-                                    <th className="pb-2 text-right">Total Withdrawn</th>
-                                    <th className="pb-2 text-right">Realized Profit</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-800">
-                                {financials.breakdown.map((prov) => (
-                                    <tr key={prov.provider} className="hover:bg-gray-800/30">
-                                        <td className="py-3 font-bold text-white">{prov.provider}</td>
-                                        <td className={`py-3 text-right font-bold ${(((prov.ledger_in_play ?? prov.in_play) || 0) >= 0) ? 'text-green-400' : 'text-red-400'}`}>
-                                            {formatCurrency((prov.ledger_in_play ?? prov.in_play) || 0)}
-                                        </td>
-                                        <td className="py-3 text-right text-gray-400">{formatCurrency(prov.deposited)}</td>
-                                        <td className="py-3 text-right text-gray-400">{formatCurrency(prov.withdrawn)}</td>
-                                        <td className={`py-3 text-right font-bold ${prov.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {formatCurrency(prov.net_profit)}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )
-            }
-
-            {/* Drawdown tiles removed (keep Performance tab focused on betting performance + curves) */}
+{/* Drawdown tiles removed (keep Performance tab focused on betting performance + curves) */}
 
             {/* Betting performance windows (settled bets) */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl backdrop-blur-sm">
