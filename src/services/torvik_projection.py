@@ -242,7 +242,7 @@ class TorvikProjectionService:
             params["date"] = date
             
         query = f"""
-        SELECT adj_off, adj_def, adj_tempo, luck, continuity 
+        SELECT adj_off, adj_def, adj_tempo, luck, continuity, torvik_rank, record
         FROM bt_team_metrics_daily 
         WHERE team_text = :t {date_clause}
         ORDER BY date DESC LIMIT 1

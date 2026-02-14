@@ -476,6 +476,8 @@ def init_bt_team_metrics_db():
         adj_off REAL,
         adj_def REAL,
         adj_tempo REAL,
+        torvik_rank INTEGER,
+        record TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(team_text, date)
     );
@@ -1407,20 +1409,36 @@ def upsert_team_metrics(metrics: list):
         conn.commit()
 
 def upsert_bt_team_metrics_daily(metrics: list):
-    """
-    Upsert daily team metrics to bt_team_metrics_daily.
+    """Upsert daily team metrics to bt_team_metrics_daily.
+
     Expected payload keys: team_text, date, adj_off, adj_def, adj_tempo
+    Optional: torvik_rank, record
     """
+
     query = """
-    INSERT INTO bt_team_metrics_daily (team_text, date, adj_off, adj_def, adj_tempo)
-    VALUES (:team_text, :date, :adj_off, :adj_def, :adj_tempo)
+    INSERT INTO bt_team_metrics_daily (team_text, date, adj_off, adj_def, adj_tempo, torvik_rank, record)
+    VALUES (:team_text, :date, :adj_off, :adj_def, :adj_tempo, :torvik_rank, :record)
     ON CONFLICT (team_text, date) DO UPDATE SET
         adj_off = EXCLUDED.adj_off,
         adj_def = EXCLUDED.adj_def,
-        adj_tempo = EXCLUDED.adj_tempo
+        adj_tempo = EXCLUDED.adj_tempo,
+        torvik_rank = EXCLUDED.torvik_rank,
+        record = EXCLUDED.record
     """
     with get_db_connection() as conn:
+        # Defensive migrations (prod DB may lag new columns)
+        try:
+            _exec(conn, "ALTER TABLE bt_team_metrics_daily ADD COLUMN IF NOT EXISTS torvik_rank INTEGER;")
+            _exec(conn, "ALTER TABLE bt_team_metrics_daily ADD COLUMN IF NOT EXISTS record TEXT;")
+        except Exception:
+            pass
+
         for m in metrics:
+            # Ensure optional keys exist for SQL named params
+            if 'torvik_rank' not in m:
+                m['torvik_rank'] = None
+            if 'record' not in m:
+                m['record'] = None
             _exec(conn, query, m)
         conn.commit()
 

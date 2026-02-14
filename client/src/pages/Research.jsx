@@ -1858,20 +1858,36 @@ const Research = ({ onAddBet }) => {
                                                             return (
                                                                 <div className="space-y-2 text-xs">
                                                                     <div className="flex justify-between items-center">
-                                                                        <span className="text-slate-500">Pace</span>
-                                                                        <span className={`${paceLbl.cls} font-bold`}>{paceLbl.label}</span>
+                                                                        <span className="text-slate-500">Avg possessions / team</span>
+                                                                        <span className={`${paceLbl.cls} font-bold`}>{tempo ? `${tempo}` : '—'}</span>
                                                                     </div>
-                                                                    <div className="text-[10px] text-slate-500">Est: {tempo ? `${tempo} possessions` : '—'}</div>
+                                                                    <div className="text-[10px] text-slate-500">Pace label: <span className={`${paceLbl.cls} font-bold`}>{paceLbl.label}</span></div>
 
                                                                     <div className="border-t border-slate-700/50 pt-2">
-                                                                        <div className="text-slate-300 font-bold mb-1">{selectedGame?.home_team}</div>
+                                                                        <div className="flex items-center justify-between gap-2 mb-1">
+                                                                            <div className="text-slate-300 font-bold">{selectedGame?.home_team}</div>
+                                                                            <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                                                                                {h.torvik_rank ? <span>Torvik #{h.torvik_rank}</span> : null}
+                                                                                {analysisResult?.kenpom_data?.home_rank ? <span>KenPom #{analysisResult.kenpom_data.home_rank}</span> : null}
+                                                                                {analysisResult?.kenpom_data?.home_rank && Number(analysisResult.kenpom_data.home_rank) <= 25 ? <span className="px-1.5 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-200">Top 25</span> : null}
+                                                                            </div>
+                                                                        </div>
+                                                                        {h.record ? <div className="text-[11px] text-slate-400 mb-1">Record: <span className="text-slate-200 font-bold">{h.record}</span></div> : null}
                                                                         <div className="flex justify-between"><span className="text-slate-500">Offense</span><span className={`${hOff.cls} font-bold`}>{hOff.label}</span></div>
                                                                         <div className="flex justify-between"><span className="text-slate-500">Defense</span><span className={`${hDef.cls} font-bold`}>{hDef.label}</span></div>
                                                                         <div className="text-[10px] text-slate-500 mt-1">AdjO {h.adj_off?.toFixed ? h.adj_off.toFixed(1) : (h.adj_off ?? '—')} • AdjD {h.adj_def?.toFixed ? h.adj_def.toFixed(1) : (h.adj_def ?? '—')} • AdjT {h.adj_tempo?.toFixed ? h.adj_tempo.toFixed(1) : (h.adj_tempo ?? '—')}</div>
                                                                     </div>
 
                                                                     <div className="border-t border-slate-700/50 pt-2">
-                                                                        <div className="text-slate-300 font-bold mb-1">{selectedGame?.away_team}</div>
+                                                                        <div className="flex items-center justify-between gap-2 mb-1">
+                                                                            <div className="text-slate-300 font-bold">{selectedGame?.away_team}</div>
+                                                                            <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                                                                                {a.torvik_rank ? <span>Torvik #{a.torvik_rank}</span> : null}
+                                                                                {analysisResult?.kenpom_data?.away_rank ? <span>KenPom #{analysisResult.kenpom_data.away_rank}</span> : null}
+                                                                                {analysisResult?.kenpom_data?.away_rank && Number(analysisResult.kenpom_data.away_rank) <= 25 ? <span className="px-1.5 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-200">Top 25</span> : null}
+                                                                            </div>
+                                                                        </div>
+                                                                        {a.record ? <div className="text-[11px] text-slate-400 mb-1">Record: <span className="text-slate-200 font-bold">{a.record}</span></div> : null}
                                                                         <div className="flex justify-between"><span className="text-slate-500">Offense</span><span className={`${aOff.cls} font-bold`}>{aOff.label}</span></div>
                                                                         <div className="flex justify-between"><span className="text-slate-500">Defense</span><span className={`${aDef.cls} font-bold`}>{aDef.label}</span></div>
                                                                         <div className="text-[10px] text-slate-500 mt-1">AdjO {a.adj_off?.toFixed ? a.adj_off.toFixed(1) : (a.adj_off ?? '—')} • AdjD {a.adj_def?.toFixed ? a.adj_def.toFixed(1) : (a.adj_def ?? '—')} • AdjT {a.adj_tempo?.toFixed ? a.adj_tempo.toFixed(1) : (a.adj_tempo ?? '—')}</div>

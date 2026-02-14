@@ -92,7 +92,9 @@ class KenPomClient:
             'total_adj': round(total_adj, 1),
             'summary': summary,
             'home_adj_em': home_rating['adj_em'],
-            'away_adj_em': away_rating['adj_em']
+            'away_adj_em': away_rating['adj_em'],
+            'home_rank': home_rating.get('rank'),
+            'away_rank': away_rating.get('rank'),
         }
 
 

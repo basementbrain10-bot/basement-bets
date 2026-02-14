@@ -115,6 +115,18 @@ class BartTorvikClient:
                 # Actually, index 21/22 is typically Tempo.
                 
                 name = row[1]
+                # Torvik rank + record are useful for UI context.
+                torvik_rank = None
+                record = None
+                try:
+                    torvik_rank = int(row[0])
+                except Exception:
+                    torvik_rank = None
+                try:
+                    record = str(row[3]) if len(row) > 3 else None
+                except Exception:
+                    record = None
+
                 adj_oe = float(row[4])
                 adj_de = float(row[6])
                 
@@ -167,6 +179,8 @@ class BartTorvikClient:
                     "adj_off": adj_oe,
                     "adj_def": adj_de,
                     "adj_tempo": tempo,
+                    "torvik_rank": torvik_rank,
+                    "record": record,
                     "luck": luck,
                     "continuity": continuity,
                     "efg_off": None,
