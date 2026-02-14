@@ -186,10 +186,11 @@ class DraftKingsTextParser:
                         header = l
                         header_idx = i
                         if odds_matches:
-                            # If both boosted (+...) and regular (-...) odds appear, prefer the last negative (regular) odds.
+                            # If both boosted (+...) and regular (-...) odds appear, prefer boosted odds.
+                            # DK often shows something like "-110+118" where +118 is the boosted payout.
                             try:
-                                negs = [o for o in odds_matches if o.startswith('-')]
-                                pick = negs[-1] if negs else odds_matches[-1]
+                                poss = [o for o in odds_matches if o.startswith('+')]
+                                pick = poss[-1] if poss else odds_matches[-1]
                                 odds = int(pick)
                             except Exception:
                                 odds = int(odds_matches[-1])
@@ -264,10 +265,10 @@ class DraftKingsTextParser:
                 # Handle concatenated odds in header like "SGP2 Picks+100+130" -> extract +130
                 odds_matches = re.findall(r'[+-]\d{3,}', bet_type)
                 if odds_matches:
-                     # If both boosted (+...) and regular (-...) odds appear, prefer the last negative (regular) odds.
+                     # If both boosted (+...) and regular (-...) odds appear, prefer boosted odds.
                      try:
-                         negs = [o for o in odds_matches if o.startswith('-')]
-                         pick = negs[-1] if negs else odds_matches[-1]
+                         poss = [o for o in odds_matches if o.startswith('+')]
+                         pick = poss[-1] if poss else odds_matches[-1]
                          odds = int(pick)
                      except Exception:
                          try:
