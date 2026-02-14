@@ -888,9 +888,17 @@ class AnalyticsEngine:
             # Transactions table may not exist yet - degrade gracefully
             print(f"[Analytics] Skipping transactions for financial summary (table may not exist): {e}")
         
-        # Calculate "Total In Play" (Current Equity)
-        balances = self.get_balances()
-        total_equity = sum(v['balance'] for v in balances.values())
+        # Snapshot-anchored balances (source of truth for "baseline")
+        from src.database import fetch_latest_balance_snapshots
+        latest_snaps = fetch_latest_balance_snapshots(user_id=user_id)
+        snap_balances = {p: float(s.get('balance') or 0) for p, s in (latest_snaps or {}).items()}
+        snap_captured = {p: s.get('captured_at') for p, s in (latest_snaps or {}).items()}
+
+        # Calculate "Total In Play" baseline from latest snapshots
+        total_equity = sum(snap_balances.values())
+
+        # Keep the previous computed balances available (for debugging/analysis)
+        balances = self.get_balances(user_id=user_id)
         
         # Realized Profit = Simple Cash Out - Cash In
         # This answers: "How much more/less money do I have from withdrawals vs deposits?"
@@ -945,8 +953,50 @@ class AnalyticsEngine:
         provider_breakdown = []
         for p, stats in provider_stats.items():
             net = stats['withdrawn'] - stats['deposited']
-            # Current balance (snapshot-anchored) used throughout UI
-            provider_balance = balances.get(p, {}).get('balance', 0.0)
+            # Baseline balance from the latest explicit snapshot (preferred) — this is what the UI historically showed.
+            provider_balance = float(snap_balances.get(p, 0.0) or 0.0)
+            provider_captured_at = snap_captured.get(p)
+
+            # Ledger delta: sum of settled bet P/L for bets created AFTER the snapshot.
+            # This gives "baseline snapshot" + "new bets added since snapshot".
+            ledger_delta = 0.0
+            try:
+                from dateutil.parser import parse as parse_date
+
+                cap = provider_captured_at
+                if isinstance(cap, str):
+                    try:
+                        cap = parse_date(cap)
+                    except Exception:
+                        cap = None
+
+                for b in (bets or []):
+                    if (b.get('provider') or '') != p:
+                        continue
+                    st = str(b.get('status') or '').upper().strip()
+                    if st in ('PENDING', 'OPEN'):
+                        continue
+                    if (b.get('category') or '').lower() == 'transaction':
+                        continue
+                    bc = b.get('created_at')
+                    if isinstance(bc, str):
+                        try:
+                            bc = parse_date(bc)
+                        except Exception:
+                            bc = None
+                    if cap and bc and bc <= cap:
+                        continue
+                    # If we don't have cap or created_at, we conservatively do NOT include it in ledger_delta.
+                    if cap and not bc:
+                        continue
+                    if not cap:
+                        # No snapshot baseline: treat ledger as 0 until you capture a snapshot.
+                        continue
+                    ledger_delta += float(b.get('profit') or 0)
+            except Exception:
+                ledger_delta = 0.0
+
+            ledger_in_play = provider_balance + float(ledger_delta or 0)
 
             computed_balance = float(stats['deposited'] or 0) - float(stats['withdrawn'] or 0) + float(bet_profit.get(p) or 0)
             provider_breakdown.append({
@@ -955,6 +1005,9 @@ class AnalyticsEngine:
                 "withdrawn": stats['withdrawn'],
                 "net_profit": net,
                 "in_play": provider_balance,
+                "captured_at": provider_captured_at,
+                "ledger_delta": float(ledger_delta),
+                "ledger_in_play": float(ledger_in_play),
                 "computed_in_play": computed_balance,
                 "computed_delta": float(computed_balance) - float(provider_balance)
             })
@@ -962,10 +1015,15 @@ class AnalyticsEngine:
         provider_breakdown.sort(key=lambda x: x['provider'])
 
         computed_total_in_play = 0.0
+        ledger_total_in_play = 0.0
         try:
             computed_total_in_play = sum(float(x.get('computed_in_play') or 0) for x in provider_breakdown)
         except Exception:
             computed_total_in_play = 0.0
+        try:
+            ledger_total_in_play = sum(float(x.get('ledger_in_play') or 0) for x in provider_breakdown)
+        except Exception:
+            ledger_total_in_play = 0.0
 
         return {
             "total_deposited": total_deposits,
@@ -973,6 +1031,8 @@ class AnalyticsEngine:
             "total_in_play": total_equity,
             "realized_profit": realized_profit,
             "net_bet_profit": net_bet_profit,
+            "ledger_total_in_play": float(ledger_total_in_play),
+            "ledger_total_delta": float(ledger_total_in_play) - float(total_equity),
             "computed_total_in_play": computed_total_in_play,
             "computed_total_delta": float(computed_total_in_play) - float(total_equity),
             "breakdown": provider_breakdown

@@ -409,6 +409,94 @@ async def get_dashboard(user: dict = Depends(get_current_user)):
         }
     }
 
+@app.get("/api/ledger/settled")
+async def get_settled_bet_ledger(user: dict = Depends(get_current_user)):
+    """Audit ledger: settled bets added *after* the latest balance snapshot per provider.
+
+    This lets us treat snapshots as the baseline, and show the incremental P/L from newly-added
+    bets (e.g. via Add Bet Slip) as a ledger delta.
+    """
+    from src.database import get_db_connection, _exec
+
+    user_id = user.get("sub")
+
+    q = """
+    WITH latest AS (
+      SELECT DISTINCT ON (provider)
+        provider,
+        captured_at,
+        balance
+      FROM balance_snapshots
+      WHERE user_id = %(uid)s
+      ORDER BY provider, captured_at DESC
+    )
+    SELECT
+      b.id AS bet_id,
+      b.provider,
+      b.created_at,
+      b.date,
+      b.description,
+      b.selection,
+      b.bet_type,
+      b.wager,
+      b.profit,
+      b.status,
+      l.captured_at AS baseline_captured_at,
+      l.balance AS baseline_balance
+    FROM bets b
+    JOIN latest l ON l.provider = b.provider
+    WHERE b.user_id = %(uid)s
+      AND (b.status IS NOT NULL AND UPPER(b.status) NOT IN ('PENDING','OPEN'))
+      AND b.created_at > l.captured_at
+    ORDER BY b.created_at DESC
+    """
+
+    with get_db_connection() as conn:
+        rows = _exec(conn, q, {"uid": str(user_id)}).fetchall()
+
+    # group by provider
+    out = {}
+    for r in rows:
+        d = dict(r)
+        p = d.get('provider') or 'Unknown'
+        out.setdefault(p, []).append(d)
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + 'Z',
+        "providers": out,
+    }
+
+
+    user_id = user.get("sub")
+    engine = get_analytics_engine(user_id=user_id)
+
+    current_year = datetime.now().year
+
+    # All computations share the cached engine (60s TTL), no extra DB hits
+    bets_all = engine.get_all_bets(user_id=user_id)
+    settled = [b for b in bets_all if (b.get('status') or '').upper() not in ('PENDING', 'OPEN')]
+
+    return {
+        "stats": engine.get_summary(user_id=user_id),
+        "bets": settled,
+        "sport_breakdown": engine.get_breakdown("sport", user_id=user_id),
+        "player_breakdown": engine.get_player_performance(user_id=user_id),
+        "monthly_breakdown": engine.get_monthly_performance(user_id=user_id),
+        "bet_type_breakdown": engine.get_breakdown("bet_type", user_id=user_id),
+        "balance_snapshots": fetch_latest_balance_snapshots(user_id=str(user_id)),
+        "financials": engine.get_financial_summary(user_id=user_id),
+        "reconciliation": engine.get_reconciliation_view(user_id=user_id),
+        "time_series": engine.get_time_series_settled_equity(user_id=user_id),
+        "drawdown": engine.get_drawdown_metrics(user_id=user_id),
+        "edge_breakdown": engine.get_edge_analysis(user_id=user_id),
+        "period_stats": {
+            "7d": engine.get_period_stats(days=7, user_id=user_id),
+            "30d": engine.get_period_stats(days=30, user_id=user_id),
+            "ytd": engine.get_period_stats(year=current_year, user_id=user_id),
+            "all": engine.get_period_stats(user_id=user_id),
+        }
+    }
+
 # ---------------------------------------------------------------------------
 # DETAIL ENDPOINTS — heavy data fetched on demand only
 # ---------------------------------------------------------------------------

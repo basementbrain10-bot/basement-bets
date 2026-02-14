@@ -609,7 +609,7 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                                     <DollarSign className={`w-5 h-5 ${prov.provider === 'DraftKings' ? 'text-orange-400' : 'text-blue-400'}`} />
                                 </div>
                                 <div className="text-3xl font-bold text-white mb-1">
-                                    {formatCurrency((prov.computed_in_play ?? prov.in_play) || 0)}
+                                    {formatCurrency((prov.ledger_in_play ?? prov.in_play) || 0)}
                                 </div>
                                 <div className="text-xs text-gray-400">Current Balance</div>
                             </div>
@@ -618,7 +618,7 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                     {(() => {
                         const calculatedTotal = financials.breakdown
                             .filter(prov => prov.provider === 'DraftKings' || prov.provider === 'FanDuel')
-                            .reduce((sum, p) => sum + ((p.computed_in_play ?? p.in_play) || 0), 0);
+                            .reduce((sum, p) => sum + ((p.ledger_in_play ?? p.in_play) || 0), 0);
 
                         return (
                             <div className="bg-slate-900 border border-green-600/30 rounded-xl p-5">
@@ -664,8 +664,8 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                                 {financials.breakdown.map((prov) => (
                                     <tr key={prov.provider} className="hover:bg-gray-800/30">
                                         <td className="py-3 font-bold text-white">{prov.provider}</td>
-                                        <td className={`py-3 text-right font-bold ${(((prov.computed_in_play ?? prov.in_play) || 0) >= 0) ? 'text-green-400' : 'text-red-400'}`}>
-                                            {formatCurrency((prov.computed_in_play ?? prov.in_play) || 0)}
+                                        <td className={`py-3 text-right font-bold ${(((prov.ledger_in_play ?? prov.in_play) || 0) >= 0) ? 'text-green-400' : 'text-red-400'}`}>
+                                            {formatCurrency((prov.ledger_in_play ?? prov.in_play) || 0)}
                                         </td>
                                         <td className="py-3 text-right text-gray-400">{formatCurrency(prov.deposited)}</td>
                                         <td className="py-3 text-right text-gray-400">{formatCurrency(prov.withdrawn)}</td>
@@ -1505,7 +1505,7 @@ const FinancialHeader = ({ financials, mode = 'all' }) => {
             {mode !== 'performance' && (
                 <FinancialCard
                     label="Total In Play"
-                    value={financials?.computed_total_in_play ?? financials?.total_in_play}
+                    value={financials?.ledger_total_in_play ?? financials?.total_in_play}
                     icon={TrendingUp}
                     borderColor="border-green-500/30"
                     colorClass="bg-green-900/20 text-green-400"
