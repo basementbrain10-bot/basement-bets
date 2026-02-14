@@ -969,6 +969,12 @@ class AnalyticsEngine:
                         cap = parse_date(cap)
                     except Exception:
                         cap = None
+                # Normalize timezone-aware timestamps to naive for safe comparison with Postgres TIMESTAMP (naive)
+                try:
+                    if hasattr(cap, 'tzinfo') and cap.tzinfo:
+                        cap = cap.replace(tzinfo=None)
+                except Exception:
+                    pass
 
                 for b in (bets or []):
                     if (b.get('provider') or '') != p:
