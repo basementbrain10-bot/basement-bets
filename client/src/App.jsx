@@ -163,7 +163,8 @@ function App() {
         didLoad.current = true;
 
         // Single batch fetch - replaces 16 parallel API calls
-        const fetchData = async () => {
+        const reloadDashboard = async () => {
+            setLoading(true);
             try {
                 const { data: d } = await api.get('/api/dashboard');
 
@@ -247,7 +248,10 @@ function App() {
                 setLoading(false);
             }
         };
-        fetchData();
+        reloadDashboard();
+
+        // expose for child components (Transactions edit) without prop drilling
+        window.__BB_RELOAD_DASHBOARD__ = reloadDashboard;
     }, []);
 
     if (error) return (
@@ -1656,13 +1660,19 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                         description: editBet.description,
                         selection: editBet.selection,
                     };
-                    // Update Event display immediately (server will also recompute event_text on save)
                     try {
                         next.event_text = computeEventText(next) || next.event_text;
                     } catch (e) { }
                     return next;
                 }));
             }
+
+            // Refresh aggregates (tiles, performance summaries, etc.)
+            try {
+                if (typeof window !== 'undefined' && typeof window.__BB_RELOAD_DASHBOARD__ === 'function') {
+                    window.__BB_RELOAD_DASHBOARD__();
+                }
+            } catch (e) { }
 
             setShowEdit(false);
             setEditBet(null);
