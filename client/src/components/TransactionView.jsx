@@ -472,33 +472,78 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                 onSave={submitManualBet}
                 onClose={() => setShowManualAdd(false)}
             />
-            {/* Sportsbook Balance Summary Tiles */}
+            {/* Sportsbook Balance Summary Tiles (Primary + Secondary per book) */}
             {normalizedFinancials?.breakdown && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                    {normalizedFinancials.breakdown
-                        .filter(prov => prov.provider === 'DraftKings' || prov.provider === 'FanDuel')
-                        .map((prov) => (
-                            <div key={prov.provider} className={`bg-slate-900 border rounded-xl p-5 ${prov.provider === 'DraftKings' ? 'border-orange-600/30' : 'border-blue-600/30'}`}>
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className={`text-sm font-bold uppercase tracking-wider ${prov.provider === 'DraftKings' ? 'text-orange-400' : 'text-blue-400'}`}>
-                                        {prov.provider}
-                                    </span>
-                                    <DollarSign className={`w-5 h-5 ${prov.provider === 'DraftKings' ? 'text-orange-400' : 'text-blue-400'}`} />
-                                </div>
-                                <div className="text-3xl font-bold text-white mb-1">
-                                    {formatCurrency((prov.ledger_in_play ?? prov.in_play) || 0)}
-                                </div>
-                                <div className="text-xs text-gray-400">Current Balance</div>
-                            </div>
-                        ))}
-                    {/* Total In Play Tile (Calculated) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                     {(() => {
-                        const calculatedTotal = normalizedFinancials.breakdown
-                            .filter(prov => prov.provider === 'DraftKings' || prov.provider === 'FanDuel')
-                            .reduce((sum, p) => sum + ((p.ledger_in_play ?? p.in_play) || 0), 0);
+                        const bd = normalizedFinancials.breakdown || [];
+                        const byProv = (name) => bd.filter(x => x.provider === name);
 
-                        return (
-                            <div className="bg-slate-900 border border-green-600/30 rounded-xl p-5">
+                        const getAcc = (provName, accId) => {
+                            const xs = byProv(provName).filter(x => String(x.account_id || '') === String(accId || ''));
+                            // Prefer explicit account row; if missing, return null
+                            return xs.length ? xs[0] : null;
+                        };
+
+                        const getTotal = (provName) => {
+                            const xs = byProv(provName).filter(x => x.account_id === null);
+                            return xs.length ? xs[0] : null;
+                        };
+
+                        const renderBookTile = (provName) => {
+                            const total = getTotal(provName);
+                            const primary = getAcc(provName, 'Main');
+                            const secondary = getAcc(provName, 'User2');
+
+                            const totalBal = Number((total?.ledger_in_play ?? total?.in_play) || 0);
+                            const priBal = Number((primary?.ledger_in_play ?? primary?.in_play) || 0);
+                            const secBal = Number((secondary?.ledger_in_play ?? secondary?.in_play) || 0);
+
+                            const borderCls = provName === 'DraftKings' ? 'border-orange-600/30' : 'border-blue-600/30';
+                            const textCls = provName === 'DraftKings' ? 'text-orange-400' : 'text-blue-400';
+                            const iconCls = provName === 'DraftKings' ? 'text-orange-400' : 'text-blue-400';
+
+                            return (
+                                <div key={provName} className={`bg-slate-900 border rounded-xl p-5 ${borderCls}`}>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className={`text-sm font-bold uppercase tracking-wider ${textCls}`}>{provName}</span>
+                                        <DollarSign className={`w-5 h-5 ${iconCls}`} />
+                                    </div>
+
+                                    <div className="text-3xl font-bold text-white mb-2">
+                                        {formatCurrency(totalBal)}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                        <div className="bg-slate-950/30 border border-slate-800 rounded-lg p-2">
+                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Primary</div>
+                                            <div className="text-slate-200 font-mono font-bold">{formatCurrency(priBal)}</div>
+                                            <div className="text-[10px] text-slate-600">Main</div>
+                                        </div>
+                                        <div className="bg-slate-950/30 border border-slate-800 rounded-lg p-2">
+                                            <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Secondary</div>
+                                            <div className="text-slate-200 font-mono font-bold">{formatCurrency(secBal)}</div>
+                                            <div className="text-[10px] text-slate-600">User2</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-2 text-[10px] text-gray-500">
+                                        Primary + Secondary = current balance
+                                    </div>
+                                </div>
+                            );
+                        };
+
+                        const dk = renderBookTile('DraftKings');
+                        const fd = renderBookTile('FanDuel');
+
+                        const calculatedTotal = bd
+                            .filter(x => x.account_id === null)
+                            .filter(x => x.provider === 'DraftKings' || x.provider === 'FanDuel')
+                            .reduce((sum, p) => sum + Number((p.ledger_in_play ?? p.in_play) || 0), 0);
+
+                        const totalTile = (
+                            <div className="bg-slate-900 border border-green-600/30 rounded-xl p-5" key="total-in-play">
                                 <div className="flex items-center justify-between mb-3">
                                     <span className="text-sm font-bold uppercase tracking-wider text-green-400">Total In Play</span>
                                     <Activity className="w-5 h-5 text-green-400" />
@@ -506,8 +551,16 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                 <div className="text-3xl font-bold text-white mb-1">
                                     {formatCurrency(calculatedTotal)}
                                 </div>
-                                <div className="text-xs text-gray-400">All Sportsbooks</div>
+                                <div className="text-xs text-gray-400">DraftKings + FanDuel</div>
                             </div>
+                        );
+
+                        return (
+                            <>
+                                {dk}
+                                {fd}
+                                {totalTile}
+                            </>
                         );
                     })()}
                 </div>
