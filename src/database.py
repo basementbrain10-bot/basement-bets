@@ -1706,6 +1706,66 @@ def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None, upd
             return 'FanDuel'
         return p
 
+    # If user changes selection/description and doesn't explicitly set event_text,
+    # recompute it from the updated fields + existing raw_text (so Event column updates).
+    needs_event_recalc = (
+        ('event_text' not in fields)
+        and any(k in fields for k in ('selection', 'description'))
+    )
+
+    existing = None
+    if needs_event_recalc:
+        try:
+            with get_db_connection() as conn:
+                existing = _exec(
+                    conn,
+                    "SELECT raw_text, description, selection FROM bets WHERE id=%s AND (%s IS NULL OR user_id=%s)",
+                    (int(bet_id), user_id, user_id),
+                ).fetchone()
+        except Exception:
+            existing = None
+
+    def _extract_event_text_from(raw_text: str, description: str, selection: str) -> str | None:
+        try:
+            def clean_side(x: str) -> str:
+                x = (x or '').strip()
+                x = re.split(r"\s+[+\-−–]\d+(?:\.\d+)?\b", x, maxsplit=1)[0]
+                x = re.split(r"\s+\b(over|under)\b\s*\d+(?:\.\d+)?\b", x, flags=re.IGNORECASE, maxsplit=1)[0]
+                x = re.split(r"\s+\bml\b", x, flags=re.IGNORECASE, maxsplit=1)[0]
+                x = re.split(r"\s+\|", x, maxsplit=1)[0]
+                x = re.sub(r"\s+", " ", x).strip()
+                x = re.sub(r"\b([A-Za-z]{3,})\s+\1\b", r"\1", x, flags=re.IGNORECASE)
+                return x.strip()
+
+            sources = [str(raw_text or ''), str(description or ''), str(selection or '')]
+            for src in sources:
+                if not src:
+                    continue
+                for ln in str(src).splitlines():
+                    ln = ln.strip()
+                    if not ln:
+                        continue
+                    if ('@' in ln) or re.search(r"\b(vs\.?|versus)\b", ln, re.IGNORECASE):
+                        m = re.search(r"(.+?)\s*(?:@|vs\.?|versus)\s*(.+)$", ln, flags=re.IGNORECASE)
+                        if m:
+                            a = clean_side(m.group(1))
+                            b = clean_side(m.group(2))
+                            if a and b:
+                                return f"{a} @ {b}"[:160]
+
+            s = "\n".join(sources)
+            s = re.sub(r"\s+", " ", s).strip()
+            m = re.search(r"(.+?)\s*(?:@|vs\.?|versus)\s*(.+?)(?:\s*\||\s*$)", s, flags=re.IGNORECASE)
+            if not m:
+                return None
+            a = clean_side(m.group(1))
+            b = clean_side(m.group(2))
+            if a and b:
+                return f"{a} @ {b}"[:160]
+        except Exception:
+            return None
+        return None
+
     for k, v in fields.items():
         if k not in allowed:
             continue
@@ -1735,6 +1795,20 @@ def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None, upd
                 continue
         sets.append(f"{k}=%s")
         params.append(v)
+
+    if needs_event_recalc and existing:
+        try:
+            raw_text = existing.get('raw_text') if hasattr(existing, 'get') else existing[0]
+            cur_desc = existing.get('description') if hasattr(existing, 'get') else existing[1]
+            cur_sel = existing.get('selection') if hasattr(existing, 'get') else existing[2]
+            new_desc = fields.get('description', cur_desc)
+            new_sel = fields.get('selection', cur_sel)
+            ev = _extract_event_text_from(raw_text, new_desc, new_sel)
+            if ev:
+                sets.append("event_text=%s")
+                params.append(ev)
+        except Exception:
+            pass
 
     if not sets:
         return False

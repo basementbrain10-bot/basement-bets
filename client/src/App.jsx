@@ -1640,7 +1640,7 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                 setBets((prev) => (prev || []).map((b) => {
                     if (Number(b.id) !== Number(editBet.id)) return b;
                     const date = String(editBet.date || '').slice(0, 10);
-                    return {
+                    const next = {
                         ...b,
                         provider: editBet.provider,
                         date,
@@ -1654,6 +1654,11 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                         description: editBet.description,
                         selection: editBet.selection,
                     };
+                    // Update Event display immediately (server will also recompute event_text on save)
+                    try {
+                        next.event_text = extractEvent(next) || next.event_text;
+                    } catch (e) { }
+                    return next;
                 }));
             }
 
