@@ -1149,39 +1149,33 @@ async def review_fill_missing_fields(days: int = 3650, limit: int = 20000, dry_r
 
 
 @app.post("/api/audit/bets/backfill-event-text")
-async def backfill_event_text(days: int = 3650, limit: int = 20000, force: bool = False, user: dict = Depends(get_current_user)):
+async def backfill_event_text(
+    days: int = 3650,
+    limit: int = 20000,
+    force: bool = False,
+    cursor: int | None = None,
+    batch: int = 300,
+    user: dict = Depends(get_current_user)
+):
     """One-time backfill: populate/repair bets.event_text from raw_text/description/selection.
+
+    This endpoint can be slow on Vercel if you try to process everything in one request.
+    Use batching:
+      - cursor: last processed id (pagination). First call cursor=null.
+      - batch: max rows examined per request.
 
     - force=false (default): only fills missing event_text
     - force=true: also repairs obviously malformed event_text
 
-    This reduces Neon egress because list endpoints can ship event_text instead of raw_text.
+    Returns: scanned, updated, next_cursor.
     """
     try:
         uid = user.get('sub')
         from datetime import datetime, timedelta
-        from src.database import get_db_connection, _exec, update_bet_fields
+        from src.database import get_db_connection, _exec
 
         now = datetime.now()
         cutoff = (now - timedelta(days=int(days))).date().isoformat()
-
-        # Defensive migration: ensure column exists before we reference it
-        with get_db_connection() as conn:
-            try:
-                _exec(conn, "ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_text TEXT;")
-            except Exception:
-                pass
-
-        q = """
-        SELECT id, date, event_text, raw_text, description, selection
-        FROM bets
-        WHERE user_id = %s AND date >= %s
-        ORDER BY date DESC
-        LIMIT %s
-        """
-
-        with get_db_connection() as conn:
-            rows = _exec(conn, q, (uid, cutoff, int(limit))).fetchall()
 
         import re
 
@@ -1234,46 +1228,78 @@ async def backfill_event_text(days: int = 3650, limit: int = 20000, force: bool 
             s = str(ev)
             if '@' not in s:
                 return True
-            # Tails like "TeamB -3.5" or "Over 147.5" should not be present in event_text
             if re.search(r"\s+[+\-−–]\d+(?:\.\d+)?\b", s):
                 return True
             if re.search(r"\b(over|under)\b\s*\d+(?:\.\d+)?\b", s, re.IGNORECASE):
                 return True
-            # Repeated away/home team tokens (common failure): "A @ B B -3.5"
-            parts = [p.strip().lower() for p in s.split('@')]
-            if len(parts) == 2:
-                away, home = parts
-                if home and away and home.split(' ')[0] in away:
-                    return True
             return False
+
+        batch = max(50, min(int(batch), 1000))
+        limit = int(limit)
 
         scanned = 0
         updated = 0
-        for r in rows:
-            b = dict(r)
-            scanned += 1
+        next_cursor = cursor
 
-            cur = b.get('event_text')
-            if cur and (not force) and (not looks_bad(cur)):
-                continue
-            if cur and (not force):
-                continue
+        with get_db_connection() as conn:
+            # Defensive migration: ensure column exists before we reference it
+            try:
+                _exec(conn, "ALTER TABLE bets ADD COLUMN IF NOT EXISTS event_text TEXT;")
+            except Exception:
+                pass
 
-            if cur and force and (not looks_bad(cur)):
-                continue
+            # page by id to keep each request fast
+            q = """
+              SELECT id, date, event_text, raw_text, description, selection
+              FROM bets
+              WHERE user_id = %s
+                AND date >= %s
+                AND (%s IS NULL OR id < %s)
+              ORDER BY id DESC
+              LIMIT %s
+            """
+            rows = _exec(conn, q, (uid, cutoff, cursor, cursor, batch)).fetchall()
 
-            ev = extract_event_text(b.get('raw_text'), b.get('description'), b.get('selection'))
-            if not ev:
-                continue
-            if cur and str(cur).strip() == ev.strip():
-                continue
+            for r in rows:
+                b = dict(r)
+                scanned += 1
+                next_cursor = int(b['id'])
 
-            ok = update_bet_fields(int(b['id']), {"event_text": ev}, user_id=uid, update_note='audit: backfill event_text')
-            if ok:
+                cur_ev = b.get('event_text')
+                if (not force) and cur_ev:
+                    continue
+                if force and cur_ev and (not looks_bad(cur_ev)):
+                    continue
+
+                new_ev = extract_event_text(b.get('raw_text'), b.get('description'), b.get('selection'))
+                if not new_ev:
+                    continue
+                if cur_ev and str(cur_ev).strip() == new_ev.strip():
+                    continue
+
+                # Fast in-transaction update (avoid per-row reconnect)
+                _exec(conn, """
+                  UPDATE bets
+                  SET event_text=%s, updated_at=NOW(), updated_by=%s, update_note=%s
+                  WHERE id=%s AND user_id=%s
+                """, (new_ev, uid, 'audit: backfill event_text', int(b['id']), uid))
                 updated += 1
 
+                if updated >= limit:
+                    break
+
+            conn.commit()
+
         invalidate_analytics_cache(uid)
-        return {"status": "success", "scanned": scanned, "updated": updated, "force": bool(force)}
+        # next_cursor is the last id processed; client should pass it back until scanned==0
+        return {
+            "status": "success",
+            "scanned": scanned,
+            "updated": updated,
+            "force": bool(force),
+            "next_cursor": next_cursor,
+            "done": scanned == 0 or updated >= limit
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
