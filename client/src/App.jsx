@@ -1630,6 +1630,8 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                 status: editBet.status,
                 description: editBet.description,
                 selection: editBet.selection,
+                // also persist event_text if we can infer it from the updated fields
+                event_text: computeEventText(editBet) || undefined,
                 update_note: editNote,
             };
 
@@ -1656,7 +1658,7 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                     };
                     // Update Event display immediately (server will also recompute event_text on save)
                     try {
-                        next.event_text = extractEvent(next) || next.event_text;
+                        next.event_text = computeEventText(next) || next.event_text;
                     } catch (e) { }
                     return next;
                 }));
@@ -1758,54 +1760,49 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
 
     const statuses = ['All', 'PENDING', 'WON', 'LOST', 'PUSH'];
 
-    const extractEvent = (bet) => {
-        // Goal: show teams/matchup if we can infer it.
-        // Priority: event_text (from DB) -> raw_text -> description -> selection.
-        if (bet?.event_text) {
-            // Clean up occasional cases like "Maryland @ Minnesota Minnesota -3.5"
-            const ev = String(bet.event_text);
-            const m = ev.match(/(.+?)\s*@\s*(.+)/);
-            if (m) {
-                const a = m[1].trim();
-                let b = m[2].trim();
-                b = b.replace(/\s+[+\-−–]\d+(?:\.\d+)?\b.*$/, '').trim();
-                b = b.replace(/\s+(over|under)\s*\d+(?:\.\d+)?\b.*$/i, '').trim();
-                // collapse duplicated tokens like "Minnesota Minnesota"
-                b = b.replace(/\b([A-Za-z]{3,})\s+\1\b/gi, '$1').trim();
-                return `${a} @ ${b}`;
-            }
-            return ev;
-        }
+    const computeEventText = (bet) => {
+        // Compute a clean matchup string ignoring any pre-existing event_text.
         const sources = [bet?.raw_text, bet?.description, bet?.selection].filter(Boolean).map(s => String(s));
-        const joined = sources.join(' \n ');
-        const raw = joined.replace(/\s+/g, ' ').trim();
-        if (!raw) return '';
+        const cleanSide = (x) => {
+            let s = String(x || '').trim();
+            s = s.replace(/\s+[+\-−–]\d+(?:\.\d+)?\b.*$/, '').trim();
+            s = s.replace(/\s+(over|under)\s*\d+(?:\.\d+)?\b.*$/i, '').trim();
+            s = s.replace(/\b([A-Za-z]{3,})\s+\1\b/gi, '$1').trim();
+            // Strip pipes
+            s = s.split('|')[0].trim();
+            return s;
+        };
 
-        // Try to pull a clean matchup from within the string.
-        // Matches: "Team A @ Team B" or "Team A vs Team B" (optionally followed by pipes)
-        const m = raw.match(/([A-Za-z0-9\.'\-\s&]+?)\s*(?:@|vs\.?|versus)\s*([A-Za-z0-9\.'\-\s&]+?)(?:\s*\||\s*$)/i);
-        if (m) {
-            const a = (m[1] || '').trim();
-            const b = (m[2] || '').trim();
-            if (a && b) return `${a} @ ${b}`;
-        }
-
-        // Secondary: look line-by-line for a matchup string (raw_text retains line breaks)
+        // Prefer explicit matchup line
         for (const src of sources) {
-            const lines = String(src).split(/\n/).map(l => l.trim()).filter(Boolean);
-            for (const ln of lines) {
+            for (const ln of String(src).split(/\n/).map(l => l.trim()).filter(Boolean)) {
                 if (ln.includes('@') || /\b(vs\.?|versus)\b/i.test(ln)) {
                     const mm = ln.match(/(.+?)\s*(?:@|vs\.?|versus)\s*(.+)/i);
                     if (mm) {
-                        const a = (mm[1] || '').trim();
-                        const b = (mm[2] || '').trim();
+                        const a = cleanSide(mm[1]);
+                        const b = cleanSide(mm[2]);
                         if (a && b) return `${a} @ ${b}`;
                     }
                 }
             }
         }
 
+        // Fallback to combined regex
+        const raw = sources.join(' \n ').replace(/\s+/g, ' ').trim();
+        if (!raw) return '';
+        const m = raw.match(/([A-Za-z0-9\.'\-\s&]+?)\s*(?:@|vs\.?|versus)\s*([A-Za-z0-9\.'\-\s&]+?)(?:\s*\||\s*$)/i);
+        if (m) {
+            const a = cleanSide(m[1]);
+            const b = cleanSide(m[2]);
+            if (a && b) return `${a} @ ${b}`;
+        }
         return '';
+    };
+
+    const extractEvent = (bet) => {
+        // UI display function
+        if (bet?.event_text) return String(bet.event_text);
+        return computeEventText(bet);
     };
     const filtered = bets.filter(b => {
         // Filter out internal Wallet Transfers
