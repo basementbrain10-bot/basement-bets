@@ -603,12 +603,6 @@ function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, b
                                     {formatCurrency(prov.in_play || 0)}
                                 </div>
                                 <div className="text-xs text-gray-400">Current Balance</div>
-                                <div className="text-[10px] text-slate-500 mt-1">
-                                    Computed: <span className="font-mono text-slate-300">{formatCurrency(prov.computed_in_play || 0)}</span>
-                                    <span className={`ml-2 font-mono ${Number(prov.computed_delta || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                        Δ {formatCurrency(Number(prov.computed_delta || 0))}
-                                    </span>
-                                </div>
                             </div>
                         ))}
                     {/* Total In Play Tile (Calculated) */}
@@ -2195,12 +2189,6 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                                     {formatCurrency(prov.in_play || 0)}
                                 </div>
                                 <div className="text-xs text-gray-400">Current Balance</div>
-                                <div className="text-[10px] text-slate-500 mt-1">
-                                    Computed: <span className="font-mono text-slate-300">{formatCurrency(prov.computed_in_play || 0)}</span>
-                                    <span className={`ml-2 font-mono ${Number(prov.computed_delta || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                        Δ {formatCurrency(Number(prov.computed_delta || 0))}
-                                    </span>
-                                </div>
                             </div>
                         ))}
                     {/* Total In Play Tile (Calculated) */}
