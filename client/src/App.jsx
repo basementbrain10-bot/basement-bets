@@ -1459,7 +1459,7 @@ function OddsTicker() {
 }
 
 function TransactionView({ bets, setBets, financials, reconciliation, loading }) {
-    const [selectedIds, setSelectedIds] = useState([]);
+    // Row selection disabled (checkbox column removed)
     const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
     const SkeletonRow = () => (
@@ -1507,40 +1507,7 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
         });
     }, [bets]);
 
-    const handleBulkStatusUpdate = async (newStatus) => {
-        if (!confirm(`Mark ${selectedIds.length} bets as ${newStatus}?`)) return;
-        setIsBulkUpdating(true);
-        try {
-            await api.post('/api/bets/bulk-status', {
-                bet_ids: selectedIds,
-                status: newStatus
-            });
-            setSelectedIds([]);
-            window.location.reload();
-        } catch (err) {
-            console.error(err);
-            alert("Bulk update failed.");
-        } finally {
-            setIsBulkUpdating(false);
-        }
-    };
-
-    const handleBulkDelete = async () => {
-        if (!confirm(`Delete ${selectedIds.length} bets forever?`)) return;
-        setIsBulkUpdating(true);
-        try {
-            await api.post('/api/bets/bulk-delete', {
-                bet_ids: selectedIds
-            });
-            setSelectedIds([]);
-            window.location.reload();
-        } catch (err) {
-            console.error(err);
-            alert("Bulk delete failed.");
-        } finally {
-            setIsBulkUpdating(false);
-        }
-    };
+    // Bulk selection actions removed (checkbox column removed)
 
 
     // Optional prefill from other charts (e.g., Performance scatter)
@@ -1667,16 +1634,14 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                 }));
             }
 
-            // Refresh aggregates (tiles, performance summaries, etc.)
-            try {
-                if (typeof window !== 'undefined' && typeof window.__BB_RELOAD_DASHBOARD__ === 'function') {
-                    window.__BB_RELOAD_DASHBOARD__();
-                }
-            } catch (e) { }
+            // Reliable way to refresh aggregates (tiles, performance summaries, etc.)
+            // without risking stale cached stats.
+            window.location.reload();
 
-            setShowEdit(false);
-            setEditBet(null);
-            setEditNote('');
+            // (below won't run, but keep structure safe if we ever remove reload)
+            // setShowEdit(false);
+            // setEditBet(null);
+            // setEditNote('');
         } catch (err) {
             console.error('Edit save failed', err);
             alert('Failed to update bet.');
@@ -2308,63 +2273,30 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                         )}
                     </div>
                     <div className="flex items-center gap-2">
-                        {selectedIds.length > 0 ? (
-                            <div className="flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/20 px-2 py-1 rounded-lg animate-in slide-in-from-right-2">
-                                <span className="text-[10px] font-black text-blue-400 mr-1 uppercase">{selectedIds.length} Selected</span>
-                                <button
-                                    onClick={() => handleBulkStatusUpdate('WON')}
-                                    disabled={isBulkUpdating}
-                                    className="text-[10px] bg-green-600/20 hover:bg-green-600/40 text-green-400 font-bold px-2 py-1 rounded border border-green-500/20 transition"
-                                >
-                                    WON
-                                </button>
-                                <button
-                                    onClick={() => handleBulkStatusUpdate('LOST')}
-                                    disabled={isBulkUpdating}
-                                    className="text-[10px] bg-red-600/20 hover:bg-red-600/40 text-red-400 font-bold px-2 py-1 rounded border border-red-500/20 transition"
-                                >
-                                    LOST
-                                </button>
-                                <button
-                                    onClick={handleBulkDelete}
-                                    disabled={isBulkUpdating}
-                                    className="text-[10px] bg-gray-800 hover:bg-red-900/40 text-gray-400 hover:text-red-300 font-bold px-2 py-1 rounded border border-gray-700 transition"
-                                >
-                                    <Trash size={12} />
-                                </button>
-                                <button
-                                    onClick={() => setSelectedIds([])}
-                                    className="ml-1 text-gray-500 hover:text-white"
-                                >
-                                    <X size={14} />
-                                </button>
-                            </div>
-                        ) : (
-                            <>
-                                <button
-                                    onClick={() => setShowManualAdd(true)}
-                                    className="text-xs text-green-300 hover:text-green-200 font-medium px-3 py-1.5 rounded-lg border border-green-900/40 hover:bg-green-900/20 transition"
-                                >
-                                    + Add Bet Slip
-                                </button>
+                        <>
+                            <button
+                                onClick={() => setShowManualAdd(true)}
+                                className="text-xs text-green-300 hover:text-green-200 font-medium px-3 py-1.5 rounded-lg border border-green-900/40 hover:bg-green-900/20 transition"
+                            >
+                                + Add Bet Slip
+                            </button>
 
-                                <button
-                                    onClick={runAudit}
-                                    disabled={auditLoading}
-                                    className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition ${auditLoading ? 'text-gray-500 border-gray-800 bg-gray-900/40 animate-pulse' : 'text-amber-300 hover:text-amber-200 border-amber-900/40 hover:bg-amber-900/20'}`}
-                                    title="Scan for bets whose sport looks wrong (based on matching teams to events)"
-                                >
-                                    {auditLoading ? 'Auditing…' : 'Audit sport'}
-                                </button>
+                            <button
+                                onClick={runAudit}
+                                disabled={auditLoading}
+                                className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition ${auditLoading ? 'text-gray-500 border-gray-800 bg-gray-900/40 animate-pulse' : 'text-amber-300 hover:text-amber-200 border-amber-900/40 hover:bg-amber-900/20'}`}
+                                title="Scan for bets whose sport looks wrong (based on matching teams to events)"
+                            >
+                                {auditLoading ? 'Auditing…' : 'Audit sport'}
+                            </button>
 
-                                <button
-                                    onClick={resetFilters}
-                                    className="text-xs text-blue-400 hover:text-blue-300 font-medium px-3 py-1.5 rounded-lg border border-blue-900/30 hover:bg-blue-900/20 transition"
-                                >
-                                    Clear Filters
-                                </button>
-                            </>
-                        )}
+                            <button
+                                onClick={resetFilters}
+                                className="text-xs text-blue-400 hover:text-blue-300 font-medium px-3 py-1.5 rounded-lg border border-blue-900/30 hover:bg-blue-900/20 transition"
+                            >
+                                Clear Filters
+                            </button>
+                        </>
                     </div>
                 </div>
 
@@ -2386,17 +2318,6 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                         <thead className="bg-gray-800 text-gray-400 font-medium uppercase text-xs tracking-wider">
                             {/* Header Labels */}
                             <tr className="bg-gray-900/20 backdrop-blur-sm">
-                                <th className="px-3 py-2 border-b border-gray-800 w-[40px] text-center">
-                                    <input
-                                        type="checkbox"
-                                        className="h-3 w-3 rounded border-gray-700 bg-gray-900 text-blue-500 focus:ring-0 focus:ring-offset-0"
-                                        checked={selectedIds.length > 0 && selectedIds.length === (sortedBets || []).length}
-                                        onChange={(e) => {
-                                            if (e.target.checked) setSelectedIds((sortedBets || []).map(b => b.id).filter(Boolean));
-                                            else setSelectedIds([]);
-                                        }}
-                                    />
-                                </th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[84px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('date')}>Date{getSortIcon('date')}</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[80px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('provider')}>Book{getSortIcon('provider')}</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[64px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('sport')}>Sport{getSortIcon('sport')}</th>
@@ -2410,7 +2331,6 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                             </tr>
                             {/* Filter Row */}
                             <tr className="bg-gray-850">
-                                <th className="px-1 py-1"></th> {/* Empty cell for the new checkbox column */}
                                 <th className="px-1 py-1">
                                     <input
                                         type="text"
@@ -2479,7 +2399,7 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                             ) : sortedBets.map((bet) => {
                                 const isTxn = (bet.category === 'Transaction');
                                 const isDeposit = isTxn && (Number(bet.wager) < 0 || (bet.description || '').toLowerCase().includes('deposit'));
-                                const isSelected = selectedIds.includes(bet.id);
+                                const isSelected = false;
                                 return (
                                     <tr
                                         key={bet.id || bet.txn_id}
@@ -2503,17 +2423,6 @@ function TransactionView({ bets, setBets, financials, reconciliation, loading })
                                             setShowEdit(true);
                                         }}
                                     >
-                                        <td className="px-3 py-3 w-[40px] text-center" onClick={(e) => e.stopPropagation()}>
-                                            <input
-                                                type="checkbox"
-                                                className="h-3 w-3 rounded border-gray-700 bg-gray-900 text-blue-500 focus:ring-0 focus:ring-offset-0"
-                                                checked={isSelected}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) setSelectedIds(prev => [...prev, bet.id]);
-                                                    else setSelectedIds(prev => prev.filter(id => id !== bet.id));
-                                                }}
-                                            />
-                                        </td>
                                         <td
                                             className="px-3 py-3 text-gray-400 font-mono text-[10px] whitespace-nowrap opacity-60"
                                             title={formatDateMDY(bet.sort_date || bet.date)}
