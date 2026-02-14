@@ -186,7 +186,13 @@ class DraftKingsTextParser:
                         header = l
                         header_idx = i
                         if odds_matches:
-                            odds = int(odds_matches[-1])
+                            # If both boosted (+...) and regular (-...) odds appear, prefer the last negative (regular) odds.
+                            try:
+                                negs = [o for o in odds_matches if o.startswith('-')]
+                                pick = negs[-1] if negs else odds_matches[-1]
+                                odds = int(pick)
+                            except Exception:
+                                odds = int(odds_matches[-1])
 
                 # Status
                 if status == "PENDING" and any(x in l_up for x in ["WON", "LOST", "CASHED OUT"]):
@@ -258,9 +264,16 @@ class DraftKingsTextParser:
                 # Handle concatenated odds in header like "SGP2 Picks+100+130" -> extract +130
                 odds_matches = re.findall(r'[+-]\d{3,}', bet_type)
                 if odds_matches:
-                     # Use the last match as the odds for the bet
-                     try: odds = int(odds_matches[-1]) 
-                     except: pass
+                     # If both boosted (+...) and regular (-...) odds appear, prefer the last negative (regular) odds.
+                     try:
+                         negs = [o for o in odds_matches if o.startswith('-')]
+                         pick = negs[-1] if negs else odds_matches[-1]
+                         odds = int(pick)
+                     except Exception:
+                         try:
+                             odds = int(odds_matches[-1])
+                         except Exception:
+                             pass
                      for o in odds_matches:
                          bet_type = bet_type.replace(o, "")
                 bet_type = bet_type.strip()
@@ -385,9 +398,66 @@ class DraftKingsTextParser:
             # Construct Matchup from detected Teams if implicit
             if not matchup and len(teams_found) >= 2:
                 matchup = f"{teams_found[0]} vs {teams_found[1]}"
-            
-            if not matchup: matchup = selection or "Unknown Matchup"
-            if not selection: selection = matchup
+
+            # DK compact paste often provides teams as two adjacent ALLCAPS tokens (e.g., "OHIO MIAMI OH" or "MICHIGAN STATE WISCONSIN")
+            if (not matchup or matchup == "Unknown Matchup") and len(teams_found) < 2:
+                try:
+                    tokens = re.findall(r"\b[A-Z]{3,}(?:\s+[A-Z]{2,})*\b", " ".join(lines))
+                    # Remove known noise tokens
+                    noise = {
+                        'WAGER', 'PAID', 'PAYOUT', 'FINAL', 'SCORE', 'LIVE', 'TOTAL', 'SPREAD',
+                        'WON', 'LOST', 'CASHED', 'OUT', 'BOOST', 'UNDER', 'OVER',
+                        'INCLUDES', 'POTENTIAL'
+                    }
+                    cleaned = []
+                    for t in tokens:
+                        tt = t.strip()
+                        if not tt:
+                            continue
+                        # Strip promo prefix inside the token
+                        if tt.upper().startswith('BOOST '):
+                            tt = tt[6:].strip()
+                        if tt and tt not in noise:
+                            cleaned.append(tt)
+                    # De-dupe while preserving order
+                    uniq = []
+                    for t in cleaned:
+                        if t not in uniq:
+                            uniq.append(t)
+
+                    # Drop promo markers and cleanup
+                    uniq = [t for t in uniq if all(x not in t for x in ['+30%', '+25%', '+20%'])]
+                    # Remove promo token itself
+                    uniq = [t for t in uniq if t.strip().upper() != 'BOOST']
+                    uniq = [t.replace('Boost ', '').strip() for t in uniq if t.strip()]
+
+                    if len(uniq) >= 2:
+                        # If token 0 looks like "MICHIGAN STATE" and token 1 looks like "MICHIGAN STATE WISCONSIN",
+                        # pick the *new* team from token 1.
+                        a = uniq[0]
+                        b = uniq[1]
+                        a_s = str(a).strip()
+                        b_s = str(b).strip()
+                        if b_s.upper().startswith(a_s.upper() + ' '):
+                            rem = b_s[len(a_s):].strip()
+                            # opponent may be multi-word; keep first 2 tokens at most
+                            rem_parts = [p for p in rem.split() if p]
+                            opp = " ".join(rem_parts[:2]) if rem_parts else rem
+                            matchup = f"{a_s.title()} vs {opp.title()}"
+                        else:
+                            matchup = f"{a_s.title()} vs {b_s.title()}"
+                    elif len(uniq) == 1:
+                        # Single token like "OHIO MIAMI OH" -> split into two teams
+                        parts = [p for p in str(uniq[0]).split() if p]
+                        if len(parts) >= 2:
+                            matchup = f"{parts[0].title()} vs {parts[1].title()}"
+                except Exception:
+                    pass
+
+            if not matchup:
+                matchup = selection or "Unknown Matchup"
+            if not selection:
+                selection = matchup
 
 
             # Fallback Odds Scan
