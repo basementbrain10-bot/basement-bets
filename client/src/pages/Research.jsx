@@ -1031,12 +1031,15 @@ const Research = ({ onAddBet }) => {
 
                                         return (
                                             <>
-                                                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                                                    <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+                                                <div className="flex items-end justify-between gap-4 mb-3">
+                                                    <div>
                                                         <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Daily recap</div>
-                                                        <div className="mt-1 text-white font-black text-lg">{fmtMDY(lastDay)}</div>
-                                                        <div className="text-xs text-slate-500">most recent day in history</div>
+                                                        <div className="text-white font-black text-xl">{fmtMDY(lastDay)}</div>
                                                     </div>
+                                                    <div className="text-[11px] text-slate-500">most recent day in history</div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                                     <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
                                                         <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Bets</div>
                                                         <div className="mt-1 text-white font-black text-2xl">{dayRows.length}</div>

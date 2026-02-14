@@ -435,7 +435,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {[0, 25, 50, 75, 100].map((p) => (
                     <g key={p}>
                         <line x1={padL} x2={width - padR} y1={yAt(p)} y2={yAt(p)} stroke="rgba(148,163,184,0.15)" strokeWidth="1" />
-                        <text x={2} y={yAt(p) + 4} fontSize="11" fill="rgba(148,163,184,0.85)">{p}%</text>
+                        <text x={2} y={yAt(p) + 5} fontSize="14" fill="rgba(148,163,184,0.92)" fontWeight="700">{p}%</text>
                     </g>
                 ))}
 
@@ -485,13 +485,13 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {hoverIdx !== null ? (
                     <g>
                         <line x1={hoverX} x2={hoverX} y1={padT} y2={height - padB} stroke="rgba(226,232,240,0.18)" strokeWidth="1" />
-                        <rect x={hoverX + 8} y={padT + 6} width="220" height="78" rx="10" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
-                        <text x={hoverX + 16} y={padT + 30} fontSize="12" fill="rgba(226,232,240,0.98)" fontWeight="700">{dayKeys[hoverIdx] || ''}</text>
+                        <rect x={hoverX + 8} y={padT + 6} width="250" height="92" rx="10" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
+                        <text x={hoverX + 16} y={padT + 34} fontSize="14" fill="rgba(226,232,240,0.98)" fontWeight="800">{dayKeys[hoverIdx] || ''}</text>
                         {bands.map((b, bi) => {
                             const v = (series[b.k] || [])[hoverIdx];
                             if (v === null || v === undefined) return null;
                             return (
-                                <text key={b.k} x={hoverX + 16} y={padT + 50 + bi * 16} fontSize="12" fill={b.color} fontWeight="700">
+                                <text key={b.k} x={hoverX + 16} y={padT + 56 + bi * 18} fontSize="14" fill={b.color} fontWeight="800">
                                     {b.k}: {Number(v).toFixed(1)}%
                                 </text>
                             );
@@ -501,7 +501,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
 
                 {/* x labels (sparse) */}
                 {tickIdx.map((i) => (
-                    <text key={i} x={xAt(i)} y={height - 6} fontSize="11" fill="rgba(148,163,184,0.85)" textAnchor="middle">
+                    <text key={i} x={xAt(i)} y={height - 6} fontSize="14" fill="rgba(148,163,184,0.92)" fontWeight="700" textAnchor="middle">
                         {(() => {
                             const parts = String(dayKeys[i] || '').split('/');
                             if (parts.length >= 2) {
@@ -597,7 +597,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                             stroke={p === 50 ? 'rgba(248,250,252,0.35)' : 'rgba(148,163,184,0.15)'}
                             strokeWidth={p === 50 ? '1.5' : '1'}
                         />
-                        <text x={2} y={yAt(p) + 4} fontSize="11" fill="rgba(148,163,184,0.85)">{p}%</text>
+                        <text x={2} y={yAt(p) + 5} fontSize="14" fill="rgba(148,163,184,0.92)" fontWeight="700">{p}%</text>
                     </g>
                 ))}
 
@@ -661,9 +661,9 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {hoverIdx !== null ? (
                     <g>
                         <line x1={hoverX} x2={hoverX} y1={padT} y2={height - padB} stroke="rgba(226,232,240,0.18)" strokeWidth="1" />
-                        <rect x={hoverX + 8} y={padT + 6} width="220" height="58" rx="10" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
-                        <text x={hoverX + 16} y={padT + 30} fontSize="12" fill="rgba(226,232,240,0.98)" fontWeight="700">{dayKeys[hoverIdx] || ''}</text>
-                        <text x={hoverX + 16} y={padT + 50} fontSize="12" fill="rgba(226,232,240,0.95)" fontWeight="700">Top 6: {(() => {
+                        <rect x={hoverX + 8} y={padT + 6} width="250" height="68" rx="10" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
+                        <text x={hoverX + 16} y={padT + 34} fontSize="14" fill="rgba(226,232,240,0.98)" fontWeight="800">{dayKeys[hoverIdx] || ''}</text>
+                        <text x={hoverX + 16} y={padT + 58} fontSize="14" fill="rgba(226,232,240,0.95)" fontWeight="800">Top 6: {(() => {
                             const v = seriesTop6[hoverIdx];
                             return (v === null || v === undefined) ? '—' : `${Number(v).toFixed(1)}%`;
                         })()}</text>
@@ -672,7 +672,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
 
                 {/* x labels (sparse) */}
                 {tickIdx.map((i) => (
-                    <text key={i} x={xBar(i) + bandW / 2} y={height - 6} fontSize="11" fill="rgba(148,163,184,0.85)" textAnchor="middle">
+                    <text key={i} x={xBar(i) + bandW / 2} y={height - 6} fontSize="14" fill="rgba(148,163,184,0.92)" fontWeight="700" textAnchor="middle">
                         {(() => {
                             const parts = String(dayKeys[i] || '').split('/');
                             if (parts.length >= 2) {
