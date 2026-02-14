@@ -925,20 +925,48 @@ class AnalyticsEngine:
             # Transactions table may not exist yet - degrade gracefully
             print(f"[Analytics] Skipping provider breakdown (table may not exist): {e}")
 
+        # Compute "computed" balances from ledger + settled bet P/L (does NOT affect current/snapshot balance)
+        from collections import defaultdict
+        bet_profit = defaultdict(float)
+        try:
+            bets = self.bets
+            if user_id and user_id != self.user_id:
+                bets = [b for b in self.bets if b.get('user_id') == user_id]
+            for b in bets:
+                prov = b.get('provider', 'Unknown')
+                st = str(b.get('status') or '').upper().strip()
+                if st in ('PENDING', 'OPEN'):
+                    continue
+                if (b.get('category') or '').lower() == 'transaction':
+                    continue
+                bet_profit[prov] += float(b.get('profit') or 0)
+        except Exception:
+            bet_profit = defaultdict(float)
+
         provider_breakdown = []
         for p, stats in provider_stats.items():
             net = stats['withdrawn'] - stats['deposited']
-            # Get current balance for this provider
+            # Current balance (snapshot-anchored) used throughout UI
             provider_balance = balances.get(p, {}).get('balance', 0.0)
+
+            computed_balance = float(stats['deposited'] or 0) - float(stats['withdrawn'] or 0) + float(bet_profit.get(p) or 0)
             provider_breakdown.append({
                 "provider": p,
                 "deposited": stats['deposited'],
                 "withdrawn": stats['withdrawn'],
                 "net_profit": net,
-                "in_play": provider_balance
+                "in_play": provider_balance,
+                "computed_in_play": computed_balance,
+                "computed_delta": float(computed_balance) - float(provider_balance)
             })
 
         provider_breakdown.sort(key=lambda x: x['provider'])
+
+        computed_total_in_play = 0.0
+        try:
+            computed_total_in_play = sum(float(x.get('computed_in_play') or 0) for x in provider_breakdown)
+        except Exception:
+            computed_total_in_play = 0.0
 
         return {
             "total_deposited": total_deposits,
@@ -946,6 +974,8 @@ class AnalyticsEngine:
             "total_in_play": total_equity,
             "realized_profit": realized_profit,
             "net_bet_profit": net_bet_profit,
+            "computed_total_in_play": computed_total_in_play,
+            "computed_total_delta": float(computed_total_in_play) - float(total_equity),
             "breakdown": provider_breakdown
         }
 
