@@ -114,14 +114,57 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
                     except Exception:
                         return '—'
 
-                sel = top_rec.get('selection') or '—'
+                # Always print a user-readable selection that includes the bet line.
+                # Some downstream formatters summarize pick as 'home'/'away'. Here we force a concrete label.
+                sel_raw = str(top_rec.get('selection') or '').strip()
+                line_val = top_rec.get('market_line')
+
+                home = g['home_team']
+                away = g['away_team']
+
+                def fmt_signed(x):
+                    try:
+                        if x is None:
+                            return None
+                        v = float(x)
+                        # keep one decimal for spreads/totals
+                        return f"{v:+.1f}".replace('+', '') if v < 0 else f"+{v:.1f}".replace('+', '+')
+                    except Exception:
+                        return str(x)
+
+                selection = '—'
+                if mkt == 'SPREAD':
+                    # selection may be "Team -4.5" already OR "home"/"away".
+                    if sel_raw.lower() in ('home', 'away'):
+                        if line_val is not None:
+                            # market_line is home perspective (neg means home favored)
+                            hv = float(line_val)
+                            if sel_raw.lower() == 'home':
+                                selection = f"{home} {hv:+.1f}".replace('+', '+')
+                            else:
+                                selection = f"{away} {(-hv):+.1f}".replace('+', '+')
+                        else:
+                            selection = home if sel_raw.lower() == 'home' else away
+                    else:
+                        selection = sel_raw
+                elif mkt == 'TOTAL':
+                    # selection could be "OVER 147.5" or just "OVER"
+                    if sel_raw.lower().startswith('over'):
+                        selection = f"OVER {fmt_line(line_val)}" if line_val is not None else 'OVER'
+                    elif sel_raw.lower().startswith('under'):
+                        selection = f"UNDER {fmt_line(line_val)}" if line_val is not None else 'UNDER'
+                    else:
+                        selection = sel_raw or (f"TOTAL {fmt_line(line_val)}" if line_val is not None else 'TOTAL')
+                else:
+                    selection = sel_raw or '—'
+
                 conf = top_rec.get('confidence')
                 book = top_rec.get('book')
                 conf_s = f" ({conf})" if conf else ''
                 book_s = f" [{book}]" if book else ''
 
                 print(
-                    f"{matchup:<40} | {mkt:<8} | {fmt_line(line):<8} | {fmt_odds(price):<6} | {fmt_ev(ev):<6} | {sel}{conf_s}{book_s}"
+                    f"{matchup:<40} | {mkt:<8} | {fmt_line(line):<8} | {fmt_odds(price):<6} | {fmt_ev(ev):<6} | {selection}{conf_s}{book_s}"
                 )
                 recs += 1
         except Exception as e:
