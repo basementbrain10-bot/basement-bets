@@ -1493,6 +1493,7 @@ def init_balance_snapshots_db():
     CREATE TABLE IF NOT EXISTS balance_snapshots (
         id BIGSERIAL PRIMARY KEY,
         provider TEXT NOT NULL,
+        account_id TEXT,
         balance NUMERIC(12,2) NOT NULL,
         captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         source TEXT NOT NULL DEFAULT 'manual',  -- manual|csv|api|scrape
@@ -1501,6 +1502,7 @@ def init_balance_snapshots_db():
         raw_data JSONB
     );
     CREATE INDEX IF NOT EXISTS idx_balance_snaps_provider_time ON balance_snapshots(provider, captured_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_balance_snaps_user_provider_account_time ON balance_snapshots(user_id, provider, account_id, captured_at DESC);
     """
 
     with get_admin_db_connection() as conn:
@@ -1781,30 +1783,88 @@ def fetch_all_bets(user_id=None, limit=None):
             return [dict(r) for r in cursor.fetchall()]
 
 def fetch_latest_balance_snapshots(user_id: str | None = None):
-    """Fetch latest balance snapshot per provider from balance_snapshots."""
+    """Fetch latest balance snapshot per provider, with optional per-account detail.
+
+    Returns a dict keyed by provider:
+      {
+        "DraftKings": {
+          "balance": <total across accounts>,
+          "captured_at": <max captured_at>,
+          "source": "manual|...",
+          "accounts": {
+            "Main": {"balance": ..., "captured_at": ..., "source": ...},
+            "User2": {...}
+          }
+        },
+        ...
+      }
+
+    Backward compatible: callers can still read provider.balance.
+    """
+
     q = """
-    SELECT DISTINCT ON (provider)
+    SELECT DISTINCT ON (provider, COALESCE(account_id, ''))
            provider,
+           COALESCE(account_id, '') AS account_id,
            balance,
            captured_at,
            source
     FROM balance_snapshots
     WHERE (:user_id IS NULL OR user_id = :user_id)
-    ORDER BY provider, captured_at DESC
+    ORDER BY provider, COALESCE(account_id, ''), captured_at DESC
     """
-    out = {}
+    out: dict = {}
     try:
         with get_db_connection() as conn:
+            # Defensive migration for older DBs
+            try:
+                _exec(conn, "ALTER TABLE balance_snapshots ADD COLUMN IF NOT EXISTS account_id TEXT;")
+            except Exception:
+                pass
+
             rows = _exec(conn, q, {"user_id": user_id}).fetchall()
             for r in rows:
                 d = dict(r)
-                out[d['provider']] = {
+                prov = d.get('provider')
+                acc = d.get('account_id') or ''
+                if not prov:
+                    continue
+
+                snap = {
                     "balance": float(d.get('balance') or 0),
                     "captured_at": d.get('captured_at'),
                     "source": d.get('source')
                 }
+
+                if prov not in out:
+                    out[prov] = {"balance": 0.0, "captured_at": None, "source": None, "accounts": {}}
+
+                key = acc if acc else 'Main'
+                out[prov]["accounts"][key] = snap
+
+            # Aggregate totals
+            for prov, obj in out.items():
+                accs = obj.get('accounts') or {}
+                obj['balance'] = float(sum(float(v.get('balance') or 0) for v in accs.values()))
+                # captured_at: max over accounts
+                try:
+                    caps = [v.get('captured_at') for v in accs.values() if v.get('captured_at')]
+                    obj['captured_at'] = max(caps) if caps else None
+                except Exception:
+                    obj['captured_at'] = None
+                # source: use the source of the newest snapshot if possible
+                try:
+                    newest = None
+                    for k, v in accs.items():
+                        if not v.get('captured_at'):
+                            continue
+                        if newest is None or v['captured_at'] > newest['captured_at']:
+                            newest = v
+                    obj['source'] = newest.get('source') if newest else None
+                except Exception:
+                    obj['source'] = None
+
     except Exception as e:
-        # Table might not exist yet in some envs
         print(f"[DB] fetch_latest_balance_snapshots error: {e}")
     return out
 

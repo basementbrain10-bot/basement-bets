@@ -397,10 +397,14 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
 
         const agg = {};
         for (const r of bd) {
-            const k = normName(r.provider);
-            if (!agg[k]) {
-                agg[k] = {
-                    provider: k,
+            const provName = normName(r.provider);
+            const acc = (r.account_id === undefined ? null : r.account_id);
+            const key = provName + '|' + (acc === null ? '__TOTAL__' : String(acc));
+
+            if (!agg[key]) {
+                agg[key] = {
+                    provider: provName,
+                    account_id: acc,
                     deposited: 0,
                     withdrawn: 0,
                     net_profit: 0,
@@ -411,17 +415,25 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                     computed_delta: 0,
                 };
             }
-            agg[k].deposited += Number(r.deposited || 0);
-            agg[k].withdrawn += Number(r.withdrawn || 0);
-            agg[k].net_profit += Number(r.net_profit || 0);
-            agg[k].in_play += Number(r.in_play || 0);
-            agg[k].ledger_in_play += Number((r.ledger_in_play ?? r.in_play) || 0);
-            agg[k].ledger_delta += Number(r.ledger_delta || 0);
-            agg[k].computed_in_play += Number(r.computed_in_play || 0);
-            agg[k].computed_delta += Number(r.computed_delta || 0);
+            agg[key].deposited += Number(r.deposited || 0);
+            agg[key].withdrawn += Number(r.withdrawn || 0);
+            agg[key].net_profit += Number(r.net_profit || 0);
+            agg[key].in_play += Number(r.in_play || 0);
+            agg[key].ledger_in_play += Number((r.ledger_in_play ?? r.in_play) || 0);
+            agg[key].ledger_delta += Number(r.ledger_delta || 0);
+            agg[key].computed_in_play += Number(r.computed_in_play || 0);
+            agg[key].computed_delta += Number(r.computed_delta || 0);
         }
 
-        const breakdown = Object.values(agg).sort((a, b) => String(a.provider).localeCompare(String(b.provider)));
+        const breakdown = Object.values(agg).sort((a, b) => {
+            const pa = String(a.provider || '');
+            const pb = String(b.provider || '');
+            if (pa !== pb) return pa.localeCompare(pb);
+            // Show totals first
+            if (a.account_id === null && b.account_id !== null) return -1;
+            if (a.account_id !== null && b.account_id === null) return 1;
+            return String(a.account_id || '').localeCompare(String(b.account_id || ''));
+        });
         return { ...financials, breakdown };
     }, [financials]);
 
@@ -529,7 +541,9 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                 const delta = Number(prov.ledger_delta || 0);
                                 return (
                                     <tr key={prov.provider} className="hover:bg-gray-800/30">
-                                        <td className="py-3 font-bold text-white">{prov.provider}</td>
+                                        <td className="py-3 font-bold text-white">
+                                            {prov.provider}{prov.account_id === null ? ' (Total)' : prov.account_id ? ` (${prov.account_id})` : ''}
+                                        </td>
                                         <td className={`py-3 text-right font-bold ${inPlay >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                             {formatCurrency(inPlay)}
                                         </td>

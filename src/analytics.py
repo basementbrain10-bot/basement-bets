@@ -891,8 +891,11 @@ class AnalyticsEngine:
         # Snapshot-anchored balances (source of truth for "baseline")
         from src.database import fetch_latest_balance_snapshots
         latest_snaps = fetch_latest_balance_snapshots(user_id=user_id)
-        snap_balances = {p: float(s.get('balance') or 0) for p, s in (latest_snaps or {}).items()}
+        # provider -> total
+        snap_balances = {p: float((s.get('balance') or 0)) for p, s in (latest_snaps or {}).items()}
         snap_captured = {p: s.get('captured_at') for p, s in (latest_snaps or {}).items()}
+        # provider -> per-account dict
+        snap_accounts = {p: (s.get('accounts') or {}) for p, s in (latest_snaps or {}).items()}
 
         # Calculate "Total In Play" baseline from latest snapshots
         total_equity = sum(snap_balances.values())
@@ -951,74 +954,101 @@ class AnalyticsEngine:
             bet_profit = defaultdict(float)
 
         provider_breakdown = []
-        for p, stats in provider_stats.items():
-            net = stats['withdrawn'] - stats['deposited']
-            # Baseline balance from the latest explicit snapshot (preferred) — this is what the UI historically showed.
-            provider_balance = float(snap_balances.get(p, 0.0) or 0.0)
-            provider_captured_at = snap_captured.get(p)
 
-            # Ledger delta: sum of settled bet P/L for bets created AFTER the snapshot.
-            # This gives "baseline snapshot" + "new bets added since snapshot".
-            ledger_delta = 0.0
+        def _to_naive_dt(x):
             try:
                 from dateutil.parser import parse as parse_date
-
-                cap = provider_captured_at
-                if isinstance(cap, str):
+                if isinstance(x, str):
                     try:
-                        cap = parse_date(cap)
+                        x = parse_date(x)
                     except Exception:
-                        cap = None
-                # Normalize timezone-aware timestamps to naive for safe comparison with Postgres TIMESTAMP (naive)
-                try:
-                    if hasattr(cap, 'tzinfo') and cap.tzinfo:
-                        cap = cap.replace(tzinfo=None)
-                except Exception:
-                    pass
+                        return None
+                if hasattr(x, 'tzinfo') and x.tzinfo:
+                    x = x.replace(tzinfo=None)
+                return x
+            except Exception:
+                return None
 
+        # Build per-provider + per-account breakdown using snapshots as baseline.
+        for p, stats in provider_stats.items():
+            net = stats['withdrawn'] - stats['deposited']
+
+            accounts = (snap_accounts.get(p) or {})
+            if not accounts:
+                # Backward compatible: single baseline per provider (no account snapshots yet)
+                accounts = {'Main': {"balance": float(snap_balances.get(p, 0.0) or 0.0), "captured_at": snap_captured.get(p), "source": None}}
+
+            # account rows
+            prov_total_in_play = 0.0
+            prov_total_ledger_in_play = 0.0
+            prov_total_ledger_delta = 0.0
+
+            for acc_id, snap in accounts.items():
+                base_bal = float((snap or {}).get('balance') or 0.0)
+                cap0 = _to_naive_dt((snap or {}).get('captured_at'))
+
+                ledger_delta = 0.0
                 for b in (bets or []):
                     if (b.get('provider') or '') != p:
+                        continue
+                    if str(b.get('account_id') or 'Main') != str(acc_id):
                         continue
                     st = str(b.get('status') or '').upper().strip()
                     if st in ('PENDING', 'OPEN'):
                         continue
                     if (b.get('category') or '').lower() == 'transaction':
                         continue
-                    bc = b.get('created_at')
-                    if isinstance(bc, str):
-                        try:
-                            bc = parse_date(bc)
-                        except Exception:
-                            bc = None
-                    if cap and bc and bc <= cap:
-                        continue
-                    # If we don't have cap or created_at, we conservatively do NOT include it in ledger_delta.
-                    if cap and not bc:
-                        continue
-                    if not cap:
-                        # No snapshot baseline: treat ledger as 0 until you capture a snapshot.
-                        continue
+                    bc = _to_naive_dt(b.get('created_at'))
+                    if cap0:
+                        # Snapshot anchored: only include bets after baseline
+                        if not bc:
+                            continue
+                        if bc <= cap0:
+                            continue
+                    # If no snapshot exists for this account, treat baseline=0 and include all settled bet P/L.
                     ledger_delta += float(b.get('profit') or 0)
-            except Exception:
-                ledger_delta = 0.0
 
-            ledger_in_play = provider_balance + float(ledger_delta or 0)
+                ledger_in_play = base_bal + float(ledger_delta or 0)
 
+                prov_total_in_play += base_bal
+                prov_total_ledger_in_play += ledger_in_play
+                prov_total_ledger_delta += float(ledger_delta or 0)
+
+                provider_breakdown.append({
+                    "provider": p,
+                    "account_id": acc_id,
+                    "deposited": 0.0,
+                    "withdrawn": 0.0,
+                    "net_profit": 0.0,
+                    "in_play": base_bal,
+                    "captured_at": (snap or {}).get('captured_at'),
+                    "ledger_delta": float(ledger_delta),
+                    "ledger_in_play": float(ledger_in_play),
+                    "computed_in_play": None,
+                    "computed_delta": None,
+                })
+
+            # provider total row (still includes deposit/withdrawal/realized profit since those are provider-wide today)
+            provider_balance = float(prov_total_in_play)
+            ledger_in_play = float(prov_total_ledger_in_play)
+            ledger_delta = float(prov_total_ledger_delta)
             computed_balance = float(stats['deposited'] or 0) - float(stats['withdrawn'] or 0) + float(bet_profit.get(p) or 0)
+
             provider_breakdown.append({
                 "provider": p,
+                "account_id": None,
                 "deposited": stats['deposited'],
                 "withdrawn": stats['withdrawn'],
                 "net_profit": net,
                 "in_play": provider_balance,
-                "captured_at": provider_captured_at,
-                "ledger_delta": float(ledger_delta),
-                "ledger_in_play": float(ledger_in_play),
+                "captured_at": snap_captured.get(p),
+                "ledger_delta": ledger_delta,
+                "ledger_in_play": ledger_in_play,
                 "computed_in_play": computed_balance,
                 "computed_delta": float(computed_balance) - float(provider_balance)
             })
 
-        provider_breakdown.sort(key=lambda x: x['provider'])
+        provider_breakdown.sort(key=lambda x: (x.get('provider') or '', '' if x.get('account_id') is None else str(x.get('account_id'))))
 
         computed_total_in_play = 0.0
         ledger_total_in_play = 0.0

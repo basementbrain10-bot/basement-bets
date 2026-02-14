@@ -422,17 +422,19 @@ async def get_settled_bet_ledger(user: dict = Depends(get_current_user)):
 
     q = """
     WITH latest AS (
-      SELECT DISTINCT ON (provider)
+      SELECT DISTINCT ON (provider, COALESCE(account_id,''))
         provider,
+        COALESCE(account_id,'') AS account_id,
         captured_at,
         balance
       FROM balance_snapshots
       WHERE user_id = %(uid)s
-      ORDER BY provider, captured_at DESC
+      ORDER BY provider, COALESCE(account_id,''), captured_at DESC
     )
     SELECT
       b.id AS bet_id,
       b.provider,
+      COALESCE(b.account_id, 'Main') AS account_id,
       b.created_at,
       b.date,
       b.description,
@@ -444,7 +446,7 @@ async def get_settled_bet_ledger(user: dict = Depends(get_current_user)):
       l.captured_at AS baseline_captured_at,
       l.balance AS baseline_balance
     FROM bets b
-    JOIN latest l ON l.provider = b.provider
+    JOIN latest l ON l.provider = b.provider AND COALESCE(l.account_id,'') = COALESCE(b.account_id,'')
     WHERE b.user_id = %(uid)s
       AND (b.status IS NOT NULL AND UPPER(b.status) NOT IN ('PENDING','OPEN'))
       AND b.created_at > l.captured_at
@@ -921,11 +923,9 @@ async def save_manual_bet(request: Request, user: dict = Depends(get_current_use
         # Handle '2026-01-11 19:57:51' or ISO format
         date_part = placed_at.split(" ")[0].split("T")[0] if placed_at else datetime.now().strftime("%Y-%m-%d")
 
-        # Sanitize account_id (Postgres requires UUID, skip if "Main" or short string)
+        # Account grouping (TEXT). We intentionally allow human-friendly values like "Main" or "User2".
         raw_acc_id = bet_data.get("account_id")
-        account_id = None
-        if raw_acc_id and len(str(raw_acc_id)) > 30:
-             account_id = raw_acc_id
+        account_id = str(raw_acc_id).strip() if raw_acc_id is not None and str(raw_acc_id).strip() else None
 
         # Normalize provider name
         provider_raw = bet_data.get("sportsbook") or bet_data.get("provider", "")

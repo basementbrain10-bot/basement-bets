@@ -27,7 +27,7 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
     const [rawText, setRawText] = useState('');
     const [parsedData, setParsedData] = useState(null);
     const [error, setError] = useState(null);
-    const [bankrollAccount, setBankrollAccount] = useState('Main');
+    const [bankrollAccount, setBankrollAccount] = useState('Main'); // Main | User2
     const [isSaving, setIsSaving] = useState(false);
     const [isParsing, setIsParsing] = useState(false);
 
@@ -253,7 +253,7 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                             className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
                         >
                             <option value="Main">Main Bankroll</option>
-                            <option value="Test">Testing Account</option>
+                            <option value="User2">User 2</option>
                         </select>
                     </div>
                 </div>
