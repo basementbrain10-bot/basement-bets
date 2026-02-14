@@ -214,16 +214,16 @@ class DraftKingsTextParser:
             from src.parsers.sport_detection import detect_sport, NCAAM_TEAMS, NFL_TEAMS, NBA_TEAMS, MLB_KEYWORDS, NHL_KEYWORDS, SOCCER_KEYWORDS
             all_team_keywords = NCAAM_TEAMS + NFL_TEAMS + NBA_TEAMS + MLB_KEYWORDS + NHL_KEYWORDS + SOCCER_KEYWORDS
 
-            for l in lines:
+            for i, l in enumerate(lines):
                 l_lower = l.lower()
                 # Existing Matchup Check
                 if matchup_idx == -1 and ("@" in l or " vs " in l_lower or " v " in l_lower):
                     matchup = l
                     matchup_idx = i
-                
+
                 # Team Scanning (if no typical matchup line found)
                 for t in all_team_keywords:
-                    if t in l_lower and len(t) > 3: # Avoid short noise
+                    if t in l_lower and len(t) > 3:  # Avoid short noise
                         # Store the actual team name (title cased), not the full line
                         team_name = t.title()
                         if team_name not in teams_found:
