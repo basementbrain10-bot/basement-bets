@@ -1,4 +1,10 @@
+import React, { useState } from 'react';
+
 const ModelPerformanceAnalytics = ({ history }) => {
+    // Hover state for inline SVG charts
+    const [hoverConfIdx, setHoverConfIdx] = useState(null);
+    const [hoverTop6Idx, setHoverTop6Idx] = useState(null);
+
     // Schema Migration: use graded_result (new) or outcome or result
     const getResult = (h) => h.graded_result || h.outcome || h.result;
 
@@ -416,8 +422,15 @@ const ModelPerformanceAnalytics = ({ history }) => {
 
         const tickIdx = [0, Math.floor((n - 1) / 2), n - 1].filter((v, i, a) => a.indexOf(v) === i);
 
+        const hoverIdx = (hoverConfIdx !== null && hoverConfIdx !== undefined) ? Number(hoverConfIdx) : null;
+        const hoverX = hoverIdx !== null ? xAt(hoverIdx) : null;
+
         return (
-            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-72">
+            <svg
+                viewBox={`0 0 ${width} ${height}`}
+                className="w-full h-72"
+                onMouseLeave={() => setHoverConfIdx(null)}
+            >
                 {/* grid */}
                 {[0, 25, 50, 75, 100].map((p) => (
                     <g key={p}>
@@ -431,6 +444,31 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     <path key={b.k} d={pathFor(series[b.k] || [])} fill="none" stroke={b.color} strokeWidth="2" />
                 ))}
 
+                {/* Hover capture (so you can hover anywhere, not just points) */}
+                <rect
+                    x={padL}
+                    y={padT}
+                    width={width - padL - padR}
+                    height={height - padT - padB}
+                    fill="transparent"
+                    onMouseMove={(e) => {
+                        try {
+                            const svg = e.currentTarget.ownerSVGElement;
+                            const pt = svg.createSVGPoint();
+                            pt.x = e.clientX;
+                            pt.y = e.clientY;
+                            const cur = pt.matrixTransform(svg.getScreenCTM().inverse());
+                            const x = cur.x;
+                            const frac = (x - padL) / (width - padL - padR);
+                            const idx = Math.round(frac * (n - 1));
+                            const clamped = Math.max(0, Math.min(n - 1, idx));
+                            setHoverConfIdx(clamped);
+                        } catch (err) {
+                            // ignore
+                        }
+                    }}
+                />
+
                 {/* hover points (native tooltip via <title>) */}
                 {bands.map((b) => (
                     (series[b.k] || []).map((v, i) => {
@@ -442,6 +480,24 @@ const ModelPerformanceAnalytics = ({ history }) => {
                         );
                     })
                 ))}
+
+                {/* hover indicator + tooltip */}
+                {hoverIdx !== null ? (
+                    <g>
+                        <line x1={hoverX} x2={hoverX} y1={padT} y2={height - padB} stroke="rgba(226,232,240,0.18)" strokeWidth="1" />
+                        <rect x={hoverX + 8} y={padT + 6} width="190" height="62" rx="8" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
+                        <text x={hoverX + 16} y={padT + 26} fontSize="10" fill="rgba(226,232,240,0.95)">{dayKeys[hoverIdx] || ''}</text>
+                        {bands.map((b, bi) => {
+                            const v = (series[b.k] || [])[hoverIdx];
+                            if (v === null || v === undefined) return null;
+                            return (
+                                <text key={b.k} x={hoverX + 16} y={padT + 40 + bi * 12} fontSize="10" fill={b.color}>
+                                    {b.k}: {Number(v).toFixed(1)}%
+                                </text>
+                            );
+                        })}
+                    </g>
+                ) : null}
 
                 {/* x labels (sparse) */}
                 {tickIdx.map((i) => (
@@ -473,23 +529,46 @@ const ModelPerformanceAnalytics = ({ history }) => {
         const padB = 28;
 
         const n = dayKeys.length;
-        const xAt = (i) => {
-            if (n <= 1) return padL;
-            return padL + (i * (width - padL - padR)) / (n - 1);
-        };
+        const plotW = (width - padL - padR);
+        const bandW = n > 0 ? (plotW / n) : plotW;
+        const xBar = (i) => padL + i * bandW;
+
         const yAt = (pct) => {
             const v = (pct === null || pct === undefined) ? 50 : pct;
             const clamped = Math.max(0, Math.min(100, Number(v)));
             return padT + ((100 - clamped) * (height - padT - padB)) / 100.0;
         };
 
-        const pathFor = (arr) => {
+        const avg = (() => {
+            const xs = (seriesTop6 || []).filter(v => v !== null && v !== undefined);
+            if (!xs.length) return null;
+            return xs.reduce((a, b) => a + Number(b), 0) / xs.length;
+        })();
+
+        // Cumulative average trend line
+        const cumAvg = (() => {
+            const out = [];
+            let s = 0;
+            let k = 0;
+            for (let i = 0; i < n; i++) {
+                const v = seriesTop6[i];
+                if (v !== null && v !== undefined) {
+                    s += Number(v);
+                    k += 1;
+                }
+                out.push(k ? (s / k) : null);
+            }
+            return out;
+        })();
+
+        const pathForBarsAvg = (arr) => {
             let d = '';
             let first = true;
             for (let i = 0; i < arr.length; i++) {
-                if (arr[i] === null || arr[i] === undefined) continue;
-                const x = xAt(i);
-                const y = yAt(arr[i]);
+                const v = arr[i];
+                if (v === null || v === undefined) continue;
+                const x = xBar(i) + bandW / 2;
+                const y = yAt(v);
                 d += (first ? `M ${x} ${y}` : ` L ${x} ${y}`);
                 first = false;
             }
@@ -498,40 +577,98 @@ const ModelPerformanceAnalytics = ({ history }) => {
 
         const tickIdx = [0, Math.floor((n - 1) / 2), n - 1].filter((v, i, a) => a.indexOf(v) === i);
 
+        const hoverIdx = (hoverTop6Idx !== null && hoverTop6Idx !== undefined) ? Number(hoverTop6Idx) : null;
+        const hoverX = hoverIdx !== null ? (xBar(hoverIdx) + bandW / 2) : null;
+
         return (
-            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-64">
+            <svg
+                viewBox={`0 0 ${width} ${height}`}
+                className="w-full h-64"
+                onMouseLeave={() => setHoverTop6Idx(null)}
+            >
                 {/* grid */}
                 {[0, 25, 50, 75, 100].map((p) => (
                     <g key={p}>
-                        <line x1={padL} x2={width - padR} y1={yAt(p)} y2={yAt(p)} stroke="rgba(148,163,184,0.15)" strokeWidth="1" />
+                        <line
+                            x1={padL}
+                            x2={width - padR}
+                            y1={yAt(p)}
+                            y2={yAt(p)}
+                            stroke={p === 50 ? 'rgba(248,250,252,0.35)' : 'rgba(148,163,184,0.15)'}
+                            strokeWidth={p === 50 ? '1.5' : '1'}
+                        />
                         <text x={2} y={yAt(p) + 3} fontSize="9" fill="rgba(148,163,184,0.7)">{p}%</text>
                     </g>
                 ))}
 
-                {/* area gradient */}
-                <defs>
-                    <linearGradient id="top6Gradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={color} stopOpacity="0.1" />
-                        <stop offset="100%" stopColor={color} stopOpacity="0" />
-                    </linearGradient>
-                </defs>
-                <path d={`${pathFor(seriesTop6.map(v => v === null ? 50 : v))} L ${xAt(n - 1)} ${height - padB} L ${padL} ${height - padB} Z`} fill="url(#top6Gradient)" />
+                {/* bars */}
+                {(seriesTop6 || []).map((v, i) => {
+                    const val = (v === null || v === undefined) ? null : Number(v);
+                    const barW = Math.max(4, bandW * 0.72);
+                    const x = xBar(i) + (bandW - barW) / 2;
+                    const y = yAt(val);
+                    const h = (height - padB) - y;
+                    const fill = val === null ? 'rgba(100,116,139,0.25)' : 'rgba(251,191,36,0.35)';
+                    const stroke = val === null ? 'rgba(100,116,139,0.25)' : 'rgba(251,191,36,0.65)';
+                    return (
+                        <rect key={i} x={x} y={y} width={barW} height={Math.max(0, h)} rx="4" fill={fill} stroke={stroke}>
+                            {val !== null ? <title>{`${dayKeys[i]} • Top 6 • ${val.toFixed(1)}% win`}</title> : null}
+                        </rect>
+                    );
+                })}
 
-                {/* series */}
-                <path d={pathFor(seriesTop6)} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />
+                {/* hover capture */}
+                <rect
+                    x={padL}
+                    y={padT}
+                    width={width - padL - padR}
+                    height={height - padT - padB}
+                    fill="transparent"
+                    onMouseMove={(e) => {
+                        try {
+                            const svg = e.currentTarget.ownerSVGElement;
+                            const pt = svg.createSVGPoint();
+                            pt.x = e.clientX;
+                            pt.y = e.clientY;
+                            const cur = pt.matrixTransform(svg.getScreenCTM().inverse());
+                            const x = cur.x;
+                            const frac = (x - padL) / (width - padL - padR);
+                            const idx = Math.floor(frac * n);
+                            const clamped = Math.max(0, Math.min(n - 1, idx));
+                            setHoverTop6Idx(clamped);
+                        } catch (err) {
+                            // ignore
+                        }
+                    }}
+                />
 
-                {/* points (native tooltip via <title>) */}
-                {seriesTop6.map((v, i) => (
-                    v !== null && (
-                        <circle key={i} cx={xAt(i)} cy={yAt(v)} r="4" fill={color} fillOpacity="0.8">
-                            <title>{`${dayKeys[i]} • Top 6 • ${Number(v).toFixed(1)}% win`}</title>
-                        </circle>
-                    )
-                ))}
+                {/* average lines */}
+                {avg !== null ? (
+                    <g>
+                        <line x1={padL} x2={width - padR} y1={yAt(avg)} y2={yAt(avg)} stroke="rgba(251,191,36,0.55)" strokeDasharray="4 4" />
+                        <text x={width - padR} y={yAt(avg) - 4} fontSize="9" fill="rgba(251,191,36,0.85)" textAnchor="end">Avg {avg.toFixed(1)}%</text>
+                    </g>
+                ) : null}
+
+                {/* cumulative average trend line */}
+                <path d={pathForBarsAvg(cumAvg)} fill="none" stroke="rgba(147,197,253,0.85)" strokeWidth="2" strokeLinecap="round" />
+
+                {/* hover indicator + tooltip */}
+                {hoverIdx !== null ? (
+                    <g>
+                        <line x1={hoverX} x2={hoverX} y1={padT} y2={height - padB} stroke="rgba(226,232,240,0.18)" strokeWidth="1" />
+                        <rect x={hoverX + 8} y={padT + 6} width="190" height="48" rx="8" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
+                        <text x={hoverX + 16} y={padT + 26} fontSize="10" fill="rgba(226,232,240,0.95)">{dayKeys[hoverIdx] || ''}</text>
+                        <text x={hoverX + 16} y={padT + 40} fontSize="10" fill="rgba(251,191,36,0.95)">Top 6: {(() => {
+                            const v = seriesTop6[hoverIdx];
+                            return (v === null || v === undefined) ? '—' : `${Number(v).toFixed(1)}%`;
+                        })()}</text>
+                    </g>
+                ) : null}
 
                 {/* x labels (sparse) */}
                 {tickIdx.map((i) => (
-                    <text key={i} x={xAt(i)} y={height - 6} fontSize="9" fill="rgba(148,163,184,0.7)" textAnchor="middle">
+                    <text key={i} x={xBar(i) + bandW / 2} y={height - 6} fontSize="9" fill="rgba(148,163,184,0.7)" textAnchor="middle">
                         {(() => {
                             const parts = String(dayKeys[i] || '').split('/');
                             if (parts.length >= 2) {
