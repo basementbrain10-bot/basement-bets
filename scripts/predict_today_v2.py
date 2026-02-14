@@ -67,8 +67,8 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
     recs = 0
     errors = 0
 
-    print(f"{'MATCHUP':<40} | {'MKT':<8} | {'FAIR':<8} | {'EDGE':<8} | {'REC'}")
-    print("-" * 110)
+    print(f"{'MATCHUP':<40} | {'MKT':<8} | {'LINE':<8} | {'ODDS':<6} | {'EV%':<6} | {'REC'}")
+    print("-" * 130)
 
     for g in games:
         scanned += 1
@@ -80,12 +80,48 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
             if recommendations:
                 top_rec = recommendations[0]
                 matchup = f"{g['away_team']} @ {g['home_team']}"
-                mkt_line = top_rec.get("market_line", 0.0)
-                fair_line = top_rec.get("fair_line", 0.0)
-                edge_pct = top_rec.get("edge", "0%")
+                # UI recommendation shape includes bet_type, selection, price, edge (EV%), book
+                mkt = str(top_rec.get('bet_type') or '').upper() or '—'
+                line = top_rec.get('market_line')
+                price = top_rec.get('price')
+                ev = top_rec.get('edge')
+
+                def fmt_line(x):
+                    try:
+                        if x is None:
+                            return '—'
+                        return f"{float(x):g}"
+                    except Exception:
+                        return str(x)
+
+                def fmt_odds(x):
+                    try:
+                        if x is None:
+                            return '—'
+                        x = int(x)
+                        return f"+{x}" if x > 0 else str(x)
+                    except Exception:
+                        return str(x) if x is not None else '—'
+
+                def fmt_ev(x):
+                    try:
+                        if x is None:
+                            return '—'
+                        # edge is a string like "12.1%"
+                        if isinstance(x, str) and '%' in x:
+                            return x.strip()
+                        return f"{float(x) * 100:.1f}%"
+                    except Exception:
+                        return '—'
+
+                sel = top_rec.get('selection') or '—'
+                conf = top_rec.get('confidence')
+                book = top_rec.get('book')
+                conf_s = f" ({conf})" if conf else ''
+                book_s = f" [{book}]" if book else ''
 
                 print(
-                    f"{matchup:<40} | {str(mkt_line):<8} | {str(fair_line):<8} | {str(edge_pct):<8} | {top_rec.get('selection')} ({top_rec.get('confidence')})"
+                    f"{matchup:<40} | {mkt:<8} | {fmt_line(line):<8} | {fmt_odds(price):<6} | {fmt_ev(ev):<6} | {sel}{conf_s}{book_s}"
                 )
                 recs += 1
         except Exception as e:
