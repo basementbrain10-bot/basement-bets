@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
-import { Trash } from 'lucide-react';
+import { Trash, DollarSign, Activity } from 'lucide-react';
 import EditBetModal from './EditBetModal';
 import SportAuditorModal from './SportAuditorModal';
 import ManualAddBetModal from './ManualAddBetModal';
