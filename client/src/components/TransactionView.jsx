@@ -78,6 +78,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
     }, []);
 
     const [showManualAdd, setShowManualAdd] = useState(false);
+    const [expandedBook, setExpandedBook] = useState(null);
     const [showEdit, setShowEdit] = useState(false);
     const [editBet, setEditBet] = useState(null);
     const [editNote, setEditNote] = useState('');
@@ -517,13 +518,13 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                     <div className="grid grid-cols-2 gap-3 text-xs">
                                         <div className="bg-slate-950/30 border border-slate-800 rounded-lg p-2">
                                             <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Primary</div>
-                                            <div className="text-slate-200 font-mono font-bold">{formatCurrency(priBal)}</div>
-                                            <div className="text-[10px] text-slate-600">Main</div>
+                                            <div className="text-slate-100 font-mono font-black text-lg">{formatCurrency(priBal)}</div>
+                                            
                                         </div>
                                         <div className="bg-slate-950/30 border border-slate-800 rounded-lg p-2">
                                             <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Secondary</div>
-                                            <div className="text-slate-200 font-mono font-bold">{formatCurrency(secBal)}</div>
-                                            <div className="text-[10px] text-slate-600">User2</div>
+                                            <div className="text-slate-100 font-mono font-black text-lg">{formatCurrency(secBal)}</div>
+                                            
                                         </div>
                                     </div>
 
@@ -562,57 +563,105 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                 {totalTile}
                             </>
                         );
-                    })()}
-                </div>
-            )}
+                  {/* Sportsbook Financials (statement-style; collapsed by default) */}
+            {normalizedFinancials?.breakdown && (() => {
+                const rows = normalizedFinancials.breakdown || [];
+                const provTop = (name) => rows.find(r => r.provider === name && r.account_id === null);
+                const provAcc = (name, acc) => rows.find(r => r.provider === name && String(r.account_id || '') === String(acc));
 
+                const providers = ['DraftKings', 'FanDuel', 'Other'];
 
-            {/* Sportsbook Financials (ledger baseline; Barstool + Other merged into Other) */}
-            {normalizedFinancials?.breakdown && (
-                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl mb-8 p-6">
-                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <DollarSign className="text-green-400" /> Sportsbook Financials
-                    </h3>
-                    <div className="text-[10px] text-gray-600 text-center mb-4 uppercase tracking-widest opacity-50">
-                        Baseline balances from latest snapshots; new settled bets apply as ledger delta.
-                    </div>
+                const fmt = (x) => formatCurrency(Number(x || 0));
 
-                    <table className="w-full text-left text-sm">
-                        <thead>
-                            <tr className="text-gray-400 border-b border-gray-700">
-                                <th className="pb-2">Sportsbook</th>
-                                <th className="pb-2 text-right">In Play</th>
-                                <th className="pb-2 text-right">Ledger Δ</th>
-                                <th className="pb-2 text-right">Total Deposited</th>
-                                <th className="pb-2 text-right">Total Withdrawn</th>
-                                <th className="pb-2 text-right">Realized Profit</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-800">
-                            {normalizedFinancials.breakdown.map((prov) => {
-                                const inPlay = Number((prov.ledger_in_play ?? prov.in_play) || 0);
-                                const delta = Number(prov.ledger_delta || 0);
-                                return (
-                                    <tr key={prov.provider} className="hover:bg-gray-800/30">
-                                        <td className="py-3 font-bold text-white">
-                                            {prov.provider}{prov.account_id === null ? ' (Total)' : prov.account_id ? ` (${prov.account_id})` : ''}
-                                        </td>
-                                        <td className={`py-3 text-right font-bold ${inPlay >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {formatCurrency(inPlay)}
-                                        </td>
-                                        <td className={`py-3 text-right font-mono font-bold ${delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {formatCurrency(delta)}
-                                        </td>
-                                        <td className="py-3 text-right text-gray-400">{formatCurrency(prov.deposited)}</td>
-                                        <td className="py-3 text-right text-gray-400">{formatCurrency(prov.withdrawn)}</td>
-                                        <td className={`py-3 text-right font-bold ${Number(prov.net_profit || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {formatCurrency(prov.net_profit)}
-                                        </td>
+                const topRows = providers
+                    .map((p) => {
+                        if (p === 'Other') {
+                            // any provider normalized to Other will already be 'Other'
+                            return { p: 'Other', top: provTop('Other'), primary: provAcc('Other', 'Main'), secondary: provAcc('Other', 'User2') };
+                        }
+                        return { p, top: provTop(p), primary: provAcc(p, 'Main'), secondary: provAcc(p, 'User2') };
+                    })
+                    .filter(x => x.top);
+
+                return (
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl mb-8">
+                        <div className="p-6 border-b border-slate-800">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-xl font-bold flex items-center gap-2">
+                                    <DollarSign className="text-green-400" /> Sportsbook Financials
+                                </h3>
+                                <div className="text-[11px] text-slate-500">Statement view (click a row to expand)</div>
+                            </div>
+                            <div className="mt-2 text-[10px] text-gray-600 uppercase tracking-widest opacity-70">
+                                Baseline balances from latest snapshots; new settled bets apply as ledger delta.
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-950/50">
+                                    <tr className="text-slate-400 border-b border-slate-800">
+                                        <th className="py-3 px-4">Sportsbook</th>
+                                        <th className="py-3 px-4 text-right">Current</th>
+                                        <th className="py-3 px-4 text-right">Δ (since snapshot)</th>
+                                        <th className="py-3 px-4 text-right">Deposits</th>
+                                        <th className="py-3 px-4 text-right">Withdrawals</th>
+                                        <th className="py-3 px-4 text-right">Realized P/L</th>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800">
+                                    {topRows.map(({ p, top, primary, secondary }) => {
+                                        const cur = Number((top.ledger_in_play ?? top.in_play) || 0);
+                                        const delta = Number(top.ledger_delta || 0);
+                                        const isOpen = expandedBook === p;
+
+                                        return (
+                                            <React.Fragment key={p}>
+                                                <tr
+                                                    className={`cursor-pointer hover:bg-slate-800/30 ${isOpen ? 'bg-slate-800/20' : ''}`}
+                                                    onClick={() => setExpandedBook(isOpen ? null : p)}
+                                                >
+                                                    <td className="py-3 px-4 font-black text-slate-100">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-slate-400">{isOpen ? '▾' : '▸'}</span>
+                                                            <span>{p}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className={`py-3 px-4 text-right font-black ${cur >= 0 ? 'text-green-300' : 'text-red-300'}`}>{fmt(cur)}</td>
+                                                    <td className={`py-3 px-4 text-right font-mono font-bold ${delta >= 0 ? 'text-green-300' : 'text-red-300'}`}>{fmt(delta)}</td>
+                                                    <td className="py-3 px-4 text-right text-slate-300 font-mono">{fmt(top.deposited)}</td>
+                                                    <td className="py-3 px-4 text-right text-slate-300 font-mono">{fmt(top.withdrawn)}</td>
+                                                    <td className={`py-3 px-4 text-right font-mono font-bold ${Number(top.net_profit || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{fmt(top.net_profit)}</td>
+                                                </tr>
+
+                                                {isOpen ? (
+                                                    <tr className="bg-slate-950/20">
+                                                        <td colSpan={6} className="px-4 py-4">
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                <div className="border border-slate-800 rounded-lg p-4 bg-slate-950/20">
+                                                                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Primary</div>
+                                                                    <div className="mt-1 text-xl font-black text-white">{fmt(Number((primary?.ledger_in_play ?? primary?.in_play) || 0))}</div>
+                                                                    <div className="text-[11px] text-slate-500 mt-1">Δ {fmt(Number(primary?.ledger_delta || 0))}</div>
+                                                                </div>
+                                                                <div className="border border-slate-800 rounded-lg p-4 bg-slate-950/20">
+                                                                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Secondary</div>
+                                                                    <div className="mt-1 text-xl font-black text-white">{fmt(Number((secondary?.ledger_in_play ?? secondary?.in_play) || 0))}</div>
+                                                                    <div className="text-[11px] text-slate-500 mt-1">Δ {fmt(Number(secondary?.ledger_delta || 0))}</div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ) : null}
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                );
+            })()}
+         </table>
                 </div>
             )}
 
