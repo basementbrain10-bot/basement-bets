@@ -2247,12 +2247,90 @@ async def analyze_ncaam_game(request: Request):
         result.setdefault("home_team", ev.get("home_team"))
         result.setdefault("away_team", ev.get("away_team"))
 
+        # NET context (best-effort from cached DB snapshot)
+        try:
+            from src.database import fetch_team_net_row
+            home_net = fetch_team_net_row(ev.get('home_team') or '')
+            away_net = fetch_team_net_row(ev.get('away_team') or '')
+            result['net_data'] = {
+                'home': home_net,
+                'away': away_net,
+            }
+        except Exception:
+            pass
+
         return result
     except HTTPException:
         raise
     except Exception as e:
         print(f"[API] Analyze error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ncaam/net/ingest")
+async def ingest_net_rankings():
+    """Fetch and persist NCAA NET rankings snapshot from NCAA.com."""
+    from src.services.ncaa_net_client import NcaamNetClient
+    from src.database import upsert_ncaam_net_rankings_daily
+
+    client = NcaamNetClient()
+    raw = client.fetch()
+    through, rows = client.parse(raw.get('html') or '')
+
+    # Normalize asof_date string for storage
+    asof = None
+    if through:
+        # e.g. "Through Games Feb. 13 2026" -> "2026-02-13"
+        import re
+        from datetime import datetime
+        m = re.search(r"Through Games\s+([A-Za-z]{3,}\.?)\s+(\d{1,2})\s+(\d{4})", through)
+        if m:
+            try:
+                dt = datetime.strptime(f"{m.group(1).replace('.', '')} {m.group(2)} {m.group(3)}", "%b %d %Y")
+                asof = dt.strftime('%Y-%m-%d')
+            except Exception:
+                asof = None
+
+    if not asof:
+        from datetime import datetime
+        asof = datetime.utcnow().strftime('%Y-%m-%d')
+
+    payload = []
+    for r in rows:
+        payload.append({
+            'asof_date': asof,
+            'rank': r.rank,
+            'school': r.school,
+            'record': r.record,
+            'conf': r.conf,
+            'road': r.road,
+            'neutral': r.neutral,
+            'home': r.home,
+            'prev': r.prev,
+            'quad1': r.quad1,
+            'quad2': r.quad2,
+            'quad3': r.quad3,
+            'quad4': r.quad4,
+            'raw': r.raw,
+        })
+
+    upsert_ncaam_net_rankings_daily(payload)
+
+    return {
+        'status': 'success',
+        'asof_date': asof,
+        'through_games': through,
+        'rows': len(payload),
+    }
+
+
+@app.get("/api/ncaam/net/team")
+async def get_net_team(team: str, asof_date: str | None = None):
+    from src.database import fetch_team_net_row
+    if not team:
+        raise HTTPException(status_code=400, detail='team is required')
+    row = fetch_team_net_row(team, asof_date=asof_date)
+    return { 'team': team, 'row': row }
+
 
 @app.get("/api/ncaam/history")
 async def get_ncaam_history(limit: int = 100):

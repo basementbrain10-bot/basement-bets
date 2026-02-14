@@ -132,6 +132,7 @@ def init_db():
     init_enrichment_db()
     init_jobs_db()
     init_performance_objects() # Phase 14/15
+    init_ncaam_net_rankings_db()
 
     # Explicitly init bets last as it depends on others conceptually (not foreign key wise mostly)
     init_bets_db()
@@ -1513,6 +1514,189 @@ def init_balance_snapshots_db():
         conn.commit()
 
     print("Balance snapshots table initialized.")
+
+
+def init_ncaam_net_rankings_db():
+    """Daily NCAA NET rankings snapshot (NCAA.com).
+
+    Stores team rank + records by location + quadrant records.
+    """
+    drops = ["DROP TABLE IF EXISTS ncaam_net_rankings_daily CASCADE;"] if _force_reset() else []
+
+    schema = """
+    CREATE TABLE IF NOT EXISTS ncaam_net_rankings_daily (
+        id BIGSERIAL PRIMARY KEY,
+        asof_date TEXT NOT NULL,
+        rank INTEGER,
+        school TEXT NOT NULL,
+        record TEXT,
+        conf TEXT,
+        road TEXT,
+        neutral TEXT,
+        home TEXT,
+        prev INTEGER,
+        quad1 TEXT,
+        quad2 TEXT,
+        quad3 TEXT,
+        quad4 TEXT,
+        raw TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(asof_date, school)
+    );
+    CREATE INDEX IF NOT EXISTS idx_net_school_date ON ncaam_net_rankings_daily(school, asof_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_net_rank_date ON ncaam_net_rankings_daily(asof_date, rank);
+    """
+
+    with get_admin_db_connection() as conn:
+        with conn.cursor() as cur:
+            for d in drops:
+                try:
+                    cur.execute(d)
+                except Exception:
+                    pass
+            cur.execute(schema)
+        conn.commit()
+
+    print("NET rankings table initialized.")
+
+
+def upsert_ncaam_net_rankings_daily(rows: list[dict]):
+    """Upsert daily NET rows."""
+    init_ncaam_net_rankings_db()
+
+    q = """
+    INSERT INTO ncaam_net_rankings_daily (
+        asof_date, rank, school, record, conf, road, neutral, home, prev,
+        quad1, quad2, quad3, quad4, raw
+    ) VALUES (
+        :asof_date, :rank, :school, :record, :conf, :road, :neutral, :home, :prev,
+        :quad1, :quad2, :quad3, :quad4, :raw
+    )
+    ON CONFLICT (asof_date, school) DO UPDATE SET
+        rank = EXCLUDED.rank,
+        record = EXCLUDED.record,
+        conf = EXCLUDED.conf,
+        road = EXCLUDED.road,
+        neutral = EXCLUDED.neutral,
+        home = EXCLUDED.home,
+        prev = EXCLUDED.prev,
+        quad1 = EXCLUDED.quad1,
+        quad2 = EXCLUDED.quad2,
+        quad3 = EXCLUDED.quad3,
+        quad4 = EXCLUDED.quad4,
+        raw = EXCLUDED.raw,
+        created_at = NOW()
+    """
+
+    # Defensive migration if table existed before
+    with get_db_connection() as conn:
+        try:
+            _exec(conn, "ALTER TABLE ncaam_net_rankings_daily ADD COLUMN IF NOT EXISTS road TEXT;")
+            _exec(conn, "ALTER TABLE ncaam_net_rankings_daily ADD COLUMN IF NOT EXISTS neutral TEXT;")
+            _exec(conn, "ALTER TABLE ncaam_net_rankings_daily ADD COLUMN IF NOT EXISTS home TEXT;")
+            _exec(conn, "ALTER TABLE ncaam_net_rankings_daily ADD COLUMN IF NOT EXISTS quad1 TEXT;")
+            _exec(conn, "ALTER TABLE ncaam_net_rankings_daily ADD COLUMN IF NOT EXISTS quad2 TEXT;")
+            _exec(conn, "ALTER TABLE ncaam_net_rankings_daily ADD COLUMN IF NOT EXISTS quad3 TEXT;")
+            _exec(conn, "ALTER TABLE ncaam_net_rankings_daily ADD COLUMN IF NOT EXISTS quad4 TEXT;")
+        except Exception:
+            pass
+
+        for r in rows or []:
+            _exec(conn, q, r)
+        conn.commit()
+
+
+def fetch_latest_ncaam_net_rankings(asof_date: str | None = None):
+    """Fetch latest NET snapshot (optionally for a specific asof_date)."""
+    with get_db_connection() as conn:
+        if asof_date:
+            rows = _exec(conn, """
+                SELECT *
+                FROM ncaam_net_rankings_daily
+                WHERE asof_date = :d
+                ORDER BY rank ASC NULLS LAST
+            """, {"d": asof_date}).fetchall()
+        else:
+            drow = _exec(conn, "SELECT MAX(asof_date) AS d FROM ncaam_net_rankings_daily").fetchone()
+            d = (dict(drow).get('d') if drow else None)
+            if not d:
+                return {"asof_date": None, "rows": []}
+            rows = _exec(conn, """
+                SELECT *
+                FROM ncaam_net_rankings_daily
+                WHERE asof_date = :d
+                ORDER BY rank ASC NULLS LAST
+            """, {"d": d}).fetchall()
+            asof_date = d
+
+    return {"asof_date": asof_date, "rows": [dict(r) for r in rows]}
+
+
+def fetch_team_net_row(team_name: str, asof_date: str | None = None):
+    """Fetch a single team's NET row (best-effort, but avoids common false matches).
+
+    We do *not* rely purely on the generic TeamMatcher here because NET team names
+    include ambiguous substrings (e.g., "Michigan" vs "Michigan St.").
+    """
+
+    def _norm(s: str) -> str:
+        s = (s or '').lower().strip()
+        s = re.sub(r"[\.'()&]", "", s)
+        s = re.sub(r"\s+", " ", s)
+        # Expand common abbreviations
+        s = s.replace(' st ', ' state ')
+        if s.endswith(' st'):
+            s = s[:-3] + ' state'
+        return s.strip()
+
+    want = _norm(team_name)
+
+    with get_db_connection() as conn:
+        # Resolve asof_date if not provided
+        d = asof_date
+        if not d:
+            drow = _exec(conn, "SELECT MAX(asof_date) AS d FROM ncaam_net_rankings_daily").fetchone()
+            d = (dict(drow).get('d') if drow else None)
+        if not d:
+            return None
+
+        rows = _exec(conn, """
+            SELECT *
+            FROM ncaam_net_rankings_daily
+            WHERE asof_date = :d
+        """, {"d": d}).fetchall()
+
+    best = None
+    best_score = -1
+
+    for r in rows:
+        rr = dict(r)
+        name = rr.get('school') or ''
+        cand = _norm(name)
+
+        # Exact match wins
+        if cand == want:
+            return rr
+
+        # Score by token overlap + containment
+        w_tokens = set(want.split())
+        c_tokens = set(cand.split())
+        overlap = len(w_tokens & c_tokens)
+        score = overlap * 10
+
+        if want in cand:
+            score += 5
+        if cand in want:
+            score += 3
+
+        # Penalize short/ambiguous matches
+        score += min(len(cand), 40) * 0.01
+
+        if score > best_score:
+            best_score = score
+            best = rr
+
+    return best
 
 
 def log_ingestion_run(data: dict):
