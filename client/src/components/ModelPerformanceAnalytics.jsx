@@ -435,7 +435,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {[0, 25, 50, 75, 100].map((p) => (
                     <g key={p}>
                         <line x1={padL} x2={width - padR} y1={yAt(p)} y2={yAt(p)} stroke="rgba(148,163,184,0.15)" strokeWidth="1" />
-                        <text x={2} y={yAt(p) + 3} fontSize="9" fill="rgba(148,163,184,0.7)">{p}%</text>
+                        <text x={2} y={yAt(p) + 4} fontSize="11" fill="rgba(148,163,184,0.85)">{p}%</text>
                     </g>
                 ))}
 
@@ -485,13 +485,13 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {hoverIdx !== null ? (
                     <g>
                         <line x1={hoverX} x2={hoverX} y1={padT} y2={height - padB} stroke="rgba(226,232,240,0.18)" strokeWidth="1" />
-                        <rect x={hoverX + 8} y={padT + 6} width="190" height="62" rx="8" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
-                        <text x={hoverX + 16} y={padT + 26} fontSize="10" fill="rgba(226,232,240,0.95)">{dayKeys[hoverIdx] || ''}</text>
+                        <rect x={hoverX + 8} y={padT + 6} width="220" height="78" rx="10" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
+                        <text x={hoverX + 16} y={padT + 30} fontSize="12" fill="rgba(226,232,240,0.98)" fontWeight="700">{dayKeys[hoverIdx] || ''}</text>
                         {bands.map((b, bi) => {
                             const v = (series[b.k] || [])[hoverIdx];
                             if (v === null || v === undefined) return null;
                             return (
-                                <text key={b.k} x={hoverX + 16} y={padT + 40 + bi * 12} fontSize="10" fill={b.color}>
+                                <text key={b.k} x={hoverX + 16} y={padT + 50 + bi * 16} fontSize="12" fill={b.color} fontWeight="700">
                                     {b.k}: {Number(v).toFixed(1)}%
                                 </text>
                             );
@@ -501,7 +501,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
 
                 {/* x labels (sparse) */}
                 {tickIdx.map((i) => (
-                    <text key={i} x={xAt(i)} y={height - 6} fontSize="9" fill="rgba(148,163,184,0.7)" textAnchor="middle">
+                    <text key={i} x={xAt(i)} y={height - 6} fontSize="11" fill="rgba(148,163,184,0.85)" textAnchor="middle">
                         {(() => {
                             const parts = String(dayKeys[i] || '').split('/');
                             if (parts.length >= 2) {
@@ -583,7 +583,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
         return (
             <svg
                 viewBox={`0 0 ${width} ${height}`}
-                className="w-full h-64"
+                className="w-full h-80"
                 onMouseLeave={() => setHoverTop6Idx(null)}
             >
                 {/* grid */}
@@ -597,7 +597,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                             stroke={p === 50 ? 'rgba(248,250,252,0.35)' : 'rgba(148,163,184,0.15)'}
                             strokeWidth={p === 50 ? '1.5' : '1'}
                         />
-                        <text x={2} y={yAt(p) + 3} fontSize="9" fill="rgba(148,163,184,0.7)">{p}%</text>
+                        <text x={2} y={yAt(p) + 4} fontSize="11" fill="rgba(148,163,184,0.85)">{p}%</text>
                     </g>
                 ))}
 
@@ -608,8 +608,12 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     const x = xBar(i) + (bandW - barW) / 2;
                     const y = yAt(val);
                     const h = (height - padB) - y;
-                    const fill = val === null ? 'rgba(100,116,139,0.25)' : 'rgba(251,191,36,0.35)';
-                    const stroke = val === null ? 'rgba(100,116,139,0.25)' : 'rgba(251,191,36,0.65)';
+                    const fill = val === null
+                        ? 'rgba(100,116,139,0.25)'
+                        : (val >= 50 ? 'rgba(34,197,94,0.32)' : 'rgba(248,113,113,0.30)');
+                    const stroke = val === null
+                        ? 'rgba(100,116,139,0.25)'
+                        : (val >= 50 ? 'rgba(34,197,94,0.70)' : 'rgba(248,113,113,0.70)');
                     return (
                         <rect key={i} x={x} y={y} width={barW} height={Math.max(0, h)} rx="4" fill={fill} stroke={stroke}>
                             {val !== null ? <title>{`${dayKeys[i]} • Top 6 • ${val.toFixed(1)}% win`}</title> : null}
@@ -657,9 +661,9 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {hoverIdx !== null ? (
                     <g>
                         <line x1={hoverX} x2={hoverX} y1={padT} y2={height - padB} stroke="rgba(226,232,240,0.18)" strokeWidth="1" />
-                        <rect x={hoverX + 8} y={padT + 6} width="190" height="48" rx="8" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
-                        <text x={hoverX + 16} y={padT + 26} fontSize="10" fill="rgba(226,232,240,0.95)">{dayKeys[hoverIdx] || ''}</text>
-                        <text x={hoverX + 16} y={padT + 40} fontSize="10" fill="rgba(251,191,36,0.95)">Top 6: {(() => {
+                        <rect x={hoverX + 8} y={padT + 6} width="220" height="58" rx="10" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
+                        <text x={hoverX + 16} y={padT + 30} fontSize="12" fill="rgba(226,232,240,0.98)" fontWeight="700">{dayKeys[hoverIdx] || ''}</text>
+                        <text x={hoverX + 16} y={padT + 50} fontSize="12" fill="rgba(226,232,240,0.95)" fontWeight="700">Top 6: {(() => {
                             const v = seriesTop6[hoverIdx];
                             return (v === null || v === undefined) ? '—' : `${Number(v).toFixed(1)}%`;
                         })()}</text>
@@ -668,7 +672,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
 
                 {/* x labels (sparse) */}
                 {tickIdx.map((i) => (
-                    <text key={i} x={xBar(i) + bandW / 2} y={height - 6} fontSize="9" fill="rgba(148,163,184,0.7)" textAnchor="middle">
+                    <text key={i} x={xBar(i) + bandW / 2} y={height - 6} fontSize="11" fill="rgba(148,163,184,0.85)" textAnchor="middle">
                         {(() => {
                             const parts = String(dayKeys[i] || '').split('/');
                             if (parts.length >= 2) {
