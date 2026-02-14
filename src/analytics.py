@@ -926,7 +926,6 @@ class AnalyticsEngine:
             print(f"[Analytics] Skipping provider breakdown (table may not exist): {e}")
 
         # Compute "computed" balances from ledger + settled bet P/L (does NOT affect current/snapshot balance)
-        from collections import defaultdict
         bet_profit = defaultdict(float)
         try:
             bets = self.bets
