@@ -705,15 +705,15 @@ const ModelPerformanceAnalytics = ({ history }) => {
     if (graded.length === 0) return null;
 
     return (
-        <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 mb-6">
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-                📊 Model Performance Analytics
+        <div className="ui-card p-6 mb-6">
+            <h3 className="text-base font-semibold text-slate-100 mb-4">
+                Model Performance
             </h3>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Overall Stats + CLV */}
-                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
-                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Overall Performance</h4>
+                <div className="bg-slate-950/20 rounded-2xl p-4 border border-slate-700/40">
+                    <h4 className="text-[11px] font-semibold text-slate-400 mb-3">Overall</h4>
                     <div className="space-y-2">
                         <div className="flex justify-between">
                             <span className="text-slate-400">Record:</span>
@@ -738,7 +738,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-slate-700">
-                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">CLV</div>
+                        <div className="text-[11px] font-semibold text-slate-400 mb-2">CLV</div>
                         <div className="space-y-2">
                             <div className="flex justify-between">
                                 <span className="text-slate-400">Avg CLV:</span>
@@ -758,10 +758,10 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 </div>
 
                 {/* Performance by Edge */}
-                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
-                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Performance by Edge</h4>
+                <div className="bg-slate-950/20 rounded-2xl p-4 border border-slate-700/40">
+                    <h4 className="text-[11px] font-semibold text-slate-400 mb-3">Edge bands</h4>
 
-                    <div className="text-[10px] text-slate-500 mb-2">
+                    <div className="text-[11px] text-slate-400 mb-2">
                         Bands are EV% ranges (not cumulative), based on EV/u.
                     </div>
 
