@@ -389,8 +389,8 @@ const ModelPerformanceAnalytics = ({ history }) => {
             { k: 'Low', color: '#f59e0b' },
         ];
 
-        const width = 720;
-        const height = 220;
+        const width = 900;
+        const height = 280;
         const padL = 34;
         const padR = 12;
         const padT = 12;
@@ -428,7 +428,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
         return (
             <svg
                 viewBox={`0 0 ${width} ${height}`}
-                className="w-full h-72"
+                className="w-full h-[420px] sm:h-[460px]"
                 onMouseLeave={() => setHoverConfIdx(null)}
             >
                 {/* grid */}
@@ -521,8 +521,8 @@ const ModelPerformanceAnalytics = ({ history }) => {
         const { dayKeys, seriesTop6 } = dailyWinSeries;
         const color = '#fbbf24'; // Amber/Gold for top picks
 
-        const width = 720;
-        const height = 180;
+        const width = 900;
+        const height = 260;
         const padL = 34;
         const padR = 12;
         const padT = 12;
@@ -583,7 +583,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
         return (
             <svg
                 viewBox={`0 0 ${width} ${height}`}
-                className="w-full h-80"
+                className="w-full h-[420px] sm:h-[460px]"
                 onMouseLeave={() => setHoverTop6Idx(null)}
             >
                 {/* grid */}
@@ -878,7 +878,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 </div>
 
                 {/* Daily win% by confidence */}
-                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700 lg:col-span-2">
                     <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Daily Win% by Confidence</h4>
                     <div className="text-[10px] text-slate-500 mb-2">Last 14 days • Win% computed on decided bets (W/L) per confidence band.</div>
                     <div className="rounded-lg border border-slate-800 bg-slate-950/20 p-2">

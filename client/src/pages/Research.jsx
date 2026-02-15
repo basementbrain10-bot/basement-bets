@@ -32,12 +32,17 @@ const Research = ({ onAddBet }) => {
     const [rowTopPicks, setRowTopPicks] = useState({}); // event_id -> { rec, analyzedAt }
     const [rowPickingId, setRowPickingId] = useState(null);
 
+    // Mobile UX: collapse recommended list to Top 6 by default (expandable)
+    const [showAllMobileRecs, setShowAllMobileRecs] = useState(false);
+
     // Sorting State
     const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
 
     const BOARD_DAYS_DEFAULT = 3;
 
     useEffect(() => {
+        // reset mobile expansion when the slate changes
+        setShowAllMobileRecs(false);
         fetchSchedule();
     }, [selectedDate, leagueFilter]); // Refetch when date/league changes
 
@@ -585,7 +590,7 @@ const Research = ({ onAddBet }) => {
 
                                     return (
                                         <>
-                                            <div className="mb-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
+                                            <div className="hidden sm:block mb-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
                                                 <div className="flex items-center justify-between mb-2">
                                                     <div className="text-[11px] font-black text-emerald-200">Top 6 Plays</div>
                                                     <div className="text-[10px] text-slate-500">{selectedDate} • Sorted by EV% (1dp)</div>
@@ -614,7 +619,7 @@ const Research = ({ onAddBet }) => {
 
                                             {/* Mobile: stacked cards (no horizontal scroll) */}
                                             <div className="sm:hidden space-y-3">
-                                                {rows.slice(0, 50).map(({ edge, top }, idx) => {
+                                                {(showAllMobileRecs ? rows : rows.slice(0, 6)).map(({ edge, top }, idx) => {
                                                     const date = edge.start_time ? new Date(edge.start_time) : null;
                                                     const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
                                                     const odds = (top.price !== null && top.price !== undefined) ? fmtSigned(top.price, 0) : 'odds n/a';
@@ -684,6 +689,19 @@ const Research = ({ onAddBet }) => {
                                                     );
                                                 })}
                                             </div>
+
+                                            {/* Mobile: expand to show all recommended bets */}
+                                            {rows.length > 6 ? (
+                                                <div className="sm:hidden mt-4 flex justify-center">
+                                                    <button
+                                                        onClick={() => setShowAllMobileRecs(v => !v)}
+                                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-slate-950/30 text-slate-200 border border-slate-700/40"
+                                                    >
+                                                        <PlusCircle size={16} className={showAllMobileRecs ? 'rotate-45 transition-transform' : 'transition-transform'} />
+                                                        {showAllMobileRecs ? 'Show Top 6' : `Show all (${rows.length})`}
+                                                    </button>
+                                                </div>
+                                            ) : null}
 
                                             {/* Desktop/tablet: table */}
                                             <div className="hidden sm:block overflow-x-auto border border-slate-700/60 rounded-xl">
