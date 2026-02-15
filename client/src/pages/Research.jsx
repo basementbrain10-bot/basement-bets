@@ -1526,8 +1526,8 @@ const Research = ({ onAddBet }) => {
                                             );
                                         })()}
 
-                                        {/* Quick Read (end-user friendly) */}
-                                        {(() => {
+                                        {/* Quick Read (removed — duplicated by Recommended Bet / Narrative) */}
+                                        {false && (() => {
                                             const rec = (analysisResult.recommendations || [])[0] || null;
                                             if (!rec) return null;
                                             const ms = String(analysisResult.narrative?.market_summary || '').trim();
@@ -1876,8 +1876,8 @@ const Research = ({ onAddBet }) => {
                                             )}
                                         </div>
 
-                                        {/* Torvik Team Stats + Game Script */}
-                                        {(analysisResult.torvik_team_stats || analysisResult.game_script) && (
+                                        {/* Torvik Team Stats + Game Script (removed — duplicated by Torvik View above) */}
+                                        {false && (analysisResult.torvik_team_stats || analysisResult.game_script) && (
                                             <div>
                                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Team Efficiency (Torvik) + Game Script</h3>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2012,8 +2012,8 @@ const Research = ({ onAddBet }) => {
                                             </div>
                                         )}
 
-                                        {/* Key Factors */}
-                                        {analysisResult.key_factors && (
+                                        {/* Key Factors (removed — shown in Recommended Bet narrative above) */}
+                                        {false && analysisResult.key_factors && (
                                             <div>
                                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Key Factors</h3>
                                                 <div className="space-y-2">
@@ -2027,8 +2027,8 @@ const Research = ({ onAddBet }) => {
                                             </div>
                                         )}
 
-                                        {/* Risks */}
-                                        {analysisResult.risks && (
+                                        {/* Risks (removed — shown in Recommended Bet narrative above) */}
+                                        {false && analysisResult.risks && (
                                             <div>
                                                 <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Risk Factors</h3>
                                                 <div className="space-y-2">
