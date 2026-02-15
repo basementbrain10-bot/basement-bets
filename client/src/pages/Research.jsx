@@ -383,19 +383,19 @@ const Research = ({ onAddBet }) => {
     // Balances removed from this page (shown in Performance)
 
     return (
-        <div className="p-6 bg-slate-900 min-h-screen text-white">
-            <div className="flex justify-between items-center mb-6">
+        <div className="p-4 md:p-6 bg-slate-900 min-h-screen text-white">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-6">
                 <div>
-                    <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-green-400 bg-clip-text text-transparent">
+                    <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-400 to-green-400 bg-clip-text text-transparent">
                         Model Recommendations
                     </h1>
                     {/* Balance tiles removed (tracked in Performance) */}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     <button
                         onClick={fetchSchedule}
                         disabled={loading}
-                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                         Refresh Board
@@ -425,14 +425,14 @@ const Research = ({ onAddBet }) => {
             {activeTab === 'live' && (
                 <>
                     <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
-                        <div className="flex items-center space-x-4">
+                        <div className="flex flex-wrap items-center gap-3">
                             {/* League Filter */}
-                            <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 focus-within:border-blue-500/50 transition-all">
+                            <div className="flex items-center bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 focus-within:border-blue-500/50 transition-all w-full sm:w-auto">
                                 <Filter size={14} className="text-slate-500 mr-2" />
                                 <select
                                     value={leagueFilter}
                                     onChange={(e) => setLeagueFilter(e.target.value)}
-                                    className="bg-transparent text-sm font-medium focus:outline-none cursor-pointer"
+                                    className="bg-transparent text-sm font-medium focus:outline-none cursor-pointer w-full"
                                 >
                                     <option value="NCAAM">NCAAM</option>
                                     <option value="NFL">NFL</option>
@@ -441,7 +441,7 @@ const Research = ({ onAddBet }) => {
                             </div>
 
                             {/* Date Navigation */}
-                            <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg px-1 py-1">
+                            <div className="flex items-center bg-slate-800 border border-slate-700 rounded-xl px-1 py-1 w-full sm:w-auto">
                                 <button onClick={() => shiftDate(-1)} className="p-1 px-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors">
                                     ←
                                 </button>
@@ -449,7 +449,7 @@ const Research = ({ onAddBet }) => {
                                     type="date"
                                     value={selectedDate}
                                     onChange={(e) => setSelectedDate(e.target.value)}
-                                    className="bg-transparent text-sm font-bold text-center w-32 focus:outline-none text-white appearance-none"
+                                    className="bg-transparent text-sm font-bold text-center w-32 sm:w-32 focus:outline-none text-white appearance-none"
                                 />
                                 <button onClick={() => shiftDate(1)} className="p-1 px-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors">
                                     →
