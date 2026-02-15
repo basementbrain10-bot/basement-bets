@@ -563,7 +563,11 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                 {totalTile}
                             </>
                         );
-                  {/* Sportsbook Financials (statement-style; collapsed by default) */}
+                    })()}
+                </div>
+            )}
+
+            {/* Sportsbook Financials (statement-style; collapsed by default) */}
             {normalizedFinancials?.breakdown && (() => {
                 const rows = normalizedFinancials.breakdown || [];
                 const provTop = (name) => rows.find(r => r.provider === name && r.account_id === null);
