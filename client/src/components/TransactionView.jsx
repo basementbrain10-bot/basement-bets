@@ -661,9 +661,6 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                     </div>
                 );
             })()}
-         </table>
-                </div>
-            )}
 
 
 
