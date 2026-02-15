@@ -417,7 +417,7 @@ const Research = ({ onAddBet }) => {
                     onClick={() => setActiveTab('history')}
                     className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${activeTab === 'history' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                 >
-                    Daily Recap
+                    Model Performance
                 </button>
             </div>
 
@@ -970,7 +970,7 @@ const Research = ({ onAddBet }) => {
                                         } catch (e) { }
                                         return ymd || '';
                                     };
-                                    return `Daily Recap${lastDay ? ` — ${fmtMDY(lastDay)}` : ''}`;
+                                    return `Model Performance${lastDay ? ` — ${fmtMDY(lastDay)}` : ''}`;
                                 })()}
                             </h2>
                             <div className="flex items-center gap-6">
@@ -1054,7 +1054,6 @@ const Research = ({ onAddBet }) => {
                                             <>
                                                 <div className="flex items-end justify-between gap-4 mb-3">
                                                     <div>
-                                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Daily recap</div>
                                                         <div className="text-white font-black text-xl">{fmtMDY(lastDay)}</div>
                                                     </div>
                                                     <div className="text-[11px] text-slate-500">most recent day in history</div>
