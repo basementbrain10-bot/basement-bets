@@ -333,10 +333,10 @@ function App() {
         <ErrorBoundary>
             {showLogin && <LoginModal onSubmit={handleLogin} />}
             {/* <StagingBanner /> */}
-            <div className="min-h-screen bg-slate-950 text-white p-8 font-sans selection:bg-green-500 selection:text-black">
+            <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 font-sans selection:bg-green-500 selection:text-black">
                 <div className="max-w-7xl mx-auto">
                     {/* Header */}
-                    <header className="mb-8 flex justify-between items-center">
+                    <header className="mb-6 md:mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                         <div>
                             <div>
                                 <h1 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
@@ -344,31 +344,38 @@ function App() {
                                 </h1>
                                 <p className="text-gray-400">Balances, performance, and the board.</p>
                             </div>        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => setView('research')}
-                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'research' ? 'bg-purple-500 text-white font-bold shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
-                            >
-                                <TrendingUp size={18} /> Model Recommendations
-                            </button>
-                            <button
-                                onClick={() => setView('actuals')}
-                                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${view === 'actuals' ? 'bg-blue-500 text-white font-bold shadow-[0_0_15px_rgba(59,130,246,0.4)]' : 'bg-slate-800 hover:bg-slate-700'}`}
-                            >
-                                <LayoutDashboard size={18} /> Actuals
-                            </button>
+                        <div className="flex flex-wrap gap-2 items-center">
+                            {/* Primary nav (segmented control) */}
+                            <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
+                                <button
+                                    onClick={() => setView('research')}
+                                    className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${view === 'research' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                >
+                                    <TrendingUp size={18} />
+                                    <span className="hidden sm:inline">Model Recommendations</span>
+                                    <span className="sm:hidden">Board</span>
+                                </button>
+                                <button
+                                    onClick={() => setView('actuals')}
+                                    className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${view === 'actuals' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                >
+                                    <LayoutDashboard size={18} />
+                                    <span className="hidden sm:inline">Actuals</span>
+                                    <span className="sm:hidden">Actuals</span>
+                                </button>
+                            </div>
 
                             {view === 'actuals' && (
-                                <div className="flex gap-1 ml-2 bg-slate-900/50 border border-slate-800 rounded-lg p-1">
+                                <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
                                     <button
                                         onClick={() => setActualsTab('performance')}
-                                        className={`px-3 py-1 rounded-md text-sm font-bold ${actualsTab === 'performance' ? 'bg-slate-700 text-white' : 'text-slate-300 hover:text-white'}`}
+                                        className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${actualsTab === 'performance' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                                     >
-                                        Bet Performance
+                                        Performance
                                     </button>
                                     <button
                                         onClick={() => setActualsTab('transactions')}
-                                        className={`px-3 py-1 rounded-md text-sm font-bold ${actualsTab === 'transactions' ? 'bg-slate-700 text-white' : 'text-slate-300 hover:text-white'}`}
+                                        className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${actualsTab === 'transactions' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                                     >
                                         Transactions
                                     </button>
@@ -378,15 +385,15 @@ function App() {
                             <button
                                 onClick={handleSyncResults}
                                 disabled={isSyncing}
-                                className={`px-4 py-2 rounded-lg flex items-center gap-2 font-bold transition-all ${isSyncing ? 'bg-slate-800 text-gray-500 animate-pulse' : 'bg-slate-800 hover:bg-slate-700 text-blue-400'}`}
+                                className={`px-4 py-2 rounded-2xl flex items-center gap-2 font-semibold transition ${isSyncing ? 'bg-slate-900/40 text-slate-500 animate-pulse border border-slate-700/40' : 'bg-slate-900/40 hover:bg-slate-800/40 text-slate-200 border border-slate-700/40'}`}
                             >
                                 <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
-                                {isSyncing ? 'Syncing...' : 'Sync Scores'}
+                                {isSyncing ? 'Syncing…' : 'Sync Scores'}
                             </button>
                             {/* Sync DK temporarily removed (rate limits / unreliable) */}
                             <button
                                 onClick={() => setShowAddBet(true)}
-                                className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg flex items-center gap-2 font-bold transition-all shadow-[0_0_15px_rgba(34,197,94,0.3)]"
+                                className="px-4 py-2 bg-emerald-500/15 hover:bg-emerald-500/20 rounded-2xl flex items-center gap-2 font-semibold transition border border-emerald-500/25 text-emerald-200"
                             >
                                 <PlusCircle size={18} /> Add Bet Slip
                             </button>
