@@ -1018,6 +1018,62 @@ class NCAAMMarketFirstModelV2(BaseModel):
         rec["archetype"] = {"key": key, "n": n, "mean": mean, "lb95": lb, "override_ok": override_ok}
         return True
 
+    _winprob_calibration: Optional[Dict[str, Any]] = None
+
+    def _load_winprob_calibration(self) -> Dict[str, Any]:
+        """Load piecewise-linear win_prob calibration mapping (if present)."""
+        if self._winprob_calibration is not None:
+            return self._winprob_calibration
+
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        path = os.path.join(repo_root, 'data', 'model_params', 'winprob_calibration_ncaam.json')
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                self._winprob_calibration = json.load(f)
+        except Exception:
+            self._winprob_calibration = {"points": []}
+        return self._winprob_calibration
+
+    def _calibrate_win_prob(self, p: float) -> float:
+        """Calibrate raw win probability using a monotonic piecewise-linear mapping."""
+        try:
+            p = float(p)
+        except Exception:
+            return p
+
+        if p <= 0.0:
+            return 0.0
+        if p >= 1.0:
+            return 1.0
+
+        cal = self._load_winprob_calibration() or {}
+        pts = cal.get('points') or []
+        if not pts or len(pts) < 2:
+            return p
+
+        xs = [float(x.get('p')) for x in pts if x and x.get('p') is not None]
+        ys = [float(x.get('p_cal')) for x in pts if x and x.get('p_cal') is not None]
+        if len(xs) != len(ys) or len(xs) < 2:
+            return p
+
+        # If outside range, clamp to endpoints
+        if p <= xs[0]:
+            return max(0.0, min(1.0, ys[0]))
+        if p >= xs[-1]:
+            return max(0.0, min(1.0, ys[-1]))
+
+        # Linear interpolate
+        for i in range(1, len(xs)):
+            if p <= xs[i]:
+                x0, x1 = xs[i - 1], xs[i]
+                y0, y1 = ys[i - 1], ys[i]
+                if x1 == x0:
+                    return max(0.0, min(1.0, y1))
+                t = (p - x0) / (x1 - x0)
+                y = y0 + t * (y1 - y0)
+                return max(0.0, min(1.0, y))
+        return p
+
     def _generate_recommendations(self, mu_s, sig_s, mu_t, sig_t, snap, event, torvik_view: Optional[Dict[str, Any]] = None) -> List[Dict]:
         recs: List[Dict[str, Any]] = []
         if not snap:
@@ -1057,12 +1113,17 @@ class NCAAMMarketFirstModelV2(BaseModel):
             push_prob = get_push_prob(line_s, sig_s)
             prob_home = prob_home_raw - (push_prob / 2)
 
-            ev_home = self._calculate_ev(prob_home, price_home)
-            kelly_home = self._calculate_kelly(prob_home, price_home)
+            # Calibrate win probability using last-2w mapping (when present)
+            prob_home_cal = self._calibrate_win_prob(prob_home)
+
+            ev_home = self._calculate_ev(prob_home_cal, price_home)
+            kelly_home = self._calculate_kelly(prob_home_cal, price_home)
 
             prob_away = (1.0 - prob_home_raw) - (push_prob / 2)
-            ev_away = self._calculate_ev(prob_away, price_away)
-            kelly_away = self._calculate_kelly(prob_away, price_away)
+            prob_away_cal = self._calibrate_win_prob(prob_away)
+
+            ev_away = self._calculate_ev(prob_away_cal, price_away)
+            kelly_away = self._calculate_kelly(prob_away_cal, price_away)
 
             # Use consensus for model math, but use a bettable line for the displayed recommendation.
             # Some consensus aggregations can produce quarter-points (e.g. -10.25) which are not real lines.
@@ -1088,8 +1149,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "team": event["home_team"],
                 "line": _snap_half(best_home_line if best_home_line is not None else market_line_s),
                 "price": int(best_home.get('price')) if best_home.get('price') is not None else int(price_home),
-                "prob": round(prob_home, 3),
-                "win_prob": round(prob_home, 3),
+                "prob": round(prob_home_cal, 3),
+                "win_prob": round(prob_home_cal, 3),
                 "ev": float(round(ev_home, 4)),
                 "kelly": float(round(kelly_home, 4)),
                 "book": best_home.get('book') or book_consensus,
@@ -1102,8 +1163,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "team": event["away_team"],
                 "line": _snap_half((best_away_line if best_away_line is not None else -market_line_s)),
                 "price": int(price_away),
-                "prob": round(prob_away, 3),
-                "win_prob": round(prob_away, 3),
+                "prob": round(prob_away_cal, 3),
+                "win_prob": round(prob_away_cal, 3),
                 "ev": float(round(ev_away, 4)),
                 "kelly": float(round(kelly_away, 4)),
                 "book": (best_away or {}).get('book') or book_consensus,
@@ -1131,10 +1192,13 @@ class NCAAMMarketFirstModelV2(BaseModel):
             prob_over = prob_over_raw - (push_prob_t / 2)
             prob_under = (1.0 - prob_over_raw) - (push_prob_t / 2)
 
-            ev_over = self._calculate_ev(prob_over, price_over)
-            kelly_over = self._calculate_kelly(prob_over, price_over)
-            ev_under = self._calculate_ev(prob_under, price_under)
-            kelly_under = self._calculate_kelly(prob_under, price_under)
+            prob_over_cal = self._calibrate_win_prob(prob_over)
+            prob_under_cal = self._calibrate_win_prob(prob_under)
+
+            ev_over = self._calculate_ev(prob_over_cal, price_over)
+            kelly_over = self._calculate_kelly(prob_over_cal, price_over)
+            ev_under = self._calculate_ev(prob_under_cal, price_under)
+            kelly_under = self._calculate_kelly(prob_under_cal, price_under)
 
             market_line_t = float(line_t)
             fair_line_t = float(mu_t)
@@ -1145,8 +1209,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "side": "over",
                 "line": float(best_over["line_value"] if best_over else line_t),
                 "price": int(price_over),
-                "prob": round(prob_over, 3),
-                "win_prob": round(prob_over, 3),
+                "prob": round(prob_over_cal, 3),
+                "win_prob": round(prob_over_cal, 3),
                 "ev": float(round(ev_over, 4)),
                 "kelly": float(round(kelly_over, 4)),
                 "book": book_over,
@@ -1158,8 +1222,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "side": "under",
                 "line": float(best_under["line_value"] if best_under else line_t),
                 "price": int(price_under),
-                "prob": round(prob_under, 3),
-                "win_prob": round(prob_under, 3),
+                "prob": round(prob_under_cal, 3),
+                "win_prob": round(prob_under_cal, 3),
                 "ev": float(round(ev_under, 4)),
                 "kelly": float(round(kelly_under, 4)),
                 "book": book_under,
