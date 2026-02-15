@@ -904,6 +904,6 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                     </div>
                 )}
             </div>
-        </div >
+        </div>
     );
 }
