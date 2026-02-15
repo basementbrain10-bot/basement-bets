@@ -706,10 +706,6 @@ const ModelPerformanceAnalytics = ({ history }) => {
 
     return (
         <div className="ui-card p-6 mb-6">
-            <h3 className="text-base font-semibold text-slate-100 mb-4">
-                Model Performance
-            </h3>
-
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Overall Stats + CLV */}
                 <div className="bg-slate-950/20 rounded-2xl p-4 border border-slate-700/40">

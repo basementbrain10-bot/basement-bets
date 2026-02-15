@@ -1134,23 +1134,23 @@ const Research = ({ onAddBet }) => {
                                                 </div>
 
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                                    <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
-                                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Bets</div>
-                                                        <div className="mt-1 text-white font-black text-2xl">{graded.length}</div>
-                                                        <div className="text-xs text-slate-500">graded (W/L/P)</div>
+                                                    <div className="bg-slate-950/20 border border-slate-700/40 rounded-2xl p-4">
+                                                        <div className="text-[11px] text-slate-400 font-semibold">Bets graded</div>
+                                                        <div className="mt-1 text-slate-100 font-black text-3xl">{graded.length}</div>
+                                                        <div className="text-[11px] text-slate-400">W / L / P only</div>
                                                         {dayRows.length !== graded.length && (
-                                                            <div className="text-[11px] text-slate-500 mt-1">Pending: {Math.max(0, dayRows.length - graded.length)}</div>
+                                                            <div className="text-[12px] text-slate-300 mt-1">Pending: {Math.max(0, dayRows.length - graded.length)}</div>
                                                         )}
                                                     </div>
-                                                    <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
-                                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Record</div>
-                                                        <div className="mt-1 text-white font-black text-2xl">{w}-{l}{p ? `-${p}` : ''}</div>
-                                                        <div className="text-xs text-slate-500">graded only</div>
+                                                    <div className="bg-slate-950/20 border border-slate-700/40 rounded-2xl p-4">
+                                                        <div className="text-[11px] text-slate-400 font-semibold">Record</div>
+                                                        <div className="mt-1 text-slate-100 font-black text-3xl">{w}-{l}{p ? `-${p}` : ''}</div>
+                                                        <div className="text-[11px] text-slate-400">graded only</div>
                                                     </div>
-                                                    <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
-                                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Win%</div>
-                                                        <div className="mt-1 text-white font-black text-2xl">{(w + l) ? `${winRate.toFixed(1)}%` : '—'}</div>
-                                                        <div className="text-xs text-slate-500">W/L only</div>
+                                                    <div className="bg-slate-950/20 border border-slate-700/40 rounded-2xl p-4">
+                                                        <div className="text-[11px] text-slate-400 font-semibold">Win rate</div>
+                                                        <div className="mt-1 text-slate-100 font-black text-3xl">{(w + l) ? `${winRate.toFixed(1)}%` : '—'}</div>
+                                                        <div className="text-[11px] text-slate-400">W/L only</div>
                                                     </div>
                                                 </div>
 
@@ -1162,10 +1162,10 @@ const Research = ({ onAddBet }) => {
                                                             { label: 'Low', s: lo, cls: 'text-purple-300' },
                                                         ];
                                                         return tiles.map(({ label, s, cls }) => (
-                                                            <div key={label} className="bg-slate-950/30 border border-slate-800 rounded-xl p-4">
-                                                                <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{label} confidence</div>
-                                                                <div className={`mt-1 font-black text-lg ${cls}`}>{s.w}-{s.l}{s.p ? `-${s.p}` : ''}</div>
-                                                                <div className="text-xs text-slate-500">Win%: <span className="text-slate-200 font-bold">{s.wr === null ? '—' : `${s.wr.toFixed(1)}%`}</span> • N={(s.w + s.l + s.p)}</div>
+                                                            <div key={label} className="bg-slate-950/20 border border-slate-700/40 rounded-2xl p-4">
+                                                                <div className="text-[11px] text-slate-400 font-semibold">{label} confidence</div>
+                                                                <div className={`mt-1 font-black text-xl ${cls}`}>{s.w}-{s.l}{s.p ? `-${s.p}` : ''}</div>
+                                                                <div className="text-[11px] text-slate-400">Win%: <span className="text-slate-200 font-semibold">{s.wr === null ? '—' : `${s.wr.toFixed(1)}%`}</span> • N={(s.w + s.l + s.p)}</div>
                                                             </div>
                                                         ));
                                                     })()}
