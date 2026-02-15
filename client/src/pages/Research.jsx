@@ -951,7 +951,28 @@ const Research = ({ onAddBet }) => {
                 activeTab === 'history' && (
                     <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-xl overflow-hidden">
                         <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
-                            <h2 className="text-lg font-semibold text-slate-200">Model Performance</h2>
+                            <h2 className="text-lg font-semibold text-slate-200">
+                                {(() => {
+                                    const hist = getRecommendedHistory();
+                                    const etDay = (ts) => {
+                                        try {
+                                            return new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+                                        } catch (e) {
+                                            return null;
+                                        }
+                                    };
+                                    const days = [...new Set(hist.map(h => etDay(h?.analyzed_at || h?.created_at)).filter(Boolean))].sort();
+                                    const lastDay = days.length ? days[days.length - 1] : null;
+                                    const fmtMDY = (ymd) => {
+                                        try {
+                                            const [yy, mm, dd] = String(ymd || '').split('-');
+                                            if (yy && mm && dd) return `${mm}/${dd}/${yy}`;
+                                        } catch (e) { }
+                                        return ymd || '';
+                                    };
+                                    return `Daily Recap${lastDay ? ` — ${fmtMDY(lastDay)}` : ''}`;
+                                })()}
+                            </h2>
                             <div className="flex items-center gap-6">
                             </div>
                         </div>
@@ -1042,8 +1063,11 @@ const Research = ({ onAddBet }) => {
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                                     <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
                                                         <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Bets</div>
-                                                        <div className="mt-1 text-white font-black text-2xl">{dayRows.length}</div>
-                                                        <div className="text-xs text-slate-500">recommended (that day)</div>
+                                                        <div className="mt-1 text-white font-black text-2xl">{graded.length}</div>
+                                                        <div className="text-xs text-slate-500">graded (W/L/P)</div>
+                                                        {dayRows.length !== graded.length && (
+                                                            <div className="text-[11px] text-slate-500 mt-1">Pending: {Math.max(0, dayRows.length - graded.length)}</div>
+                                                        )}
                                                     </div>
                                                     <div className="bg-slate-800/40 border border-slate-700 rounded-xl p-4">
                                                         <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Record</div>
