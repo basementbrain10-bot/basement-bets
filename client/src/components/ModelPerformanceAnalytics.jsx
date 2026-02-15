@@ -666,7 +666,8 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {avg !== null ? (
                     <g>
                         <line x1={padL} x2={width - padR} y1={yAt(avg)} y2={yAt(avg)} stroke="rgba(251,191,36,0.55)" strokeDasharray="4 4" />
-                        <text x={width - padR} y={yAt(avg) - 6} fontSize="12" fill="rgba(251,191,36,0.90)" textAnchor="end" fontWeight="800">Avg {avg.toFixed(1)}%</text>
+                        {/* Avg label placed on the left to avoid colliding with rolling label */}
+                        <text x={padL + 6} y={yAt(avg) - 6} fontSize="12" fill="rgba(251,191,36,0.90)" textAnchor="start" fontWeight="800">Avg {avg.toFixed(1)}%</text>
                     </g>
                 ) : null}
 
@@ -686,7 +687,12 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     const y = yAt(v);
                     const label = `Roll ${v.toFixed(1)}%`;
                     const lx = Math.max(padL, Math.min(x + 8, (width - padR) - 90));
-                    const ly = Math.max(padT + 14, Math.min(y - 8, (height - padB) - 6));
+                    // If the rolling label is too close (vertically) to the avg line, bump it down.
+                    const avgY = (avg !== null && avg !== undefined) ? yAt(avg) : null;
+                    let ly = Math.max(padT + 14, Math.min(y - 8, (height - padB) - 6));
+                    if (avgY !== null && Math.abs(ly - avgY) < 16) {
+                        ly = Math.min((height - padB) - 6, ly + 18);
+                    }
                     return (
                         <g>
                             <circle cx={x} cy={y} r="4" fill="rgba(147,197,253,0.95)" />
@@ -891,7 +897,12 @@ const ModelPerformanceAnalytics = ({ history }) => {
                                         const d7 = trend7.find(t => t.level === lvl) || { wins: 0, losses: 0, pushes: 0, winRate: 0 };
                                         const d30 = trend30.find(t => t.level === lvl) || { wins: 0, losses: 0, pushes: 0, winRate: 0 };
 
-                                        const cell = (t) => `${t.wins}-${t.losses}${t.pushes ? `-${t.pushes}` : ''} (${Number(t.winRate || 0).toFixed(0)}%)`;
+                                        // Condensed: show Win% and N (decided bets)
+                                        const cell = (t) => {
+                                            const decided = (Number(t.wins) || 0) + (Number(t.losses) || 0);
+                                            const wr = Number(t.winRate || 0);
+                                            return `${wr.toFixed(0)}% (N=${decided})`;
+                                        };
 
                                         return (
                                             <tr key={lvl} className="border-b border-slate-800/60 last:border-0">
@@ -906,7 +917,7 @@ const ModelPerformanceAnalytics = ({ history }) => {
                                 </tbody>
                             </table>
                         </div>
-                        <div className="text-[10px] text-slate-500 mt-2">*Recap includes graded bets only. Format: W-L(-P) (Win%).</div>
+                        <div className="text-[10px] text-slate-500 mt-2">*Recap includes graded bets only. Format: Win% (decided N).</div>
                     </div>
                 </div>
 
