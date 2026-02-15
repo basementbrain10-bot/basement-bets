@@ -1718,18 +1718,18 @@ const Research = ({ onAddBet }) => {
                                                 })()}
                                             </div>
 
-                                            <div className="bg-slate-800/80 p-6 rounded-xl border border-slate-700/50">
-                                                <h3 className="font-bold text-slate-200 mb-4 flex items-center gap-2 text-sm uppercase tracking-wider group relative">
+                                            <div className="bg-slate-900/40 p-6 rounded-2xl border border-slate-700/40">
+                                                <h3 className="font-semibold text-slate-200 mb-4 flex items-center gap-2 text-sm group relative">
                                                     <ShieldCheck size={16} className="text-green-400" />
                                                     Torvik View
                                                     <span className="ml-auto text-[9px] text-slate-500 font-normal normal-case cursor-help" title={`Data from BartTorvik.com\n\nScraped Fields:\n• Adj Offensive Efficiency\n• Adj Defensive Efficiency\n• Adj Tempo\n• Luck Factor\n\nLast Refresh: ${analysisResult.torvik_view?.data_date || analysisResult.debug_info?.torvik_refresh || 'Live fetch'}`}>
                                                         ⓘ Data Source
                                                     </span>
                                                 </h3>
-                                                <div className="grid grid-cols-2 gap-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     {/* Model Inputs (Torvik team metrics used in narrative) */}
                                                     <div className="col-span-2 bg-slate-900/30 p-3 rounded-lg border border-slate-700/50">
-                                                        <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2">Model Inputs (Team Stats)</div>
+                                                        <div className="text-[11px] text-slate-400 font-semibold mb-2">Team inputs</div>
                                                         {(() => {
                                                             const ts = analysisResult.torvik_team_stats || {};
                                                             const h = ts.home || {};
@@ -1756,17 +1756,17 @@ const Research = ({ onAddBet }) => {
                                                             return (
                                                                 <>
                                                                     <div className="grid grid-cols-3 gap-2 text-[11px]">
-                                                                        <div className="text-slate-500 font-black">Metric</div>
-                                                                        <div className="text-slate-400 font-black truncate">{awayName}</div>
-                                                                        <div className="text-slate-400 font-black truncate">{homeName}</div>
+                                                                        <div className="text-slate-500 font-semibold">Metric</div>
+                                                                        <div className="text-slate-300 font-semibold min-w-0 whitespace-normal break-words">{awayName}</div>
+                                                                        <div className="text-slate-300 font-semibold min-w-0 whitespace-normal break-words">{homeName}</div>
 
                                                                         {/* Team context */}
-                                                                        <div className="text-slate-600 text-[10px] font-black uppercase tracking-wider">Context</div>
-                                                                        <div className="text-slate-500 text-[10px] font-bold truncate">
+                                                                        <div className="text-slate-500 text-[10px] font-semibold">Context</div>
+                                                                        <div className="text-slate-400 text-[10px] font-semibold min-w-0 whitespace-normal break-words">
                                                                             {a?.record ? `Rec ${a.record}` : 'Rec —'}
                                                                             {analysisResult?.net_data?.away?.rank ? ` • NET #${analysisResult.net_data.away.rank}` : ''}
                                                                         </div>
-                                                                        <div className="text-slate-500 text-[10px] font-bold truncate">
+                                                                        <div className="text-slate-400 text-[10px] font-semibold min-w-0 whitespace-normal break-words">
                                                                             {h?.record ? `Rec ${h.record}` : 'Rec —'}
                                                                             {analysisResult?.net_data?.home?.rank ? ` • NET #${analysisResult.net_data.home.rank}` : ''}
                                                                         </div>
@@ -1791,7 +1791,7 @@ const Research = ({ onAddBet }) => {
                                                         })()}
                                                     </div>
                                                     <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 cursor-help" title="Projected final score computed from Torvik efficiency ratings (AdjO, AdjD) and tempo">
-                                                        <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Projected Score</div>
+                                                        <div className="text-[11px] text-slate-400 font-semibold mb-1">Projected score</div>
                                                         {(() => {
                                                             // torvik_view.projected_score is often "AwayScore-HomeScore"; make it explicit.
                                                             const ps = String(analysisResult.torvik_view?.projected_score || '').trim();
@@ -1802,12 +1802,12 @@ const Research = ({ onAddBet }) => {
                                                             const homeName = selectedGame?.home_team || analysisResult.home_team || 'Home';
                                                             return (
                                                                 <div className="space-y-1">
-                                                                    <div className="flex justify-between text-white font-bold">
-                                                                        <span className="truncate pr-2">{awayName}</span>
+                                                                    <div className="flex justify-between text-white font-bold gap-2">
+                                                                        <span className="min-w-0 whitespace-normal break-words">{awayName}</span>
                                                                         <span className="font-mono">{awayScore}</span>
                                                                     </div>
-                                                                    <div className="flex justify-between text-white font-bold">
-                                                                        <span className="truncate pr-2">{homeName}</span>
+                                                                    <div className="flex justify-between text-white font-bold gap-2">
+                                                                        <span className="min-w-0 whitespace-normal break-words">{homeName}</span>
                                                                         <span className="font-mono">{homeScore}</span>
                                                                     </div>
                                                                 </div>
@@ -1815,7 +1815,7 @@ const Research = ({ onAddBet }) => {
                                                         })()}
                                                     </div>
                                                     <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 cursor-help" title="Expected margin based on efficiency differential and home court advantage">
-                                                        <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Proj Margin</div>
+                                                        <div className="text-[11px] text-slate-400 font-semibold mb-1">Projected margin</div>
                                                         <div className="text-lg font-bold text-white">
                                                             {analysisResult.torvik_view?.margin !== undefined && analysisResult.torvik_view.margin !== null
                                                                 ? `${Number(analysisResult.torvik_view.margin) > 0 ? '+' : ''}${Number(analysisResult.torvik_view.margin).toFixed(1)}`
@@ -1835,10 +1835,10 @@ const Research = ({ onAddBet }) => {
 
                                             {/* KenPom View */}
                                             {analysisResult.kenpom_data && (
-                                                <div className="bg-slate-800/80 p-6 rounded-xl border border-slate-700/50">
-                                                    <h3 className="font-bold text-slate-200 mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
+                                                <div className="bg-slate-900/40 p-6 rounded-2xl border border-slate-700/40">
+                                                    <h3 className="font-semibold text-slate-200 mb-4 flex items-center gap-2 text-sm">
                                                         <Shield size={16} className="text-purple-400" />
-                                                        KenPom View
+                                                        KenPom
                                                     </h3>
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700">
@@ -1864,10 +1864,10 @@ const Research = ({ onAddBet }) => {
 
                                             {/* News View */}
                                             {analysisResult.news_summary && (
-                                                <div className="bg-slate-800/80 p-6 rounded-xl border border-slate-700/50">
-                                                    <h3 className="font-bold text-slate-200 mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
+                                                <div className="bg-slate-900/40 p-6 rounded-2xl border border-slate-700/40">
+                                                    <h3 className="font-semibold text-slate-200 mb-4 flex items-center gap-2 text-sm">
                                                         <AlertCircle size={16} className="text-amber-400" />
-                                                        News / Context
+                                                        News
                                                     </h3>
                                                     <div className="text-sm text-slate-300 bg-slate-900/30 p-3 rounded-lg border border-slate-700/50 min-h-[80px]">
                                                         {analysisResult.news_summary}
