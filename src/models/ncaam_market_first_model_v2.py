@@ -736,6 +736,62 @@ class NCAAMMarketFirstModelV2(BaseModel):
             if not best_rec or r['ev'] > best_rec['ev']:
                 best_rec = r
 
+        # --- Persisted pick normalization ---
+        # For SPREAD we want the persisted `pick` to be the actual team name (not "home/away"),
+        # and `bet_line` to be relative to that pick (signed).
+        persisted_pick = best_rec['side'] if best_rec else "NONE"
+        persisted_line = best_rec['line'] if best_rec else None
+        persisted_selection = best_rec['side'] if best_rec else None
+
+        try:
+            if best_rec and str(best_rec.get('market') or '').upper() == 'SPREAD':
+                side = str(best_rec.get('side') or '').lower().strip()
+                home_team = event.get('home_team')
+                away_team = event.get('away_team')
+
+                # Convert home/away -> team names
+                if side == 'home' and home_team:
+                    persisted_pick = home_team
+                elif side == 'away' and away_team:
+                    persisted_pick = away_team
+
+                # Ensure spread line is signed relative to HOME convention if we have spread_home.
+                # Many of our snapshot pipelines store absolute spread with side=HOME/AWAY.
+                # If we can infer the home sign from market_snapshot['spread_home'], use it.
+                if persisted_line is not None:
+                    try:
+                        line_abs = abs(float(persisted_line))
+                        spread_home = market_snapshot.get('spread_home')
+                        if spread_home is not None:
+                            home_sign = -1.0 if float(spread_home) < 0 else 1.0
+                            if side == 'home':
+                                persisted_line = home_sign * line_abs
+                            elif side == 'away':
+                                persisted_line = -home_sign * line_abs
+                            else:
+                                persisted_line = float(persisted_line)
+                        else:
+                            persisted_line = float(persisted_line)
+                    except Exception:
+                        pass
+
+                # Build human selection like "Creighton -4.5" / "West Virginia +6.5"
+                if persisted_pick and persisted_line is not None:
+                    try:
+                        v = float(persisted_line)
+                        sign = '+' if v > 0 else ''
+                        persisted_selection = f"{persisted_pick} {sign}{v:g}"
+                    except Exception:
+                        persisted_selection = f"{persisted_pick} {persisted_line}"
+
+            elif best_rec and str(best_rec.get('market') or '').upper() == 'TOTAL':
+                side = str(best_rec.get('side') or '').upper().strip()
+                persisted_pick = side
+                persisted_selection = f"{side} {best_rec.get('line')}" if best_rec.get('line') is not None else side
+        except Exception:
+            # never block analyze() on persistence formatting
+            pass
+
         res = {
             "id": None, 
             "event_id": event_id,
@@ -744,8 +800,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "analyzed_at": datetime.now().isoformat(),
             "model_version": self.VERSION,
             "market_type": best_rec['market'] if best_rec else "AUTO",
-            "pick": best_rec['side'] if best_rec else "NONE",
-            "bet_line": best_rec['line'] if best_rec else None,
+            "pick": persisted_pick,
+            "bet_line": persisted_line,
             "bet_price": best_rec['price'] if best_rec else None,
             "book": best_rec['book'] if best_rec else None,
             "mu_market": mu_market_spread,
@@ -768,7 +824,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "news_summary": self.news_service.summarize_impact(news_context),
             "key_factors": narrative.get('key_factors') or [],
             "risks": narrative.get('risks') or [],
-            "selection": best_rec['side'] if best_rec else None,
+            "selection": persisted_selection,
             "price": best_rec['price'] if best_rec else None,
             "basement_line": mu_spread_final if (best_rec and best_rec['market'] == 'SPREAD') else mu_total_final,
             "edge_points": abs((best_rec['line'] if best_rec else 0) - (mu_spread_final if (best_rec and best_rec['market'] == 'SPREAD') else mu_total_final)), 
