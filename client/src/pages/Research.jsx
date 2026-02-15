@@ -594,8 +594,8 @@ const Research = ({ onAddBet }) => {
                                                     {top6.map(({ edge, top }, i) => (
                                                         <div key={edge.id} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-900/30 border border-slate-700/50">
                                                             <div className="min-w-0">
-                                                                <div className="text-xs text-slate-200 font-black truncate">{i + 1}. {edge.away_team} @ {edge.home_team}</div>
-                                                                <div className="text-xs text-slate-400 truncate">{top.bet_type} • {fmtPick(edge, top)} • {top.confidence || '—'}</div>
+                                                                <div className="text-xs text-slate-200 font-black whitespace-normal break-words">{i + 1}. {edge.away_team} @ {edge.home_team}</div>
+                                                                <div className="text-xs text-slate-400 whitespace-normal break-words">{top.bet_type} • {fmtPick(edge, top)} • {top.confidence || '—'}</div>
                                                             </div>
                                                             <div className="text-right shrink-0">
                                                                 <div className="text-xs font-mono font-black text-emerald-300">{(() => {
@@ -612,7 +612,81 @@ const Research = ({ onAddBet }) => {
                                                 </div>
                                             </div>
 
-                                            <div className="overflow-x-auto border border-slate-700/60 rounded-xl">
+                                            {/* Mobile: stacked cards (no horizontal scroll) */}
+                                            <div className="sm:hidden space-y-3">
+                                                {rows.slice(0, 50).map(({ edge, top }, idx) => {
+                                                    const date = edge.start_time ? new Date(edge.start_time) : null;
+                                                    const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
+                                                    const odds = (top.price !== null && top.price !== undefined) ? fmtSigned(top.price, 0) : 'odds n/a';
+                                                    const pickText = fmtPick(edge, top);
+                                                    const evTxt = String(top.edge || '').trim();
+                                                    const isTop = idx < 6;
+
+                                                    return (
+                                                        <div key={edge.id} className={`p-4 rounded-2xl border ${isTop ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-slate-700/40 bg-slate-900/30'}`}>
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div className="min-w-0">
+                                                                    <div className="text-[11px] text-slate-400 font-semibold">{timeStr || '—'}</div>
+                                                                    <div className="mt-0.5 text-sm font-semibold text-slate-100 whitespace-normal break-words">{edge.away_team} @ {edge.home_team}</div>
+                                                                </div>
+                                                                {isTop ? (
+                                                                    <div className="shrink-0 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-[10px] font-semibold text-emerald-200">Top 6</div>
+                                                                ) : null}
+                                                            </div>
+
+                                                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                                <span className="px-2 py-0.5 rounded-full bg-slate-950/30 border border-slate-700/40 text-[10px] font-semibold text-slate-300">
+                                                                    {top.bet_type}
+                                                                </span>
+                                                                <span className="text-sm font-semibold text-slate-100 whitespace-normal break-words">{pickText}</span>
+                                                            </div>
+
+                                                            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                                                                <div className="ui-card p-2 rounded-xl border border-slate-700/40 bg-slate-950/20">
+                                                                    <div className="ui-label">Odds</div>
+                                                                    <div className="text-slate-100 font-mono font-semibold">{odds}</div>
+                                                                </div>
+                                                                <div className="ui-card p-2 rounded-xl border border-slate-700/40 bg-slate-950/20">
+                                                                    <div className="ui-label">EV</div>
+                                                                    <div className="text-emerald-300 font-mono font-semibold">{evTxt && !String(evTxt).startsWith('-') ? `+${evTxt}` : evTxt || '—'}</div>
+                                                                </div>
+                                                                <div className="ui-card p-2 rounded-xl border border-slate-700/40 bg-slate-950/20">
+                                                                    <div className="ui-label">Confidence</div>
+                                                                    <div className="text-slate-100 font-semibold">{top.confidence || '—'}</div>
+                                                                </div>
+                                                                <div className="ui-card p-2 rounded-xl border border-slate-700/40 bg-slate-950/20">
+                                                                    <div className="ui-label">Actions</div>
+                                                                    <div className="flex gap-2 mt-1">
+                                                                        <button
+                                                                            onClick={() => onAddBet?.({
+                                                                                sport: edge.sport,
+                                                                                game: `${edge.away_team} @ ${edge.home_team}`,
+                                                                                market: top.bet_type,
+                                                                                pick: pickText,
+                                                                                line: top.market_line,
+                                                                                odds: top.price,
+                                                                                book: top.book,
+                                                                            })}
+                                                                            className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-500/15 text-emerald-200 border border-emerald-500/25"
+                                                                        >
+                                                                            Add
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => analyzeGame(edge)}
+                                                                            className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-950/30 text-slate-200 border border-slate-700/40"
+                                                                        >
+                                                                            Details
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Desktop/tablet: table */}
+                                            <div className="hidden sm:block overflow-x-auto border border-slate-700/60 rounded-xl">
                                                 <table className="min-w-full text-left text-sm">
                                                     <thead className="bg-slate-900/40 border-b border-slate-700/60">
                                                         <tr className="text-[10px] uppercase tracking-wider text-slate-500">
