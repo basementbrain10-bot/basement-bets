@@ -708,11 +708,20 @@ class NCAAMMarketFirstModelV2(BaseModel):
                     # For totals, interpret edge points as difference in line (direction depends on OVER/UNDER)
                     edge_points_side = round(float(fair_line_side) - float(market_line_side), 1)
 
-            # Build a human-friendly selection label (avoid "home/away" in UI)
+            # Build a human-friendly selection label.
+            # IMPORTANT: For SPREAD, include the sign (+/-) so underdogs aren't displayed as favorites.
             sel = None
             if r['market'] == 'SPREAD':
                 team = r.get('team') or (event['home_team'] if r.get('side') == 'home' else event['away_team'])
-                sel = team + (f" {r['line']}" if r.get('line') is not None else "")
+                if r.get('line') is not None:
+                    try:
+                        v = float(r.get('line'))
+                        sign = '+' if v > 0 else ''
+                        sel = f"{team} {sign}{v:g}"
+                    except Exception:
+                        sel = team + f" {r.get('line')}"
+                else:
+                    sel = team
             elif r['market'] == 'TOTAL':
                 side = str(r.get('side') or '').upper()
                 sel = side + (f" {r['line']}" if r.get('line') is not None else "")
