@@ -425,6 +425,14 @@ const ModelPerformanceAnalytics = ({ history }) => {
         const hoverIdx = (hoverConfIdx !== null && hoverConfIdx !== undefined) ? Number(hoverConfIdx) : null;
         const hoverX = hoverIdx !== null ? xAt(hoverIdx) : null;
 
+        // Tooltip clamp so it never renders off-canvas
+        const tipW = 250;
+        const tipH = 92;
+        const tipX = hoverX !== null
+            ? Math.max(padL, Math.min(hoverX + 8, (width - padR) - tipW))
+            : null;
+        const tipY = padT + 6;
+
         return (
             <svg
                 viewBox={`0 0 ${width} ${height}`}
@@ -485,13 +493,13 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {hoverIdx !== null ? (
                     <g>
                         <line x1={hoverX} x2={hoverX} y1={padT} y2={height - padB} stroke="rgba(226,232,240,0.18)" strokeWidth="1" />
-                        <rect x={hoverX + 8} y={padT + 6} width="250" height="92" rx="10" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
-                        <text x={hoverX + 16} y={padT + 34} fontSize="14" fill="rgba(226,232,240,0.98)" fontWeight="800">{dayKeys[hoverIdx] || ''}</text>
+                        <rect x={tipX} y={tipY} width={tipW} height={tipH} rx="10" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
+                        <text x={tipX + 8} y={tipY + 28} fontSize="14" fill="rgba(226,232,240,0.98)" fontWeight="800">{dayKeys[hoverIdx] || ''}</text>
                         {bands.map((b, bi) => {
                             const v = (series[b.k] || [])[hoverIdx];
                             if (v === null || v === undefined) return null;
                             return (
-                                <text key={b.k} x={hoverX + 16} y={padT + 56 + bi * 18} fontSize="14" fill={b.color} fontWeight="800">
+                                <text key={b.k} x={tipX + 8} y={tipY + 50 + bi * 18} fontSize="14" fill={b.color} fontWeight="800">
                                     {b.k}: {Number(v).toFixed(1)}%
                                 </text>
                             );
@@ -580,6 +588,14 @@ const ModelPerformanceAnalytics = ({ history }) => {
         const hoverIdx = (hoverTop6Idx !== null && hoverTop6Idx !== undefined) ? Number(hoverTop6Idx) : null;
         const hoverX = hoverIdx !== null ? (xBar(hoverIdx) + bandW / 2) : null;
 
+        // Tooltip clamp so it never renders off-canvas
+        const tipW = 250;
+        const tipH = 68;
+        const tipX = hoverX !== null
+            ? Math.max(padL, Math.min(hoverX + 8, (width - padR) - tipW))
+            : null;
+        const tipY = padT + 6;
+
         return (
             <svg
                 viewBox={`0 0 ${width} ${height}`}
@@ -650,20 +666,42 @@ const ModelPerformanceAnalytics = ({ history }) => {
                 {avg !== null ? (
                     <g>
                         <line x1={padL} x2={width - padR} y1={yAt(avg)} y2={yAt(avg)} stroke="rgba(251,191,36,0.55)" strokeDasharray="4 4" />
-                        <text x={width - padR} y={yAt(avg) - 4} fontSize="9" fill="rgba(251,191,36,0.85)" textAnchor="end">Avg {avg.toFixed(1)}%</text>
+                        <text x={width - padR} y={yAt(avg) - 6} fontSize="12" fill="rgba(251,191,36,0.90)" textAnchor="end" fontWeight="800">Avg {avg.toFixed(1)}%</text>
                     </g>
                 ) : null}
 
                 {/* cumulative average trend line */}
                 <path d={pathForBarsAvg(cumAvg)} fill="none" stroke="rgba(147,197,253,0.85)" strokeWidth="2" strokeLinecap="round" />
 
+                {/* cumulative avg value label (last available point) */}
+                {(() => {
+                    let lastIdx = -1;
+                    for (let i = cumAvg.length - 1; i >= 0; i--) {
+                        if (cumAvg[i] !== null && cumAvg[i] !== undefined) { lastIdx = i; break; }
+                    }
+                    if (lastIdx < 0) return null;
+                    const v = Number(cumAvg[lastIdx]);
+                    if (!Number.isFinite(v)) return null;
+                    const x = xBar(lastIdx) + bandW / 2;
+                    const y = yAt(v);
+                    const label = `Roll ${v.toFixed(1)}%`;
+                    const lx = Math.max(padL, Math.min(x + 8, (width - padR) - 90));
+                    const ly = Math.max(padT + 14, Math.min(y - 8, (height - padB) - 6));
+                    return (
+                        <g>
+                            <circle cx={x} cy={y} r="4" fill="rgba(147,197,253,0.95)" />
+                            <text x={lx} y={ly} fontSize="12" fill="rgba(147,197,253,0.95)" fontWeight="800">{label}</text>
+                        </g>
+                    );
+                })()}
+
                 {/* hover indicator + tooltip */}
                 {hoverIdx !== null ? (
                     <g>
                         <line x1={hoverX} x2={hoverX} y1={padT} y2={height - padB} stroke="rgba(226,232,240,0.18)" strokeWidth="1" />
-                        <rect x={hoverX + 8} y={padT + 6} width="250" height="68" rx="10" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
-                        <text x={hoverX + 16} y={padT + 34} fontSize="14" fill="rgba(226,232,240,0.98)" fontWeight="800">{dayKeys[hoverIdx] || ''}</text>
-                        <text x={hoverX + 16} y={padT + 58} fontSize="14" fill="rgba(226,232,240,0.95)" fontWeight="800">Top 6: {(() => {
+                        <rect x={tipX} y={tipY} width={tipW} height={tipH} rx="10" fill="rgba(2,6,23,0.92)" stroke="rgba(148,163,184,0.25)" />
+                        <text x={tipX + 8} y={tipY + 28} fontSize="14" fill="rgba(226,232,240,0.98)" fontWeight="800">{dayKeys[hoverIdx] || ''}</text>
+                        <text x={tipX + 8} y={tipY + 52} fontSize="14" fill="rgba(226,232,240,0.95)" fontWeight="800">Top 6: {(() => {
                             const v = seriesTop6[hoverIdx];
                             return (v === null || v === undefined) ? '—' : `${Number(v).toFixed(1)}%`;
                         })()}</text>
@@ -834,68 +872,41 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-slate-700">
-                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Trend by confidence (all graded bets)</div>
-                        <div className="grid grid-cols-2 gap-3 text-[11px]">
-                            <div className="bg-slate-950/30 rounded-md p-2 border border-slate-800">
-                                <div className="text-[10px] text-slate-500 font-bold mb-1">Yesterday</div>
-                                {trendYday.map(t => (
-                                    <div key={t.level} className="flex justify-between">
-                                        <span className="text-slate-400">{t.level}</span>
-                                        <span className="text-slate-300">{t.wins}-{t.losses}{t.pushes ? `-${t.pushes}` : ''} ({t.winRate.toFixed(0)}%)</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="bg-slate-950/30 rounded-md p-2 border border-slate-800">
-                                <div className="text-[10px] text-slate-500 font-bold mb-1">Last 3 days</div>
-                                {trend3.map(t => (
-                                    <div key={t.level} className="flex justify-between">
-                                        <span className="text-slate-400">{t.level}</span>
-                                        <span className="text-slate-300">{t.wins}-{t.losses}{t.pushes ? `-${t.pushes}` : ''} ({t.winRate.toFixed(0)}%)</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="bg-slate-950/30 rounded-md p-2 border border-slate-800">
-                                <div className="text-[10px] text-slate-500 font-bold mb-1">Last 7 days</div>
-                                {trend7.map(t => (
-                                    <div key={t.level} className="flex justify-between">
-                                        <span className="text-slate-400">{t.level}</span>
-                                        <span className="text-slate-300">{t.wins}-{t.losses}{t.pushes ? `-${t.pushes}` : ''} ({t.winRate.toFixed(0)}%)</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="bg-slate-950/30 rounded-md p-2 border border-slate-800">
-                                <div className="text-[10px] text-slate-500 font-bold mb-1">Last 30 days</div>
-                                {trend30.map(t => (
-                                    <div key={t.level} className="flex justify-between">
-                                        <span className="text-slate-400">{t.level}</span>
-                                        <span className="text-slate-300">{t.wins}-{t.losses}{t.pushes ? `-${t.pushes}` : ''} ({t.winRate.toFixed(0)}%)</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="text-[10px] text-slate-500 mt-2">*Trends include graded bets only.</div>
-                    </div>
-                </div>
+                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Recap (graded bets)</div>
+                        <div className="rounded-xl border border-slate-800 bg-slate-950/25 p-3 overflow-x-auto">
+                            <table className="w-full text-[11px]">
+                                <thead>
+                                    <tr className="text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-800">
+                                        <th className="py-1 pr-2 text-left">Conf</th>
+                                        <th className="py-1 px-2 text-right">Yesterday</th>
+                                        <th className="py-1 px-2 text-right">3d</th>
+                                        <th className="py-1 px-2 text-right">7d</th>
+                                        <th className="py-1 pl-2 text-right">30d</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {confidenceLevels.map((lvl) => {
+                                        const y = trendYday.find(t => t.level === lvl) || { wins: 0, losses: 0, pushes: 0, winRate: 0 };
+                                        const d3 = trend3.find(t => t.level === lvl) || { wins: 0, losses: 0, pushes: 0, winRate: 0 };
+                                        const d7 = trend7.find(t => t.level === lvl) || { wins: 0, losses: 0, pushes: 0, winRate: 0 };
+                                        const d30 = trend30.find(t => t.level === lvl) || { wins: 0, losses: 0, pushes: 0, winRate: 0 };
 
-                {/* Daily win% by confidence */}
-                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700 lg:col-span-2">
-                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Daily Win% by Confidence</h4>
-                    <div className="text-[10px] text-slate-500 mb-2">Last 14 days • Win% computed on decided bets (W/L) per confidence band.</div>
-                    <div className="rounded-lg border border-slate-800 bg-slate-950/20 p-2">
-                        {renderConfidenceChart()}
-                    </div>
-                    <div className="mt-2 flex items-center gap-4 text-[11px] text-slate-400">
-                        <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#34d399' }}></span>High</div>
-                        <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#60a5fa' }}></span>Medium</div>
-                        <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#f59e0b' }}></span>Low</div>
-                    </div>
+                                        const cell = (t) => `${t.wins}-${t.losses}${t.pushes ? `-${t.pushes}` : ''} (${Number(t.winRate || 0).toFixed(0)}%)`;
 
-                    <div className="mt-8">
-                        <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Top 6 Recommended Win Rate</h4>
-                        <div className="text-[10px] text-slate-500 mb-2">Last 14 days • Win% of the 6 highest EV graded bets each day.</div>
-                        <div className="rounded-lg border border-slate-800 bg-slate-950/20 p-2">
-                            {renderTop6Chart()}
+                                        return (
+                                            <tr key={lvl} className="border-b border-slate-800/60 last:border-0">
+                                                <td className="py-1 pr-2 text-slate-300 font-bold">{lvl}</td>
+                                                <td className="py-1 px-2 text-right text-slate-300 font-mono">{cell(y)}</td>
+                                                <td className="py-1 px-2 text-right text-slate-300 font-mono">{cell(d3)}</td>
+                                                <td className="py-1 px-2 text-right text-slate-300 font-mono">{cell(d7)}</td>
+                                                <td className="py-1 pl-2 text-right text-slate-300 font-mono">{cell(d30)}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
+                        <div className="text-[10px] text-slate-500 mt-2">*Recap includes graded bets only. Format: W-L(-P) (Win%).</div>
                     </div>
                 </div>
 
@@ -983,6 +994,30 @@ const ModelPerformanceAnalytics = ({ history }) => {
                         ) : null}
                     </div>
                 </div>
+
+                {/* Daily win% by confidence */}
+                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700 lg:col-span-2">
+                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Daily Win% by Confidence</h4>
+                    <div className="text-[10px] text-slate-500 mb-2">Last 14 days • Win% computed on decided bets (W/L) per confidence band.</div>
+                    <div className="rounded-lg border border-slate-800 bg-slate-950/20 p-2">
+                        {renderConfidenceChart()}
+                    </div>
+                    <div className="mt-2 flex items-center gap-4 text-[11px] text-slate-400">
+                        <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#34d399' }}></span>High</div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#60a5fa' }}></span>Medium</div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#f59e0b' }}></span>Low</div>
+                    </div>
+
+                    <div className="mt-8">
+                        <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Top 6 Recommended Win Rate</h4>
+                        <div className="text-[10px] text-slate-500 mb-2">Last 14 days • Win% of the 6 highest EV graded bets each day.</div>
+                        <div className="rounded-lg border border-slate-800 bg-slate-950/20 p-2">
+                            {renderTop6Chart()}
+                        </div>
+                    </div>
+                </div>
+
+
             </div>
         </div>
     );
