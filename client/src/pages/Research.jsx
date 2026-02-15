@@ -1760,7 +1760,18 @@ const Research = ({ onAddBet }) => {
                                                                         <div className="text-slate-400 font-black truncate">{awayName}</div>
                                                                         <div className="text-slate-400 font-black truncate">{homeName}</div>
 
-                                                                        {rows.map((r) => {
+                                                                        {/* Team context */}
+                                                                        <div className="text-slate-600 text-[10px] font-black uppercase tracking-wider">Context</div>
+                                                                        <div className="text-slate-500 text-[10px] font-bold truncate">
+                                                                            {a?.record ? `Rec ${a.record}` : 'Rec —'}
+                                                                            {analysisResult?.net_data?.away?.rank ? ` • NET #${analysisResult.net_data.away.rank}` : ''}
+                                                                        </div>
+                                                                        <div className="text-slate-500 text-[10px] font-bold truncate">
+                                                                            {h?.record ? `Rec ${h.record}` : 'Rec —'}
+                                                                            {analysisResult?.net_data?.home?.rank ? ` • NET #${analysisResult.net_data.home.rank}` : ''}
+                                                                        </div>
+
+                                                                        {rows.map((r) => { 
                                                                             const dec = (r.k === 'Luck' || r.k === 'Continuity') ? 2 : 1;
                                                                             return (
                                                                                 <React.Fragment key={r.k}>
