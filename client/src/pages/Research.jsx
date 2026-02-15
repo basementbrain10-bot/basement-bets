@@ -406,25 +406,25 @@ const Research = ({ onAddBet }) => {
             </div>
 
             {/* Tabs */}
-            <div className="flex space-x-4 mb-6 border-b border-slate-700">
+            <div className="inline-flex gap-1 mb-6 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
                 <button
                     onClick={() => setActiveTab('live')}
-                    className={`pb-2 px-4 text-sm font-medium transition-colors ${activeTab === 'live' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-slate-200'}`}
+                    className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${activeTab === 'live' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                 >
-                    Market Board
+                    Board
                 </button>
                 <button
                     onClick={() => setActiveTab('history')}
-                    className={`pb-2 px-4 text-sm font-medium transition-colors ${activeTab === 'history' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-slate-200'}`}
+                    className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${activeTab === 'history' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                 >
-                    Model Performance
+                    Daily Recap
                 </button>
             </div>
 
 
             {activeTab === 'live' && (
                 <>
-                    <div className="flex justify-between items-center mb-4">
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
                         <div className="flex items-center space-x-4">
                             {/* League Filter */}
                             <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 focus-within:border-blue-500/50 transition-all">
@@ -461,31 +461,31 @@ const Research = ({ onAddBet }) => {
                         </div>
                     </div>
 
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-xl overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-700 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+                    <div className="bg-slate-900/40 rounded-2xl border border-slate-700/40 shadow-xl overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-700/40 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
                             <div>
-                                <h2 className="text-lg font-semibold text-slate-200">Board</h2>
-                                <div className="text-xs text-slate-500 flex items-center mt-1">
+                                <h2 className="text-base font-semibold text-slate-200">Board</h2>
+                                <div className="text-[11px] text-slate-400 flex items-center mt-1 leading-snug">
                                     <Info size={12} className="mr-1" />
                                     Times shown in ET • lines shown as (team/side, line, odds)
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-950/30 border border-slate-700/40">
                                 <button
                                     onClick={() => setBoardTab('recommended')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${boardTab === 'recommended'
-                                        ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/30'
-                                        : 'bg-slate-900/20 text-slate-300 border-slate-700 hover:bg-slate-900/30'
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${boardTab === 'recommended'
+                                        ? 'bg-slate-800/70 text-slate-100 border-white/10 shadow-sm'
+                                        : 'bg-transparent text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-slate-200'
                                         }`}
                                 >
                                     Recommended
                                 </button>
                                 <button
                                     onClick={() => setBoardTab('full')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${boardTab === 'full'
-                                        ? 'bg-purple-500/20 text-purple-200 border-purple-500/30'
-                                        : 'bg-slate-900/20 text-slate-300 border-slate-700 hover:bg-slate-900/30'
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${boardTab === 'full'
+                                        ? 'bg-slate-800/70 text-slate-100 border-white/10 shadow-sm'
+                                        : 'bg-transparent text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-slate-200'
                                         }`}
                                 >
                                     Full board
@@ -949,8 +949,8 @@ const Research = ({ onAddBet }) => {
 
             {
                 activeTab === 'history' && (
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-xl overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+                    <div className="bg-slate-900/40 rounded-2xl border border-slate-700/40 shadow-xl overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-700/40 flex justify-between items-center bg-slate-900/20">
                             <h2 className="text-lg font-semibold text-slate-200">
                                 {(() => {
                                     const hist = getRecommendedHistory();
