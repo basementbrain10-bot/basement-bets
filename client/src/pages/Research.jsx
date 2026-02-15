@@ -1570,9 +1570,9 @@ const Research = ({ onAddBet }) => {
                                             );
                                         })()}
 
-                                        {/* Market Lines (clarify who is favored) */}
-                                        <div className="bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
-                                            <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-2">Market Lines</div>
+                                        {/* Market (clean, compact) */}
+                                        <div className="bg-slate-900/40 p-5 rounded-2xl border border-slate-700/40">
+                                            <div className="text-sm font-semibold text-slate-200 mb-3">Market</div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                                                 <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-700/50">
                                                     <div className="text-[10px] text-slate-500 uppercase font-black mb-1">Spread (team / line / odds)</div>
@@ -1783,9 +1783,48 @@ const Research = ({ onAddBet }) => {
                                                                         })}
                                                                     </div>
 
-                                                                    <div className="mt-2 text-[10px] text-slate-500">
-                                                                        Avg possessions (game tempo): <span className="text-slate-200 font-mono font-bold">{tempo !== undefined && tempo !== null ? fmt(tempo, 1) : '—'}</span>
+                                                                    <div className="mt-2 text-[11px] text-slate-400">
+                                                                        Avg possessions (est.): <span className="text-slate-100 font-mono font-semibold">{tempo !== undefined && tempo !== null ? fmt(tempo, 1) : '—'}</span>
                                                                     </div>
+
+                                                                    {(() => {
+                                                                        // Pace context: translate tempo into what it means for totals.
+                                                                        const t = Number(tempo);
+                                                                        const totalLine = Number(selectedGame?.total_line ?? selectedGame?.total ?? analysisResult?.market_snapshot?.total ?? null);
+                                                                        if (!Number.isFinite(t) || !Number.isFinite(totalLine) || t <= 1) return null;
+
+                                                                        // Combined points per possession (both teams) implied by the market total.
+                                                                        const pppCombined = totalLine / t;
+                                                                        const pppTeam = pppCombined / 2;
+
+                                                                        // Approx scoring-trip rate assuming ~2.05 pts per scoring trip (2s + 3s + FTs blend).
+                                                                        const ptsPerScoringTrip = 2.05;
+                                                                        const scoringTripRate = Math.min(1, Math.max(0, totalLine / (ptsPerScoringTrip * t)));
+
+                                                                        // Simple qualitative labels vs typical D1 averages (~1.02–1.06 PPP per team).
+                                                                        const lbl = (pppTeam >= 1.10) ? { txt: 'high-efficiency game', cls: 'text-emerald-300' }
+                                                                            : (pppTeam >= 1.03) ? { txt: 'around average efficiency', cls: 'text-slate-300' }
+                                                                                : { txt: 'lower-efficiency game', cls: 'text-amber-300' };
+
+                                                                        const paceLbl = (t >= 71) ? { txt: 'fast', cls: 'text-emerald-300' }
+                                                                            : (t >= 67) ? { txt: 'average', cls: 'text-slate-300' }
+                                                                                : { txt: 'slow', cls: 'text-amber-300' };
+
+                                                                        return (
+                                                                            <div className="mt-2 text-[11px] text-slate-500 space-y-1 leading-snug">
+                                                                                <div>
+                                                                                    Pace: <span className={`${paceLbl.cls} font-semibold`}>{paceLbl.txt}</span> • Total implies <span className="text-slate-200 font-mono font-semibold">{pppTeam.toFixed(2)}</span> pts/poss/team.
+                                                                                </div>
+                                                                                <div>
+                                                                                    Rough scoring-trip rate: <span className="text-slate-200 font-mono font-semibold">{(scoringTripRate * 100).toFixed(0)}%</span>
+                                                                                    <span className="text-slate-600"> (assumes ~{ptsPerScoringTrip.toFixed(2)} pts per scoring trip)</span>.
+                                                                                </div>
+                                                                                <div>
+                                                                                    Read: slow pace means fewer possessions—totals need more efficiency per trip. This looks like <span className={`${lbl.cls} font-semibold`}>{lbl.txt}</span>.
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })()}
                                                                 </>
                                                             );
                                                         })()}
