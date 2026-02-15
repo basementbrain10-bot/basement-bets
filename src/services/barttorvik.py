@@ -130,16 +130,31 @@ class BartTorvikClient:
                 adj_oe = float(row[4])
                 adj_de = float(row[6])
                 
-                # Heuristic for Tempo: Look for value ~60-80 around index 20-25
+                # Tempo
+                # The Torvik JSON layout changes over time. For the 2026 feed we've observed:
+                # - rows are length ~45
+                # - adjusted tempo is frequently at the last index (44)
+                # We'll use that when present; otherwise fall back to a heuristic scan.
                 tempo = 68.0
-                for idx in range(20, 26):
-                    try:
-                        val = float(row[idx])
-                        if 55.0 < val < 85.0:
-                            tempo = val
-                            break
-                    except:
-                        continue
+                try:
+                    if len(row) > 44:
+                        cand = float(row[44])
+                        if 55.0 < cand < 85.0:
+                            tempo = cand
+                except Exception:
+                    pass
+
+                if tempo == 68.0:
+                    # Heuristic fallback: scan for any plausible tempo number in the row.
+                    # (Prefer later indices; earlier ones include ranks/other counts.)
+                    for idx in range(len(row) - 1, -1, -1):
+                        try:
+                            val = float(row[idx])
+                            if 55.0 < val < 85.0:
+                                tempo = val
+                                break
+                        except Exception:
+                            continue
                 
                 ratings[name] = {
                     "off_rating": adj_oe,
@@ -168,10 +183,14 @@ class BartTorvikClient:
                 
                 continuity = None
                 try:
-                    # Index 43 seemed to be 72.7 in sample.
+                    # Continuity index has been unstable across Torvik feed versions.
+                    # Keep it only if it looks like a ratio/percent (0-100), otherwise ignore.
                     if len(row) > 43:
-                        continuity = float(row[43])
-                except: pass
+                        c = float(row[43])
+                        if 0.0 <= c <= 100.0:
+                            continuity = c
+                except Exception:
+                    pass
                 
                 metrics_payload.append({
                     "team_text": name,
