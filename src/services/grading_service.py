@@ -201,10 +201,18 @@ class GradingService:
           WHERE m.close_line IS NULL
             AND e.start_time < CURRENT_TIMESTAMP
             AND e.start_time > (CURRENT_TIMESTAMP - (%(d)s || ' days')::interval)
+            -- Recommended bets only (publication gates / non-placeholder)
             AND COALESCE(m.ev_per_unit, 0) >= %(min_ev)s
             AND m.market_type IN ('SPREAD','TOTAL')
+            AND UPPER(COALESCE(m.market_type,'')) <> 'AUTO'
             AND m.pick IS NOT NULL
             AND TRIM(m.pick) <> ''
+            AND UPPER(TRIM(m.pick)) <> 'NONE'
+            AND m.selection IS NOT NULL
+            AND TRIM(m.selection) <> ''
+            AND m.selection <> '—'
+            -- ignore last-second analyses (shouldn't be considered "published" recs)
+            AND m.analyzed_at <= (e.start_time - INTERVAL '10 minutes')
           ORDER BY e.start_time DESC
           LIMIT %(lim)s
         ), snaps AS (
