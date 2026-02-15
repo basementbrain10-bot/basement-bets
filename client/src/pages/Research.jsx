@@ -1790,7 +1790,20 @@ const Research = ({ onAddBet }) => {
                                                                     {(() => {
                                                                         // Pace context: translate tempo into what it means for totals.
                                                                         const t = Number(tempo);
-                                                                        const totalLine = Number(selectedGame?.total_line ?? selectedGame?.total ?? analysisResult?.market_snapshot?.total ?? null);
+
+                                                                        // Prefer the bet line we're recommending (if this is a TOTAL pick), otherwise fall back to market total.
+                                                                        const topRec = (analysisResult?.recommendations || [])[0] || null;
+                                                                        const recTotal = topRec && String(topRec.bet_type || '').toUpperCase() === 'TOTAL'
+                                                                            ? Number(topRec.market_line ?? topRec.line ?? null)
+                                                                            : null;
+
+                                                                        const totalLine = Number(
+                                                                            (Number.isFinite(recTotal) ? recTotal : null)
+                                                                            ?? selectedGame?.total_line
+                                                                            ?? selectedGame?.total
+                                                                            ?? null
+                                                                        );
+
                                                                         if (!Number.isFinite(t) || !Number.isFinite(totalLine) || t <= 1) return null;
 
                                                                         // Combined points per possession (both teams) implied by the market total.
