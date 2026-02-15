@@ -687,8 +687,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 market_home = market_snapshot.get('spread_home')
                 fair_home = mu_spread_final
 
-                # Convert to the side being bet (home vs away)
-                if r['side'] == event['home_team']:
+                # Convert to the side being bet (home vs away).
+                # `r['side']` is usually 'home'/'away' (not a team name).
+                side_key = str(r.get('side') or '').lower().strip()
+                is_home_side = (side_key == 'home') or (r.get('team') == event.get('home_team')) or (r.get('side') == event.get('home_team'))
+
+                if is_home_side:
                     market_line_side = market_home
                     fair_line_side = fair_home
                 else:
