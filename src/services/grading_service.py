@@ -167,209 +167,86 @@ class GradingService:
     def _compute_clv_for_started_games(self, *, max_rows: int = 250, lookback_days: int = 3):
         """Compute CLV for games that have started.
 
+        This version is DB-driven and side-aware so it actually fills close_line/close_price
+        for recommended bets.
+
         Bounded for serverless execution.
         """
         min_ev = float(os.getenv('GRADING_MIN_EV_PER_UNIT', '0.02'))
-        query = """
-        SELECT m.id, m.event_id, m.market_type, m.pick, m.open_line, m.open_price, e.start_time, e.league
-        FROM model_predictions m
-        JOIN events e ON m.event_id = e.id
-        WHERE m.close_line IS NULL 
-          AND e.start_time < CURRENT_TIMESTAMP
-          AND e.start_time > (CURRENT_TIMESTAMP - (%(d)s || ' days')::interval)
-          AND COALESCE(m.ev_per_unit, 0) >= %(min_ev)s
-        ORDER BY e.start_time DESC
-        LIMIT %(lim)s
+
+        # DB-driven batch update using LATERAL to pick the last snapshot before tip.
+        # This avoids per-row connections and makes CLV usable.
+        upd_q = """
+        WITH candidates AS (
+          SELECT
+            m.id,
+            m.event_id,
+            m.market_type,
+            m.pick,
+            COALESCE(m.open_line, m.bet_line) as open_line,
+            COALESCE(m.open_price, m.bet_price) as open_price,
+            e.start_time,
+            e.home_team,
+            e.away_team,
+            CASE
+              WHEN m.market_type='TOTAL' AND UPPER(m.pick) IN ('OVER','UNDER') THEN UPPER(m.pick)
+              WHEN m.market_type='SPREAD' AND m.pick = e.home_team THEN 'HOME'
+              WHEN m.market_type='SPREAD' AND m.pick = e.away_team THEN 'AWAY'
+              WHEN m.market_type='SPREAD' AND LOWER(m.pick)='home' THEN 'HOME'
+              WHEN m.market_type='SPREAD' AND LOWER(m.pick)='away' THEN 'AWAY'
+              ELSE NULL
+            END as side
+          FROM model_predictions m
+          JOIN events e ON e.id=m.event_id
+          WHERE m.close_line IS NULL
+            AND e.start_time < CURRENT_TIMESTAMP
+            AND e.start_time > (CURRENT_TIMESTAMP - (%(d)s || ' days')::interval)
+            AND COALESCE(m.ev_per_unit, 0) >= %(min_ev)s
+            AND m.market_type IN ('SPREAD','TOTAL')
+            AND m.pick IS NOT NULL
+            AND TRIM(m.pick) <> ''
+          ORDER BY e.start_time DESC
+          LIMIT %(lim)s
+        ), snaps AS (
+          SELECT
+            c.id as mid,
+            s.line_value,
+            s.price,
+            s.captured_at
+          FROM candidates c
+          JOIN LATERAL (
+            SELECT line_value, price, captured_at
+            FROM odds_snapshots
+            WHERE event_id=c.event_id
+              AND market_type=c.market_type
+              AND side=c.side
+              AND captured_at <= c.start_time
+            ORDER BY captured_at DESC
+            LIMIT 1
+          ) s ON TRUE
+          WHERE c.side IS NOT NULL
+            AND s.line_value IS NOT NULL
+        )
+        UPDATE model_predictions m
+        SET
+          close_line = s.line_value,
+          close_price = s.price,
+          close_captured_at = s.captured_at,
+          clv_method = 'odds_snapshot_before_tip',
+          clv_points = CASE
+            WHEN m.market_type='SPREAD' THEN (COALESCE(m.open_line, m.bet_line) - s.line_value)
+            WHEN m.market_type='TOTAL' AND UPPER(m.pick)='OVER' THEN (s.line_value - COALESCE(m.open_line, m.bet_line))
+            WHEN m.market_type='TOTAL' AND UPPER(m.pick)='UNDER' THEN (COALESCE(m.open_line, m.bet_line) - s.line_value)
+            ELSE NULL
+          END
+        FROM snaps s
+        WHERE m.id=s.mid
         """
-        
+
         with get_db_connection() as conn:
-            rows = _exec(conn, query, {"d": int(lookback_days), "lim": int(max_rows), "min_ev": float(min_ev)}).fetchall()
-            
-        updates = 0
-        now = datetime.now() # naive or tz aware? DB timestamps usually naive UTC or similar in this app
-        
-        # print(f"[CLV] Checking {len(rows)} candidates for closing lines...")
-        
-        for r in rows:
-            # Parse start_time
-            st_raw = r['start_time']
-            if not st_raw: continue
-            
-            # Simple check: has game started?
-            # Assume DB stores ISO strings or datetime objects
-            if isinstance(st_raw, str):
-                try:
-                    start_dt = datetime.fromisoformat(st_raw.replace('Z', '+00:00'))
-                    # Strip TZ for naive comparison if needed, or ensure now is TZ aware
-                    if start_dt.tzinfo:
-                        start_dt = start_dt.replace(tzinfo=None) # naive UTC assumption
-                except:
-                    continue
-            else:
-                start_dt = st_raw # datetime object
-            
-            if start_dt > now:
-                continue # Not started yet
-                
-            # Game Started: Find Closing Line
-            # 1. Fetch all snapshots for event
-            raw_snaps = []
-            snap_q = "SELECT * FROM odds_snapshots WHERE event_id = :eid AND captured_at <= :st ORDER BY captured_at DESC LIMIT 100"
-            
-            # We need to format start_dt back to string for query if needed
-            st_str = start_dt.isoformat()
-            
-            with get_db_connection() as conn:
-                raw_snaps = [dict(s) for s in _exec(conn, snap_q, {"eid": r['event_id'], "st": st_str}).fetchall()]
-                
-            if not raw_snaps:
-                # print(f"[CLV] No snapshots found before start for {r['event_id']}")
-                continue
-                
-            # 2. Select 'Best' Closing Snapshot
-            # Determine side from pick/market
-            # Market type: SPREAD, TOTAL
-            # Pick: Team Name (Spread) or OVER/UNDER (Total)
-            
-            # Map pick to side
-            target_side = None
-            if r['market_type'] == 'TOTAL':
-                target_side = r['pick'] # OVER/UNDER
-            elif r['market_type'] == 'SPREAD':
-                # Pick is a Team Name. We need HOME/AWAY.
-                # Use event or logic? 
-                # Ideally selection service handles 'HOME'/'AWAY' if we pass it? 
-                # Or we try to match pick to name?
-                # Let's try both HOME/AWAY and see which matches pick?
-                # Actually, simpler: Select Best SPREAD (priority). 
-                # If that snapshot's home team == pick, side is HOME.
-                pass
-            
-            # Use Selector
-            best_snap = self.odds_selector.select_best_snapshot(raw_snaps, r['market_type'])
-            
-            if best_snap:
-                close_line = best_snap.get('line_value')
-                close_price = best_snap.get('price')
-                
-                if close_line is not None:
-                    # Calculate CLV Points
-                    # Spread: (Close - Open) * Direction
-                    # If I extracted pick direction correctly...
-                    
-                    # Problem: r['pick'] is 'Duke'. best_snap has 'spread_home' (Duke by -5).
-                    # We need to normalize.
-                    
-                    # If best_snap is flat row from DB: market_type, side, line_value...
-                    # Oh, select_best_snapshot returns a SNAPSHOT ROW.
-                    # It has 'side' (HOME/AWAY/OVER/UNDER).
-                    pass
-                    
-                    # Logic:
-                    # If I bet HOME -3. (Open = -3). 
-                    # Closing Snap: HOME -5. (Close = -5).
-                    # CLV = (-5) - (-3) = -2? 
-                    # Wait. -5 is "Better" or "Worse"?
-                    # Favored by 5 is "Better" than Favored by 3? 
-                    # Actually, if I bet -3 (needing to win by >3), and market closes -5 (expects win by 5),
-                    # I got a "good" number. -3 is EASIER to cover than -5.
-                    # So CLV = Open - Close? (-3) - (-5) = +2 points. 
-                    
-                    # Example 2: Bet Under dog +7. Open = +7. 
-                    # Closes +4. (Market lost faith in dog).
-                    # I have +7. Market has +4.
-                    # +7 is Better than +4.
-                    # CLV = Open - Close = 7 - 4 = +3 points.
-                    
-                    # Does this hold? Open - Close works for standard conventions?
-                    # Home -3 vs Home -5: -3 - (-5) = +2. Yes.
-                    # Home +7 vs Home +4: 7 - 4 = +3. Yes.
-                    
-                    # Exception: TOTALS.
-                    # Bet OVER 140. Closes 145.
-                    # 140 is easier than 145. (Good).
-                    # Open - Close = 140 - 145 = -5. (Bad sign?).
-                    # For OVER, Lower is better. So Open < Close is GOOD.
-                    # CLV = Close - Open? 145 - 140 = +5.
-                    # Bet UNDER 140. Closes 135.
-                    # 140 is easier than 135. (Good).
-                    # Open > Close is GOOD.
-                    # CLV = Open - Close? 140 - 135 = +5.
-                    
-                    # Formula:
-                    # SPREAD: Open - Close (since line is relative to MY side... wait, DB lines are usually Home relative or Side relative?)
-                    # model_predictions.bet_line IS relative to the pick in V2!
-                    # So if I picked Duke -5, bet_line is -5.
-                    
-                    # We need the close_line RELATIVE TO THE PICK.
-                    # best_snap has 'line_value' and 'side'.
-                    # If best_snap['side'] == 'HOME' and pick is Home Team -> line matches.
-                    # If best_snap['side'] == 'AWAY' and pick is Home Team -> line is inverted?
-                    # The DB `odds_snapshots` usually stores line for the specific side.
-                    # EXCEPT: Totals usually store the total score.
-                    
-                    # Let's trust `odds_selector` picked a relevant line.
-                    # But `odds_selector` blindly picks "best" purely by priority. It might pick an AWAY line when I bet HOME line?
-                    # Actually `odds_selector.select_best_snapshot` takes a `side` arg!
-                    # I should pass the side I bet on!
-                    
-                    # Resolve side from pick
-                    mapped_side = None
-                    if r['market_type'] == 'TOTAL':
-                        mapped_side = r['pick'] # OVER/UNDER
-                    elif r['market_type'] == 'SPREAD':
-                        q_ev = "SELECT home_team, away_team FROM events WHERE id=:eid"
-                        with get_db_connection() as conn:
-                            evt = _exec(conn, q_ev, {"eid": r['event_id']}).fetchone()
-                            if evt:
-                                if r['pick'] == evt['home_team']: mapped_side = 'HOME'
-                                elif r['pick'] == evt['away_team']: mapped_side = 'AWAY'
-                    
-                    if mapped_side:
-                        # Re-select with strict side
-                        specific_snap = self.odds_selector.select_best_snapshot(raw_snaps, r['market_type'], side=mapped_side)
-                        if specific_snap:
-                            close_line = specific_snap['line_value']
-                            close_price = specific_snap['price']
-                            
-                            # Final CLV calc
-                            if r['market_type'] == 'SPREAD':
-                                clv = r['open_line'] - close_line # Open - Close (since lower magnitude negative is good/bad??)
-                                # Let's re-verify:
-                                # Bet Home -3. Close Home -5.
-                                # -3 - (-5) = +2. Good.
-                                # Bet Home +7. Close Home +4.
-                                # +7 - 4 = +3. Good.
-                                # Bet Home +3. Close Home +5.
-                                # +3 - 5 = -2. Bad.
-                                # Seems correct: Open - Close.
-                                
-                            elif r['market_type'] == 'TOTAL':
-                                if r['pick'] == 'OVER':
-                                    clv = close_line - r['open_line'] # Close - Open
-                                else:
-                                    clv = r['open_line'] - close_line # Open - Close
-                            else:
-                                clv = 0 # ML todo
-                                
-                            # Update DB
-                            u_q = """
-                            UPDATE model_predictions SET 
-                                close_line=:cl, close_price=:cp, clv_points=:cv, close_captured_at=:ts
-                            WHERE id=:id
-                            """
-                            with get_db_connection() as conn:
-                                _exec(conn, u_q, {
-                                    "cl": close_line,
-                                    "cp": close_price,
-                                    "cv": clv,
-                                    "ts": specific_snap['captured_at'],
-                                    "id": r['id']
-                                })
-                                conn.commit()
-                            updates += 1
-                            
-        return updates
+            cur = _exec(conn, upd_q, {"d": int(lookback_days), "lim": int(max_rows), "min_ev": float(min_ev)})
+            conn.commit()
+            return int(cur.rowcount or 0)
 
     def _evaluate_db_predictions(self, *, max_rows: int = 500):
         """Grade outcomes for pending predictions where the game is FINAL.

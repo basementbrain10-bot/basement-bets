@@ -812,20 +812,33 @@ def insert_model_prediction(doc: dict) -> bool:
     else:
         analyzed_at_dt = analyzed_at
     
-    # Use minute-level bucket for dedupe on double-click
-    analyzed_bucket = analyzed_at_dt.replace(second=0, microsecond=0).isoformat()
-    
+    # Use ET *day* bucket for dedupe so we don't store the same recommendation
+    # repeatedly across reruns in the same day.
+    # (We still allow multiple bets per event/day if they differ by side/line/price.)
+    try:
+        import pytz
+        et = pytz.timezone('America/New_York')
+        if analyzed_at_dt.tzinfo is None:
+            analyzed_at_dt = analyzed_at_dt.replace(tzinfo=timezone.utc)
+        analyzed_bucket = analyzed_at_dt.astimezone(et).strftime('%Y-%m-%d')
+    except Exception:
+        analyzed_bucket = analyzed_at_dt.date().isoformat()
+
     # Get user_id (important for multi-user isolation)
     user_id = doc.get('user_id') or ''
     doc['user_id'] = user_id if user_id else None
-    
-    # Compute prediction_key including user_id for isolation
+
+    # Compute prediction_key including line/price to avoid duplicate spam while
+    # still distinguishing materially different bets.
     parts = [
         str(user_id),
         str(event_id),
         str(doc.get('model_version') or 'v1'),
         str(doc.get('market_type') or ''),
         str(doc.get('pick') or ''),
+        str(doc.get('bet_line') if doc.get('bet_line') is not None else ''),
+        str(doc.get('bet_price') if doc.get('bet_price') is not None else ''),
+        str(doc.get('book') or ''),
         analyzed_bucket
     ]
     raw = "|".join(parts)
@@ -855,11 +868,23 @@ def insert_model_prediction(doc: dict) -> bool:
         :close_line, :close_price, :clv_points, :clv_method, :close_captured_at,
         :prediction_key
     ) ON CONFLICT (prediction_key) DO UPDATE SET
+        analyzed_at = EXCLUDED.analyzed_at,
         outputs_json = EXCLUDED.outputs_json,
         narrative_json = EXCLUDED.narrative_json,
         confidence_0_100 = EXCLUDED.confidence_0_100,
         win_prob = EXCLUDED.win_prob,
-        ev_per_unit = EXCLUDED.ev_per_unit
+        ev_per_unit = EXCLUDED.ev_per_unit,
+        selection = EXCLUDED.selection,
+        price = EXCLUDED.price,
+        fair_line = EXCLUDED.fair_line,
+        edge_points = EXCLUDED.edge_points,
+        open_line = EXCLUDED.open_line,
+        open_price = EXCLUDED.open_price,
+        bet_line = EXCLUDED.bet_line,
+        bet_price = EXCLUDED.bet_price,
+        book = EXCLUDED.book,
+        market_type = EXCLUDED.market_type,
+        pick = EXCLUDED.pick
     """
     with get_db_connection() as conn:
         _exec(conn, query, doc)
