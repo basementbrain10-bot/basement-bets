@@ -724,7 +724,95 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                     );
                 })()}
 
-                <div className="scrollbar-refined overflow-x-auto">
+                {/* Mobile: stacked cards (no horizontal scroll) */}
+                <div className="sm:hidden space-y-3 p-3">
+                    {loading ? (
+                        Array(8).fill(0).map((_, i) => (
+                            <div key={i} className="ui-card p-4">
+                                <div className="h-3 w-1/2 bg-slate-800/60 rounded" />
+                                <div className="mt-3 h-3 w-3/4 bg-slate-800/60 rounded" />
+                                <div className="mt-3 h-3 w-2/3 bg-slate-800/60 rounded" />
+                            </div>
+                        ))
+                    ) : (
+                        (sortedBets || []).map((bet) => {
+                            const isTxn = (bet.category === 'Transaction');
+                            const title = isTxn
+                                ? (bet.description || bet.type || 'Transaction')
+                                : `${extractEvent(bet) || (bet.away_team && bet.home_team ? `${bet.away_team} @ ${bet.home_team}` : 'Bet')}`;
+
+                            const sel = String(bet.display_selection || bet.selection || '').trim();
+                            const odds = (bet.odds !== undefined && bet.odds !== null && bet.odds !== '') ? String(bet.odds) : '—';
+                            const wager = (bet.wager !== undefined && bet.wager !== null) ? formatCurrency(bet.wager) : '—';
+                            const pl = (bet.profit !== undefined && bet.profit !== null) ? formatCurrency(bet.profit) : '—';
+
+                            return (
+                                <div
+                                    key={bet.id || bet.txn_id}
+                                    className="ui-card p-4"
+                                    onClick={() => {
+                                        if (!bet.id) return;
+                                        setEditBet({
+                                            id: bet.id,
+                                            provider: bet.provider,
+                                            date: (bet.sort_date || bet.date || '').slice(0, 10),
+                                            sport: bet.sport,
+                                            bet_type: bet.bet_type,
+                                            wager: bet.wager,
+                                            odds: bet.odds,
+                                            profit: bet.profit,
+                                            status: bet.status,
+                                            description: bet.description,
+                                            selection: bet.selection,
+                                        });
+                                        setEditNote('');
+                                        setShowEdit(true);
+                                    }}
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-[11px] text-slate-400 font-semibold">
+                                                {formatDateMDY(bet.sort_date || bet.date)}
+                                                {bet.provider ? ` • ${bet.provider}` : ''}
+                                                {bet.sport ? ` • ${bet.sport}` : ''}
+                                            </div>
+                                            <div className="mt-1 text-sm font-semibold text-slate-100 whitespace-normal break-words">
+                                                {title}
+                                            </div>
+                                            {sel ? (
+                                                <div className="mt-1 text-[12px] text-slate-300 whitespace-normal break-words">
+                                                    {sel}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <div className={`text-sm font-mono font-semibold ${(Number(bet.profit) || 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{pl}</div>
+                                            <div className="text-[11px] text-slate-400 font-mono">wager {wager}</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+                                        <div className="bg-slate-950/20 border border-slate-700/40 rounded-xl p-2">
+                                            <div className="ui-label">Type</div>
+                                            <div className="text-slate-200 font-semibold whitespace-normal break-words">{bet.bet_type || bet.type || '—'}</div>
+                                        </div>
+                                        <div className="bg-slate-950/20 border border-slate-700/40 rounded-xl p-2">
+                                            <div className="ui-label">Odds</div>
+                                            <div className="text-slate-200 font-mono font-semibold">{odds}</div>
+                                        </div>
+                                        <div className="bg-slate-950/20 border border-slate-700/40 rounded-xl p-2">
+                                            <div className="ui-label">Status</div>
+                                            <div className="text-slate-200 font-semibold">{isTxn ? (Number(bet.wager) < 0 ? 'DEP' : 'WDR') : (bet.status || '—')}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+
+                {/* Desktop/tablet: table */}
+                <div className="hidden sm:block scrollbar-refined overflow-x-auto">
                     <table className="w-full text-left text-xs table-fixed border-separate border-spacing-0">
                         <thead className="bg-gray-800 text-gray-400 font-medium uppercase text-xs tracking-wider">
                             {/* Header Labels */}
