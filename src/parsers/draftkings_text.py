@@ -238,6 +238,8 @@ class DraftKingsTextParser:
                         break  # Only capture first team match per line to avoid duplicates
 
             # 2. Bet Type Normalization
+            # Note: DK dumps sometimes contain leg-level lines that are not standalone bets.
+            # We treat them as artifacts and try not to surface them as "Leg" bet_type.
             # PRIORITY: Check for explicit bet type keywords on their own lines FIRST
             explicit_bet_type = None
             explicit_bet_type_keywords = {
@@ -293,9 +295,13 @@ class DraftKingsTextParser:
                     bet_type = "ML"
                 elif any(x in bet_type_upper for x in ["PARLAY", "LEG", "PICK"]):
                     leg_match = re.search(r'(\d+)', bet_type)
-                    if leg_match: bet_type = f"{leg_match.group(1)} leg parlay"
-                    elif "4+" in bet_type_upper or "4 LEG" in bet_type_upper: bet_type = "4 leg parlay"
-                    else: bet_type = "parlay"
+                    if leg_match:
+                        bet_type = f"{leg_match.group(1)} leg parlay"
+                    elif "4+" in bet_type_upper or "4 LEG" in bet_type_upper:
+                        bet_type = "4 leg parlay"
+                    else:
+                        # Avoid returning bare "Leg" (those are usually legs of a parent parlay/SGP)
+                        bet_type = "parlay"
                 elif any(x in bet_type_upper for x in ["OVER / UNDER", "TOTAL OVER/UNDER", "TOTAL (OVER/UNDER)", "TOTAL", "OVER", "UNDER"]):
                     bet_type = "Over/Under"
                 elif "PROP" in bet_type_upper:
