@@ -2279,6 +2279,9 @@ def insert_transaction(txn: dict) -> bool:
     Insert a single transaction with idempotency via (provider, txn_id).
     Maps incoming fields from parsers to database schema.
     Returns True if inserted/updated, False on error.
+
+    Note: `transactions.raw_data` is TEXT in our schema, so we JSON-serialize
+    dict/list payloads for safety.
     """
     query = """
     INSERT INTO transactions (provider, txn_id, date, type, description, 
@@ -2289,8 +2292,22 @@ def insert_transaction(txn: dict) -> bool:
         amount = EXCLUDED.amount,
         balance = EXCLUDED.balance,
         type = EXCLUDED.type,
-        description = EXCLUDED.description
+        description = EXCLUDED.description,
+        raw_data = COALESCE(EXCLUDED.raw_data, transactions.raw_data)
     """
+
+    import json
+
+    def _raw_to_text(x):
+        if x is None:
+            return None
+        if isinstance(x, (dict, list)):
+            try:
+                return json.dumps(x)
+            except Exception:
+                return str(x)
+        return str(x)
+
     # Map incoming fields from parsers to schema
     doc = {
         'provider': txn.get('provider') or txn.get('sportsbook'),
@@ -2301,7 +2318,7 @@ def insert_transaction(txn: dict) -> bool:
         'amount': txn.get('amount'),
         'balance': txn.get('balance'),
         'user_id': txn.get('user_id') or '00000000-0000-0000-0000-000000000000',
-        'raw_data': txn.get('raw_data')
+        'raw_data': _raw_to_text(txn.get('raw_data'))
     }
     
     try:
