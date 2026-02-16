@@ -689,7 +689,9 @@ async def sync_fanduel_token(request: Request):
                 "odds": bet.get('odds', 0), # American
                 "is_live": bet.get('is_live', False),
                 "is_bonus": bet.get('is_bonus', False),
-                "raw_text": bet.get('raw_text')
+                "raw_text": bet.get('raw_text'),
+                "external_id": bet.get('external_id') or bet.get('id') or bet.get('bet_id'),
+                "source": "sync_api",
             }
             
             # Unique Hash for FD: Provider|BetId ? 
@@ -790,7 +792,9 @@ async def sync_draftkings(request: Request, user: dict = Depends(get_current_use
                 "odds": bet.get('odds', 0),
                 "is_live": bet.get('is_live', False),
                 "is_bonus": bet.get('is_bonus', False),
-                "raw_text": bet.get('raw_text')
+                "raw_text": bet.get('raw_text'),
+                "external_id": bet.get('external_id') or bet.get('id') or bet.get('bet_id'),
+                "source": "sync_scrape",
             }
             
             # Generate Hash
@@ -1008,7 +1012,8 @@ async def save_manual_bet(request: Request, user: dict = Depends(get_current_use
             "external_id": external_id,
             "is_live": bet_data.get("is_live", False),
             "is_bonus": bet_data.get("is_bonus", False),
-            "raw_text": bet_data.get("raw_text")
+            "raw_text": bet_data.get("raw_text"),
+            "source": "manual_add",
         }
         
         # Generate Hash for Idempotency

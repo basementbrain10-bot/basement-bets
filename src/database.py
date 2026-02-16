@@ -256,6 +256,10 @@ def init_bets_db():
         # Canonical ET day for reliable reporting
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS date_et DATE;",
         "CREATE INDEX IF NOT EXISTS idx_bets_user_date_et ON bets(user_id, date_et);",
+
+        # Provenance / ingest source tagging
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS source TEXT;",
+        "CREATE INDEX IF NOT EXISTS idx_bets_source ON bets(source);",
     ]
 
     with get_admin_db_connection() as conn:
@@ -1152,11 +1156,11 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
     INSERT INTO bets (
         user_id, account_id, provider, date, sport, bet_type, wager, profit, status, 
         description, selection, odds, closing_odds, is_live, is_bonus, raw_text, event_text,
-        external_id, validation_errors
+        external_id, validation_errors, source
     ) VALUES (
         :user_id, :account_id, :provider, :date, :sport, :bet_type, :wager, :profit, :status, 
         :description, :selection, :odds, :closing_odds, :is_live, :is_bonus, :raw_text, :event_text,
-        :external_id, :validation_errors
+        :external_id, :validation_errors, :source
     )
     ON CONFLICT (user_id, provider, description, date, wager) DO UPDATE SET
         profit = EXCLUDED.profit,
@@ -1167,7 +1171,8 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
         raw_text = EXCLUDED.raw_text,
         event_text = COALESCE(EXCLUDED.event_text, bets.event_text),
         external_id = COALESCE(EXCLUDED.external_id, bets.external_id),
-        validation_errors = EXCLUDED.validation_errors
+        validation_errors = EXCLUDED.validation_errors,
+        source = COALESCE(EXCLUDED.source, bets.source)
     RETURNING id;
     """
     
@@ -1233,6 +1238,11 @@ def insert_bet_v2(doc: dict, legs: list = None) -> int:
     # Ensure validation_errors is present in doc, default to None
     if 'validation_errors' not in doc:
         doc['validation_errors'] = None
+
+    # Provenance
+    if 'source' not in doc:
+        # Best-effort default: if sportsbook-native id exists, it's from a sportsbook-sourced ingest.
+        doc['source'] = 'sportsbook_id' if doc.get('external_id') else 'unknown'
 
     bet_id = None
     with get_db_connection() as conn:
