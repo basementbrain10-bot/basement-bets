@@ -270,19 +270,37 @@ def init_events_db():
         league TEXT,
         home_team TEXT,
         away_team TEXT,
-        start_time TIMESTAMP,
+        -- Store in UTC with timezone so ET conversions are reliable.
+        start_time TIMESTAMPTZ,
         status TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_events_league ON events(league);
     CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_time);
     """
+
     drops = ["DROP TABLE IF EXISTS events CASCADE;"] if _force_reset() else []
+
+    # Non-destructive migrations
+    migrations = [
+        # Convert legacy TIMESTAMP (assumed UTC) -> TIMESTAMPTZ
+        "ALTER TABLE events ALTER COLUMN start_time TYPE TIMESTAMPTZ USING start_time AT TIME ZONE 'UTC';",
+        "ALTER TABLE events ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';",
+        "ALTER TABLE events ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';",
+    ]
+
     with get_admin_db_connection() as conn:
         with conn.cursor() as cur:
-            for d in drops: cur.execute(d)
+            for d in drops:
+                cur.execute(d)
             cur.execute(schema)
+            if not drops:
+                for m in migrations:
+                    try:
+                        cur.execute(m)
+                    except Exception as e:
+                        print(f"[DB] Migration warn (events): {e}")
         conn.commit()
     print("Events DB initialized.")
 
@@ -625,6 +643,22 @@ def init_enrichment_db():
 # They use get_db_connection() (pooled safe) for runtime checks.
 
 def insert_event(event_data: dict):
+    # Normalize start_time to tz-aware UTC for consistent ET reporting.
+    try:
+        st = event_data.get('start_time')
+        if isinstance(st, str):
+            # Accept both Z and offset formats
+            st_dt = datetime.fromisoformat(st.replace('Z', '+00:00'))
+            if st_dt.tzinfo is None:
+                st_dt = st_dt.replace(tzinfo=timezone.utc)
+            event_data['start_time'] = st_dt.astimezone(timezone.utc)
+        elif isinstance(st, datetime):
+            if st.tzinfo is None:
+                st = st.replace(tzinfo=timezone.utc)
+            event_data['start_time'] = st.astimezone(timezone.utc)
+    except Exception:
+        pass
+
     query = """
     INSERT INTO events (id, sport_key, league, home_team, away_team, start_time, status)
     VALUES (:id, :sport_key, :league, :home_team, :away_team, :start_time, :status)
