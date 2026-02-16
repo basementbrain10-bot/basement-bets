@@ -322,20 +322,34 @@ async def get_latest_balance_snapshots(user: dict = Depends(get_current_user)):
 async def add_balance_snapshot(request: Request):
     """Manually add a balance snapshot (Basement key auth only).
 
-    Payload: { provider: 'FanDuel'|'DraftKings'|..., balance: number, captured_at?: iso, note?: str, source?: str }
+    Payload: { provider: 'FanDuel'|'DraftKings'|..., account_id: 'Main'|'User2' (aka Primary/Secondary), balance: number, captured_at?: iso, note?: str, source?: str }
     """
     try:
         payload = await request.json()
         provider = (payload or {}).get('provider')
         balance = (payload or {}).get('balance')
+        acc_raw = (payload or {}).get('account_id')
+
         if provider is None or balance is None:
             raise HTTPException(status_code=400, detail='provider and balance are required')
+
+        # Require explicit account_id (Primary/Secondary) so snapshots stay clean.
+        if acc_raw is None or str(acc_raw).strip() == '':
+            raise HTTPException(status_code=400, detail='account_id is required (Primary/Secondary)')
+
+        acc = str(acc_raw).strip()
+        # Allow friendly labels
+        if acc.lower() == 'primary':
+            acc = 'Main'
+        elif acc.lower() == 'secondary':
+            acc = 'User2'
 
         from src.database import insert_balance_snapshot
         from src.sync_jobs import DEFAULT_USER_ID
 
         ok = insert_balance_snapshot({
             'provider': provider,
+            'account_id': acc,
             'balance': float(balance),
             'captured_at': payload.get('captured_at'),
             'source': payload.get('source') or 'manual',

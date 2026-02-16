@@ -1938,11 +1938,12 @@ def fetch_latest_balance_snapshots(user_id: str | None = None):
 def insert_balance_snapshot(snapshot: dict) -> bool:
     """Insert a balance snapshot row."""
     q = """
-    INSERT INTO balance_snapshots (provider, balance, captured_at, source, user_id, note, raw_data)
-    VALUES (:provider, :balance, COALESCE(:captured_at, NOW()), COALESCE(:source, 'manual'), :user_id, :note, :raw_data)
+    INSERT INTO balance_snapshots (provider, account_id, balance, captured_at, source, user_id, note, raw_data)
+    VALUES (:provider, :account_id, :balance, COALESCE(:captured_at, NOW()), COALESCE(:source, 'manual'), :user_id, :note, :raw_data)
     """
     doc = {
         "provider": snapshot.get("provider"),
+        "account_id": snapshot.get("account_id"),
         "balance": snapshot.get("balance"),
         "captured_at": snapshot.get("captured_at"),
         "source": snapshot.get("source") or 'manual',
@@ -1952,6 +1953,11 @@ def insert_balance_snapshot(snapshot: dict) -> bool:
     }
     try:
         with get_db_connection() as conn:
+            # Defensive migration for older DBs
+            try:
+                _exec(conn, "ALTER TABLE balance_snapshots ADD COLUMN IF NOT EXISTS account_id TEXT;")
+            except Exception:
+                pass
             _exec(conn, q, doc)
             conn.commit()
         return True
