@@ -69,7 +69,16 @@ class FanDuelParser:
     def _parse_single_bet(self, block):
         # Join for regex searching
         full_text = "\n".join(block)
-        
+
+        # Guardrail: FanDuel sometimes exports receipt-style cards like "Sports: Bet Placed"
+        # that do not include settlement/return info. Do not ingest these as bets.
+        if re.search(r"\bSports:\s*Bet\s*Placed\b", full_text, re.IGNORECASE):
+            return None
+
+        # Extract BET ID if present (strong dedupe key)
+        bet_id_match = re.search(r"BET ID:\s*(O/\S+)", full_text, re.IGNORECASE)
+        external_id = bet_id_match.group(1).strip() if bet_id_match else None
+
         # 1. Date
         # Line: PLACED: 1/11/2026 4:28PM ET
         date_match = re.search(r'PLACED:\s+(\d{1,2}/\d{1,2}/\d{4}.*?ET)', full_text)
@@ -238,6 +247,7 @@ class FanDuelParser:
 
         return {
             "provider": "FanDuel",
+            "external_id": external_id,
             "date": formatted_date,
             "sport": sport,
             "bet_type": bet_type,

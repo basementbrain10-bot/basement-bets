@@ -268,9 +268,9 @@ We keep financial ledger data separate under /api/financials/*.
 """
     user_id = user.get("sub")
     engine = get_analytics_engine(user_id=user_id)
-    # Settled-only: exclude pending/open bets
+    # Settled-only for ROI/performance: exclude pending/open + void placeholders
     bets = engine.get_all_bets(user_id=user_id)
-    return [b for b in bets if (b.get('status') or '').upper() not in ('PENDING', 'OPEN')]
+    return [b for b in bets if (b.get('status') or '').upper() not in ('PENDING', 'OPEN', 'VOID')]
 
 @app.get("/api/bets/open")
 async def get_open_bets(user: dict = Depends(get_current_user)):
@@ -386,7 +386,7 @@ async def get_dashboard(user: dict = Depends(get_current_user)):
 
     # All computations share the cached engine (60s TTL), no extra DB hits
     bets_all = engine.get_all_bets(user_id=user_id)
-    settled = [b for b in bets_all if (b.get('status') or '').upper() not in ('PENDING', 'OPEN')]
+    settled = [b for b in bets_all if (b.get('status') or '').upper() not in ('PENDING', 'OPEN', 'VOID')]
 
     return {
         "stats": engine.get_summary(user_id=user_id),
@@ -448,7 +448,7 @@ async def get_settled_bet_ledger(user: dict = Depends(get_current_user)):
     FROM bets b
     JOIN latest l ON l.provider = b.provider AND COALESCE(l.account_id,'') = COALESCE(b.account_id,'')
     WHERE b.user_id = %(uid)s
-      AND (b.status IS NOT NULL AND UPPER(b.status) NOT IN ('PENDING','OPEN'))
+      AND (b.status IS NOT NULL AND UPPER(b.status) NOT IN ('PENDING','OPEN','VOID'))
       AND b.created_at > l.captured_at
     ORDER BY b.created_at DESC
     """
@@ -476,7 +476,7 @@ async def get_settled_bet_ledger(user: dict = Depends(get_current_user)):
 
     # All computations share the cached engine (60s TTL), no extra DB hits
     bets_all = engine.get_all_bets(user_id=user_id)
-    settled = [b for b in bets_all if (b.get('status') or '').upper() not in ('PENDING', 'OPEN')]
+    settled = [b for b in bets_all if (b.get('status') or '').upper() not in ('PENDING', 'OPEN', 'VOID')]
 
     return {
         "stats": engine.get_summary(user_id=user_id),

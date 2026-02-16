@@ -123,19 +123,36 @@ class AnalyticsEngine:
         if user_id and user_id != self.user_id:
              bets = [b for b in self.bets if b.get('user_id') == user_id]
              
-        total_wagered = sum(b['wager'] for b in bets)
-        net_profit = sum(b['profit'] for b in bets)
+        def is_perf_bet(b: dict) -> bool:
+            st = (b.get('status') or '').strip().upper()
+            # Performance metrics should exclude placeholders/voids.
+            return st not in ('PENDING', 'OPEN', 'VOID')
+
+        perf = [b for b in bets if is_perf_bet(b)]
+        voids = [b for b in bets if (b.get('status') or '').strip().upper() == 'VOID']
+
+        total_wagered = sum(float(b.get('wager') or 0.0) for b in perf)
+        net_profit = sum(float(b.get('profit') or 0.0) for b in perf)
         roi = (net_profit / total_wagered * 100) if total_wagered > 0 else 0.0
-        wins = sum(1 for b in bets if b['status'].strip().upper() in ('WON', 'WIN') or (b['status'].strip().upper() == 'CASHED OUT' and b['profit'] > 0))
-        total = len(bets)
+
+        wins = sum(
+            1 for b in perf
+            if (str(b.get('status') or '').strip().upper() in ('WON', 'WIN'))
+            or ((str(b.get('status') or '').strip().upper() == 'CASHED OUT') and float(b.get('profit') or 0.0) > 0)
+        )
+        total = len(perf)
         win_rate = (wins / total * 100) if total > 0 else 0.0
-        
+
         return {
+            # Core performance metrics (VOID excluded)
             "total_bets": total,
             "total_wagered": total_wagered,
             "net_profit": net_profit,
             "roi": roi,
-            "win_rate": win_rate
+            "win_rate": win_rate,
+            # Additional transparency
+            "void_bets": len(voids),
+            "void_wagered": sum(float(b.get('wager') or 0.0) for b in voids),
         }
 
     def get_breakdown(self, field: str, user_id=None):
@@ -152,10 +169,14 @@ class AnalyticsEngine:
         
         for b in bets:
             key = b.get(field, 'Unknown')
-            groups[key]['wager'] += b['wager']
-            groups[key]['profit'] += b['profit']
+            st = (b.get('status') or '').strip().upper()
+            if st in ('PENDING', 'OPEN', 'VOID'):
+                continue
+
+            groups[key]['wager'] += float(b.get('wager') or 0.0)
+            groups[key]['profit'] += float(b.get('profit') or 0.0)
             groups[key]['total'] += 1
-            if b['status'].strip().upper() in ('WON', 'WIN') or (b['status'].strip().upper() == 'CASHED OUT' and b['profit'] > 0):
+            if st in ('WON', 'WIN') or (st == 'CASHED OUT' and float(b.get('profit') or 0.0) > 0):
                 groups[key]['wins'] += 1
         results = []
         for key, vals in groups.items():
@@ -437,6 +458,9 @@ class AnalyticsEngine:
 
             if status in ('PENDING', 'OPEN'):
                 daily_profit[day_key] -= wager
+            elif status == 'VOID':
+                # do not impact equity curve
+                continue
             else:
                 daily_profit[day_key] += profit
 
@@ -494,7 +518,7 @@ class AnalyticsEngine:
 
         for b in bets:
             status = (b.get('status') or 'PENDING').upper()
-            if status in ('PENDING', 'OPEN'):
+            if status in ('PENDING', 'OPEN', 'VOID'):
                 continue
 
             day_key = self._to_day_key(b.get('date', ''))
