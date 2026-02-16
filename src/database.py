@@ -1809,12 +1809,12 @@ def fetch_all_bets(user_id=None, limit=None):
     """
     if user_id:
         query = """
-        SELECT id, user_id, account_id, provider, date, sport, bet_type,
-               wager, profit, status, description, selection, odds, 
+        SELECT id, user_id, account_id, provider, date, date_et, sport, bet_type,
+               wager, profit, status, status_raw, description, selection, odds, 
                closing_odds, is_live, is_bonus, event_text, created_at
         FROM bets
         WHERE user_id = %s
-        ORDER BY date DESC
+        ORDER BY COALESCE(date_et::text, date) DESC
         """
         # include raw_text so the UI can infer the matchup/event for display
         params = [user_id]
@@ -1831,11 +1831,11 @@ def fetch_all_bets(user_id=None, limit=None):
             return [dict(r) for r in cursor.fetchall()]
     else:
         query = """
-        SELECT id, user_id, account_id, provider, date, sport, bet_type,
-               wager, profit, status, description, selection, odds,
+        SELECT id, user_id, account_id, provider, date, date_et, sport, bet_type,
+               wager, profit, status, status_raw, description, selection, odds,
                closing_odds, is_live, is_bonus, event_text, created_at
         FROM bets
-        ORDER BY date DESC
+        ORDER BY COALESCE(date_et::text, date) DESC
         """
         if limit:
             query += f" LIMIT {int(limit)}"

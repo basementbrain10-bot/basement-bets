@@ -9,20 +9,34 @@ class AnalyticsEngine:
         self._add_sortable_dates()
     
     def _add_sortable_dates(self):
-        """Adds ISO-formatted sort_date field for proper date sorting."""
-        from dateutil.parser import parse as parse_date
-        
+        """Adds ISO-formatted sort_date field for proper date sorting.
+
+        Avoid hard dependency on python-dateutil (some runtimes/venvs omit it).
+        """
+        try:
+            from dateutil.parser import parse as parse_date  # type: ignore
+        except Exception:
+            parse_date = None
+
         for b in self.bets:
             raw_date = b.get('date', '')
             try:
-                # Parse the date string
-                dt = parse_date(raw_date, fuzzy=True)
-                # Store ISO format for sorting
-                b['sort_date'] = dt.strftime('%Y-%m-%d %H:%M:%S')
-                # Display format for UI (DD/MM/YYYY)
-                b['display_date'] = dt.strftime('%d/%m/%Y')
+                dt = None
+                if parse_date is not None:
+                    dt = parse_date(raw_date, fuzzy=True)
+                else:
+                    # Best-effort ISO date/datetime parsing
+                    s = str(raw_date or '').strip()
+                    s0 = s.split('T')[0].split(' ')[0] if s else ''
+                    if len(s0) == 10:
+                        dt = datetime.strptime(s0, '%Y-%m-%d')
+                if dt is not None:
+                    b['sort_date'] = dt.strftime('%Y-%m-%d %H:%M:%S')
+                    b['display_date'] = dt.strftime('%d/%m/%Y')
+                else:
+                    b['sort_date'] = raw_date
+                    b['display_date'] = raw_date
             except Exception:
-                # Fallback: use raw date as-is
                 b['sort_date'] = raw_date
                 b['display_date'] = raw_date
 
@@ -773,62 +787,67 @@ class AnalyticsEngine:
 
         filtered_bets = []
         now = datetime.now()
-        
-        # 1. Calculate Anchor Date (Latest Bet) to support historical data viewing
-        # This ensures 'Last 7 Days' shows the last 7 days of *activity*, not calendar time.
-        valid_dates = []
-        parsed_bets = []
-        
-        for b in bets:
-            date_str = b.get('date', '')
-            if not date_str or date_str == 'Unknown': 
-                parsed_bets.append((b, None))
-                continue
-            
+
+        def _bet_day(b):
+            # Prefer canonical date_et (DATE) when present
             try:
-                # Robust parsing
+                de = b.get('date_et')
+                if de:
+                    # psycopg2 returns date objects; leave as datetime for comparisons
+                    return datetime(de.year, de.month, de.day)
+            except Exception:
+                pass
+
+            date_str = b.get('date', '')
+            if not date_str or date_str == 'Unknown':
+                return None
+            try:
                 d_str = date_str.split(' ')[0] if ' ' in date_str else date_str
-                # Try multiple formats if needed, but ISO expected
                 if '/' in d_str:
-                     bet_date = datetime.strptime(d_str, "%m/%d/%Y")
-                else:
-                     bet_date = datetime.strptime(d_str, "%Y-%m-%d")
-                
-                valid_dates.append(bet_date)
-                parsed_bets.append((b, bet_date))
-            except:
-                parsed_bets.append((b, None))
+                    return datetime.strptime(d_str, "%m/%d/%Y")
+                return datetime.strptime(d_str, "%Y-%m-%d")
+            except Exception:
+                return None
 
-        # Anchor is always "now" so "Last 7/30 days" means true calendar time.
-        # (The prior "historical mode" behavior caused confusing windows where old bets
-        # could appear inside "last 30d" if there was a long gap in activity.)
-        anchor = now
+        # Filter to performance-relevant bets only
+        perf_bets = []
+        for b in bets:
+            st = str(b.get('status') or '').strip().upper()
+            if st in ('PENDING', 'OPEN', 'VOID'):
+                continue
+            perf_bets.append(b)
 
-        for b, bet_date in parsed_bets:
-            if not bet_date: continue
-            
+        anchor_day = now.date()
+        cutoff_day = (anchor_day - timedelta(days=int(days))) if days else None
+
+        for b in perf_bets:
+            bet_date = _bet_day(b)
+            if not bet_date:
+                continue
+            bet_day = bet_date.date()
+
             if year:
-                if bet_date.year == year:
+                if bet_day.year == int(year):
                     filtered_bets.append(b)
             elif days:
-                cutoff = anchor - timedelta(days=days)
-                # Include the anchor day fully? anchor is timestamp. 
-                # If anchor is 2024-01-21, cutoff 7d is 2024-01-14. 
-                # bet_date >= 2024-01-14 covers it.
-                if bet_date >= cutoff:
+                # Date-based window (inclusive) so "Last 30d" aligns with ET-day reporting.
+                if bet_day >= cutoff_day:
                     filtered_bets.append(b)
             else:
-                # All time
                 filtered_bets.append(b)
                 
         # Calculate Stats for filtered bets
         # Calculate Stats for filtered bets
-        total_wagered = sum(b['wager'] for b in filtered_bets)
-        net_profit = sum(b['profit'] for b in filtered_bets)
+        total_wagered = sum(float(b.get('wager') or 0.0) for b in filtered_bets)
+        net_profit = sum(float(b.get('profit') or 0.0) for b in filtered_bets)
         roi = (net_profit / total_wagered * 100) if total_wagered > 0 else 0.0
-        
-        wins = sum(1 for b in filtered_bets if b['status'].strip().upper() in ('WON', 'WIN') or (b['status'].strip().upper() == 'CASHED OUT' and b['profit'] > 0))
-        losses = sum(1 for b in filtered_bets if b['status'].strip().upper() in ('LOST', 'LOSE'))
+
+        wins = sum(
+            1 for b in filtered_bets
+            if (str(b.get('status') or '').strip().upper() in ('WON', 'WIN'))
+            or ((str(b.get('status') or '').strip().upper() == 'CASHED OUT') and float(b.get('profit') or 0.0) > 0)
+        )
+        losses = sum(1 for b in filtered_bets if str(b.get('status') or '').strip().upper() in ('LOST', 'LOSE'))
         total = len(filtered_bets)
         actual_win_rate = (wins / total * 100) if total > 0 else 0.0
         
