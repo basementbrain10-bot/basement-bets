@@ -49,6 +49,7 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
         WHERE league = 'NCAAM'
           AND start_time >= NOW() - INTERVAL :lookback
           AND start_time <= NOW() + INTERVAL :window
+          AND DATE(start_time AT TIME ZONE 'America/New_York') = :today_et
         ORDER BY start_time ASC
     """
 
@@ -56,7 +57,11 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
         games = _exec(
             conn,
             query,
-            {"lookback": f"{int(lookback_hours)} hours", "window": f"{int(window_hours)} hours"},
+            {
+                "lookback": f"{int(lookback_hours)} hours",
+                "window": f"{int(window_hours)} hours",
+                "today_et": today_str,
+            },
         ).fetchall()
 
     if not games:
