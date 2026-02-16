@@ -249,6 +249,13 @@ def init_bets_db():
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;",
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS updated_by TEXT;",
         "ALTER TABLE bets ADD COLUMN IF NOT EXISTS update_note TEXT;",
+
+        # Lossless normalization fields (keep raw provider data)
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS status_raw TEXT;",
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS date_raw TEXT;",
+        # Canonical ET day for reliable reporting
+        "ALTER TABLE bets ADD COLUMN IF NOT EXISTS date_et DATE;",
+        "CREATE INDEX IF NOT EXISTS idx_bets_user_date_et ON bets(user_id, date_et);",
     ]
 
     with get_admin_db_connection() as conn:
