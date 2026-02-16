@@ -233,11 +233,21 @@ function App() {
 
                 const ps = d.period_stats || {};
                 const defaultPeriod = { net_profit: 0, roi: 0, wins: 0, losses: 0, total_bets: 0, actual_win_rate: 0, implied_win_rate: 0 };
+
+                // Source of truth: sportsbook financials (snapshots + cashflows). For all-time P/L,
+                // prefer financials.net_bet_profit over summing bet rows.
+                const allPeriod = ps['all'] || defaultPeriod;
+                const finAll = d?.financials?.net_bet_profit;
+                const allMerged = {
+                    ...allPeriod,
+                    net_profit: (finAll !== undefined && finAll !== null) ? Number(finAll) : allPeriod.net_profit,
+                };
+
                 setPeriodStats({
                     '7d': ps['7d'] || defaultPeriod,
                     '30d': ps['30d'] || defaultPeriod,
                     'ytd': ps['ytd'] || defaultPeriod,
-                    'all': ps['all'] || defaultPeriod
+                    'all': allMerged
                 });
 
             } catch (err) {
