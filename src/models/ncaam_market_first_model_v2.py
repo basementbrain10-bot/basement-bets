@@ -1188,6 +1188,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         """Compute win_prob bounds by sampling uncertainty in mu.
 
         Returns calibrated p10/p90 bounds for P(bet wins).
+        NOTE: `mu` and `line` are passed in HOME perspective for SPREAD, and absolute for TOTAL.
         """
         import random
 
@@ -1199,39 +1200,32 @@ class NCAAMMarketFirstModelV2(BaseModel):
         mkt = str(market).upper()
         side = str(side).lower().strip()
 
+        def _push_prob(line_v: float) -> float:
+            try:
+                if float(line_v) % 1 != 0:
+                    return 0.0
+                key_numbers = {2, 3, 4, 5, 6, 7, 10, 14}
+                return 0.05 if abs(float(line_v)) in key_numbers else 0.03
+            except Exception:
+                return 0.0
+
         for _ in range(int(n_sims)):
             mu_true = float(mu) + random.gauss(0.0, float(tau))
 
             if mkt == 'SPREAD':
-                # line is HOME spread
-                prob_home_raw = 1.0 - self._normal_cdf(-float(line), float(mu_true), float(sigma))
-                push_prob = 0.0
-                try:
-                    # replicate push approx from _generate_recommendations
-                    if float(line) % 1 == 0:
-                        key_numbers = {2, 3, 4, 5, 6, 7, 10, 14}
-                        push_prob = 0.05 if abs(float(line)) in key_numbers else 0.03
-                except Exception:
-                    push_prob = 0.0
-
-                prob_home = prob_home_raw - (push_prob / 2)
-                prob_away = (1.0 - prob_home_raw) - (push_prob / 2)
-                p = prob_home if side == 'home' else prob_away
+                # Home cover probability using same convention as main path
+                prob_home_raw = 1.0 - self._normal_cdf(-float(line), -float(mu_true), float(sigma))
+                push_prob = _push_prob(float(line))
+                p_home = prob_home_raw - (push_prob / 2)
+                p_away = (1.0 - prob_home_raw) - (push_prob / 2)
+                p = p_home if side == 'home' else p_away
 
             else:
-                # TOTAL: line is total points
                 prob_over_raw = 1.0 - self._normal_cdf(float(line), float(mu_true), float(sigma))
-                push_prob = 0.0
-                try:
-                    if float(line) % 1 == 0:
-                        key_numbers = {2, 3, 4, 5, 6, 7, 10, 14}
-                        push_prob = 0.05 if abs(float(line)) in key_numbers else 0.03
-                except Exception:
-                    push_prob = 0.0
-
-                prob_over = prob_over_raw - (push_prob / 2)
-                prob_under = (1.0 - prob_over_raw) - (push_prob / 2)
-                p = prob_over if side == 'over' else prob_under
+                push_prob = _push_prob(float(line))
+                p_over = prob_over_raw - (push_prob / 2)
+                p_under = (1.0 - prob_over_raw) - (push_prob / 2)
+                p = p_over if side == 'over' else p_under
 
             probs.append(self._calibrate_win_prob(p))
 
@@ -1281,6 +1275,18 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 return 0.05
             return 0.03
 
+        def _spread_cover_prob_home(mu_home: float, sigma: float, line_home: float) -> float:
+            """P(Home covers) given home-perspective mu and home spread line."""
+            prob_home_raw = 1.0 - self._normal_cdf(-float(line_home), -float(mu_home), float(sigma))
+            push_prob = get_push_prob(float(line_home), float(sigma))
+            return prob_home_raw - (push_prob / 2)
+
+        def _total_over_prob(mu_total: float, sigma: float, total_line: float) -> float:
+            prob_over_raw = 1.0 - self._normal_cdf(float(total_line), float(mu_total), float(sigma))
+            push_prob = get_push_prob(float(total_line), float(sigma))
+            return prob_over_raw - (push_prob / 2)
+
+
         # --- Spread ---
         line_s = snap.get("spread_home")
         price_home = snap.get("spread_price_home", -110)
@@ -1289,16 +1295,16 @@ class NCAAMMarketFirstModelV2(BaseModel):
         book_consensus = snap.get("book_spread", "Consensus")
 
         if line_s is not None:
-            prob_home_raw = 1.0 - self._normal_cdf(-line_s, -mu_s, sig_s)
-            push_prob = get_push_prob(line_s, sig_s)
-            prob_home = prob_home_raw - (push_prob / 2)
-
-            # Calibrate win probability using last-2w mapping (when present)
+            prob_home = _spread_cover_prob_home(mu_s, sig_s, line_s)
             prob_home_cal = self._calibrate_win_prob(prob_home)
 
             ev_home = self._calculate_ev(prob_home_cal, price_home)
             kelly_home = self._calculate_kelly(prob_home_cal, price_home)
 
+            # Away cover prob = 1 - P(home covers) - push (approx already baked into helper via -push/2)
+            # For symmetry we compute raw home cover without calibration then derive away.
+            prob_home_raw = 1.0 - self._normal_cdf(-float(line_s), -float(mu_s), float(sig_s))
+            push_prob = get_push_prob(float(line_s), float(sig_s))
             prob_away = (1.0 - prob_home_raw) - (push_prob / 2)
             prob_away_cal = self._calibrate_win_prob(prob_away)
 
