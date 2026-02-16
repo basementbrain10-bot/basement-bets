@@ -808,6 +808,64 @@ class NCAAMMarketFirstModelV2(BaseModel):
             # never block analyze() on persistence formatting
             pass
 
+        # -------------------------
+        # Persistence semantics (critical)
+        # - For SPREAD: store all lines in *pick-side perspective* (same sign as bet_line)
+        #   so they are comparable to close_line (side-specific snapshot).
+        # - For TOTAL: store totals in absolute points (e.g., 145.5), not deltas.
+        # -------------------------
+        persisted_market_type = best_rec['market'] if best_rec else "AUTO"
+
+        # Market line in HOME perspective
+        mkt_spread_home = market_snapshot.get('spread_home')
+        mkt_total = market_snapshot.get('total')
+
+        # Fair line in HOME perspective
+        fair_spread_home = mu_spread_final
+        fair_total = mu_total_final
+
+        # Torvik in HOME perspective
+        torvik_spread_home = mu_torvik_spread
+        torvik_total = mu_torvik_total
+
+        # Convert to pick-side perspective
+        mu_market_persist = None
+        mu_torvik_persist = None
+        mu_final_persist = None
+        sigma_persist = None
+        fair_line_persist = None
+        edge_points_persist = None
+
+        try:
+            if persisted_market_type == 'SPREAD':
+                sigma_persist = sigma_spread
+                side = str(best_rec.get('side') or '').lower().strip() if best_rec else ''
+                if side == 'home':
+                    mu_market_persist = float(mkt_spread_home) if mkt_spread_home is not None else None
+                    mu_torvik_persist = float(torvik_spread_home) if torvik_spread_home is not None else None
+                    mu_final_persist = float(fair_spread_home) if fair_spread_home is not None else None
+                else:
+                    mu_market_persist = (-float(mkt_spread_home)) if mkt_spread_home is not None else None
+                    mu_torvik_persist = (-float(torvik_spread_home)) if torvik_spread_home is not None else None
+                    mu_final_persist = (-float(fair_spread_home)) if fair_spread_home is not None else None
+
+                fair_line_persist = mu_final_persist
+                # edge in points relative to pick-side market
+                if mu_market_persist is not None and mu_final_persist is not None:
+                    edge_points_persist = round(float(mu_market_persist) - float(mu_final_persist), 2)
+
+            elif persisted_market_type == 'TOTAL':
+                sigma_persist = sigma_total
+                mu_market_persist = float(mkt_total) if mkt_total is not None else None
+                mu_torvik_persist = float(torvik_total) if torvik_total is not None else None
+                mu_final_persist = float(fair_total) if fair_total is not None else None
+                fair_line_persist = mu_final_persist
+                if mu_market_persist is not None and mu_final_persist is not None:
+                    edge_points_persist = round(float(mu_final_persist) - float(mu_market_persist), 2)
+
+        except Exception:
+            pass
+
         res = {
             "id": None, 
             "event_id": event_id,
@@ -815,15 +873,15 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "away_team": event['away_team'],
             "analyzed_at": datetime.now().isoformat(),
             "model_version": self.VERSION,
-            "market_type": best_rec['market'] if best_rec else "AUTO",
+            "market_type": persisted_market_type,
             "pick": persisted_pick,
             "bet_line": persisted_line,
             "bet_price": best_rec['price'] if best_rec else None,
             "book": best_rec['book'] if best_rec else None,
-            "mu_market": mu_market_spread,
-            "mu_torvik": mu_torvik_spread,
-            "mu_final": mu_spread_final,
-            "sigma": sigma_spread,
+            "mu_market": mu_market_persist,
+            "mu_torvik": mu_torvik_persist,
+            "mu_final": mu_final_persist,
+            "sigma": sigma_persist,
             "win_prob": best_rec['win_prob'] if best_rec else 0.5,
             "ev_per_unit": best_rec['ev'] if best_rec else 0.0,
             "kelly": best_rec['kelly'] if best_rec else 0.0,
@@ -842,8 +900,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "risks": narrative.get('risks') or [],
             "selection": persisted_selection,
             "price": best_rec['price'] if best_rec else None,
-            "basement_line": mu_spread_final if (best_rec and best_rec['market'] == 'SPREAD') else mu_total_final,
-            "edge_points": abs((best_rec['line'] if best_rec else 0) - (mu_spread_final if (best_rec and best_rec['market'] == 'SPREAD') else mu_total_final)), 
+            "fair_line": fair_line_persist,
+            "edge_points": edge_points_persist,
             "open_line": best_rec['line'] if best_rec else None,
             "open_price": best_rec['price'] if best_rec else None,
             "clv_method": "odds_selector_v1",
