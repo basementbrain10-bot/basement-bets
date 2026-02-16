@@ -24,6 +24,14 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
 
     // Core State
     const [sportsbook, setSportsbook] = useState('DK');
+
+    // Entry type: bet slip vs manual transaction line
+    const [entryType, setEntryType] = useState('BET'); // BET | TXN
+    const [txnType, setTxnType] = useState('Deposit'); // Deposit | Withdrawal
+    const [txnAmount, setTxnAmount] = useState('');
+    const [txnDate, setTxnDate] = useState('');
+    const [txnDesc, setTxnDesc] = useState('');
+
     const [rawText, setRawText] = useState('');
     const [parsedData, setParsedData] = useState(null);
     const [error, setError] = useState(null);
@@ -199,21 +207,47 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
     };
 
     const handleSave = async () => {
-        if (!parsedData) return;
-
         setIsSaving(true);
+        setError(null);
         try {
+            if (entryType === 'TXN') {
+                const amt = Number(txnAmount);
+                if (!amt || amt <= 0) {
+                    throw new Error('Amount must be > 0');
+                }
+                await api.post('/api/transactions/manual', {
+                    provider: sportsbook === 'DK' ? 'DraftKings' : 'FanDuel',
+                    // account_id is kept for UI consistency; backend currently ignores it.
+                    account_id: bankrollAccount,
+                    type: txnType,
+                    amount: amt,
+                    date: txnDate || undefined,
+                    description: txnDesc || undefined,
+                });
+
+                // reset
+                setTxnAmount('');
+                setTxnDate('');
+                setTxnDesc('');
+                if (onSaveSuccess) onSaveSuccess();
+                return;
+            }
+
+            // BET
+            if (!parsedData) return;
+
             await api.post('/api/bets/manual', {
                 ...parsedData,
                 sportsbook,
-                account_id: bankrollAccount // UI uses 'Main'/'Test' for now
+                account_id: bankrollAccount
             });
 
             setRawText('');
             setParsedData(null);
             if (onSaveSuccess) onSaveSuccess();
         } catch (err) {
-            setError(err.response?.data?.detail || 'Failed to save bet.');
+            const msg = err?.response?.data?.detail || err?.message || 'Failed to save entry.';
+            setError(msg);
         } finally {
             setIsSaving(false);
         }
@@ -222,7 +256,7 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
     return (
         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 backdrop-blur-sm">
             <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-white">Add Bet Slip</h2>
+                <h2 className="text-xl font-semibold text-white">Add Entry</h2>
                 <button
                     onClick={() => { setRawText(''); setParsedData(null); setBatchResults(null); setError(null); onClose(); }}
                     className="text-slate-400 hover:text-white transition-colors"
@@ -233,6 +267,25 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
 
             <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                        <label className="block text-sm font-medium text-slate-400 mb-1">Entry Type</label>
+                        <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
+                            <button
+                                type="button"
+                                onClick={() => { setEntryType('BET'); setParsedData(null); setBatchResults(null); setError(null); }}
+                                className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${entryType === 'BET' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                            >
+                                Bet
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setEntryType('TXN'); setRawText(''); setParsedData(null); setBatchResults(null); setError(null); }}
+                                className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${entryType === 'TXN' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                            >
+                                Deposit / Withdrawal
+                            </button>
+                        </div>
+                    </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-400 mb-1">Sportsbook</label>
                         <select
@@ -252,13 +305,13 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                             onChange={(e) => setBankrollAccount(e.target.value)}
                             className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
                         >
-                            <option value="Main">Main Bankroll</option>
-                            <option value="User2">User 2</option>
+                            <option value="Main">Primary</option>
+                            <option value="User2">Secondary</option>
                         </select>
                     </div>
                 </div>
 
-                {!parsedData && !batchResults && (
+                {entryType === 'BET' && !parsedData && !batchResults && (
                     <div className="flex gap-3 mb-2">
                         <button
                             onClick={handleSync}
@@ -271,7 +324,7 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                     </div>
                 )}
 
-                {isSyncing && (
+                {entryType === 'BET' && isSyncing && (
                     <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
                         <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-lg text-blue-200 text-sm">
                             <p className="font-bold mb-1">FanDuel API Sync</p>
@@ -306,7 +359,7 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                     </div>
                 )}
 
-                {isSyncing && !showCurlInput && (
+                {entryType === 'BET' && isSyncing && !showCurlInput && (
                     <div className="bg-blue-900/20 border border-blue-500/30 p-4 rounded-lg text-blue-200 text-sm flex items-center gap-3">
                         <Loader2 className="w-5 h-5 animate-spin shrink-0" />
                         <div>
@@ -316,28 +369,90 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                     </div>
                 )}
 
-                <div>
-                    {!batchResults && !showCurlInput && (
-                        <>
-                            <label className="block text-sm font-medium text-slate-400 mb-1">Or Paste Slip Text</label>
-                            <textarea
-                                value={rawText}
-                                onChange={(e) => setRawText(e.target.value)}
-                                placeholder="Paste your slip here..."
-                                className="w-full h-32 bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder:text-slate-600"
-                            />
-                        </>
-                    )}
-                </div>
+                {entryType === 'TXN' && (
+                    <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4 space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-400 mb-1">Type</label>
+                                <select
+                                    value={txnType}
+                                    onChange={(e) => setTxnType(e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                >
+                                    <option value="Deposit">Deposit</option>
+                                    <option value="Withdrawal">Withdrawal</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-400 mb-1">Amount ($)</label>
+                                <input
+                                    value={txnAmount}
+                                    onChange={(e) => setTxnAmount(e.target.value)}
+                                    placeholder="e.g. 100"
+                                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-400 mb-1">Date (YYYY-MM-DD)</label>
+                                <input
+                                    value={txnDate}
+                                    onChange={(e) => setTxnDate(e.target.value)}
+                                    placeholder="YYYY-MM-DD"
+                                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-400 mb-1">Description (optional)</label>
+                                <input
+                                    value={txnDesc}
+                                    onChange={(e) => setTxnDesc(e.target.value)}
+                                    placeholder={`Manual ${txnType}`}
+                                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                            </div>
+                        </div>
 
-                {!parsedData && !batchResults && !showCurlInput && (
-                    <button
-                        onClick={handleParse}
-                        disabled={isParsing || isSyncing || !rawText.trim()}
-                        className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-                    >
-                        {isParsing ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Parse Slip'}
-                    </button>
+                        <button
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                        >
+                            {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                            Add {txnType}
+                        </button>
+
+                        <div className="text-[11px] text-slate-500">
+                            Note: this records a cashflow line item for reconciliation with sportsbook snapshots.
+                        </div>
+                    </div>
+                )}
+
+                {entryType === 'BET' && (
+                    <>
+                        <div>
+                            {!batchResults && !showCurlInput && (
+                                <>
+                                    <label className="block text-sm font-medium text-slate-400 mb-1">Or Paste Slip Text</label>
+                                    <textarea
+                                        value={rawText}
+                                        onChange={(e) => setRawText(e.target.value)}
+                                        placeholder="Paste your slip here..."
+                                        className="w-full h-32 bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none resize-none placeholder:text-slate-600"
+                                    />
+                                </>
+                            )}
+                        </div>
+
+                        {!parsedData && !batchResults && !showCurlInput && (
+                            <button
+                                onClick={handleParse}
+                                disabled={isParsing || isSyncing || !rawText.trim()}
+                                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                                {isParsing ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Parse Slip'}
+                            </button>
+                        )}
+                    </>
                 )}
 
                 {error && (

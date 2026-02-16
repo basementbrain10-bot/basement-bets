@@ -1036,6 +1036,71 @@ async def save_manual_bet(request: Request, user: dict = Depends(get_current_use
         return {"status": "success", "link_status": leg['link_status'], "event_id": leg['event_id']}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+@app.post("/api/transactions/manual")
+async def add_manual_transaction(request: Request, user: dict = Depends(get_current_user)):
+    """Manually add a deposit/withdrawal line (affects financials).
+
+Payload: {
+  provider: 'DraftKings'|'FanDuel'|...,
+  date: 'YYYY-MM-DD',
+  type: 'Deposit'|'Withdrawal',
+  amount: number,
+  description?: str
+}
+
+Note: this does not directly change sportsbook-reported balances; it is used for net cashflow
+and reconciliation against snapshots.
+"""
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="Invalid payload")
+
+        provider = payload.get('provider') or payload.get('sportsbook')
+        typ = (payload.get('type') or '').strip()
+        if typ not in ('Deposit', 'Withdrawal'):
+            raise HTTPException(status_code=400, detail="type must be Deposit or Withdrawal")
+
+        amt = payload.get('amount')
+        if amt is None:
+            raise HTTPException(status_code=400, detail="amount is required")
+        amt = float(amt)
+        if amt <= 0:
+            raise HTTPException(status_code=400, detail="amount must be > 0")
+
+        date = payload.get('date') or payload.get('placed_at')
+        if not date:
+            date = datetime.now().strftime('%Y-%m-%d')
+        date = str(date).split('T')[0].split(' ')[0]
+
+        desc = payload.get('description') or f"Manual {typ}"
+
+        import uuid
+        txn = {
+            'provider': provider,
+            'txn_id': f"manual_{uuid.uuid4().hex[:12]}",
+            'date': date,
+            'type': typ,
+            'description': desc,
+            'amount': amt if typ == 'Deposit' else -abs(amt),
+            'balance': None,
+            'user_id': user.get('sub'),
+            'raw_data': payload,
+        }
+
+        from src.database import insert_transaction
+        ok = insert_transaction(txn)
+        if not ok:
+            raise HTTPException(status_code=500, detail="Failed to insert transaction")
+
+        invalidate_analytics_cache(user.get('sub'))
+        return {'status': 'success'}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/api/ingest/odds/{league}")
 async def ingest_odds(league: str, request: Request):
     """
