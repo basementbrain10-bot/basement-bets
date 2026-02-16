@@ -969,7 +969,7 @@ class AnalyticsEngine:
             for b in bets:
                 prov = b.get('provider', 'Unknown')
                 st = str(b.get('status') or '').upper().strip()
-                if st in ('PENDING', 'OPEN'):
+                if st in ('PENDING', 'OPEN', 'VOID'):
                     continue
                 if (b.get('category') or '').lower() == 'transaction':
                     continue
@@ -1018,7 +1018,7 @@ class AnalyticsEngine:
                     if str(b.get('account_id') or 'Main') != str(acc_id):
                         continue
                     st = str(b.get('status') or '').upper().strip()
-                    if st in ('PENDING', 'OPEN'):
+                    if st in ('PENDING', 'OPEN', 'VOID'):
                         continue
                     if (b.get('category') or '').lower() == 'transaction':
                         continue

@@ -542,29 +542,56 @@ async def get_inplay_series(days: int = 90, user: dict = Depends(get_current_use
           WITH snaps AS (
             SELECT
               provider,
+              COALESCE(account_id, 'Main') AS account_id,
               (captured_at AT TIME ZONE 'America/New_York')::date::text AS day_et,
               balance,
               captured_at
             FROM balance_snapshots
             WHERE (%(user_id)s IS NULL OR user_id = %(user_id)s)
               AND captured_at > NOW() - (%(d)s || ' days')::interval
-          ), latest_per_provider_day AS (
-            SELECT DISTINCT ON (provider, day_et)
+          ), latest_per_provider_account_day AS (
+            SELECT DISTINCT ON (provider, account_id, day_et)
               provider,
+              account_id,
               day_et,
-              balance
+              balance,
+              captured_at
             FROM snaps
-            ORDER BY provider, day_et, captured_at DESC
+            ORDER BY provider, account_id, day_et, captured_at DESC
+          ), profits_after_snapshot AS (
+            SELECT
+              l.day_et,
+              l.provider,
+              l.account_id,
+              COALESCE(SUM(b.profit), 0)::float AS profit_after
+            FROM latest_per_provider_account_day l
+            LEFT JOIN bets b
+              ON b.provider = l.provider
+             AND COALESCE(b.account_id, 'Main') = l.account_id
+             AND UPPER(COALESCE(b.status,'')) NOT IN ('PENDING','OPEN','VOID')
+             AND b.created_at > l.captured_at
+             AND b.created_at < ((l.day_et::date + interval '1 day')::timestamp AT TIME ZONE 'America/New_York')
+            GROUP BY l.day_et, l.provider, l.account_id
           )
           SELECT
-            day_et AS day,
-            SUM(balance)::float AS total_in_play
-          FROM latest_per_provider_day
-          GROUP BY day_et
-          ORDER BY day_et ASC
+            l.day_et AS day,
+            SUM(l.balance)::float AS reported_total_in_play,
+            SUM((l.balance + p.profit_after))::float AS computed_total_in_play
+          FROM latest_per_provider_account_day l
+          LEFT JOIN profits_after_snapshot p
+            ON p.day_et=l.day_et AND p.provider=l.provider AND p.account_id=l.account_id
+          GROUP BY l.day_et
+          ORDER BY l.day_et ASC
         """, {"user_id": str(user_id) if user_id else None, "d": int(days)}).fetchall()
 
-    series = [{"day": r.get('day'), "total_in_play": float(r.get('total_in_play') or 0)} for r in rows]
+    series = [
+        {
+            "day": r.get('day'),
+            "reported_total_in_play": float(r.get('reported_total_in_play') or 0),
+            "computed_total_in_play": float(r.get('computed_total_in_play') or 0),
+        }
+        for r in rows
+    ]
 
     return {
         "generated_at": datetime.utcnow().isoformat() + 'Z',
