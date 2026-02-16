@@ -1076,6 +1076,7 @@ and reconciliation against snapshots.
             raise HTTPException(status_code=400, detail="Invalid payload")
 
         provider = payload.get('provider') or payload.get('sportsbook')
+        acc_raw = payload.get('account_id')
         typ = (payload.get('type') or '').strip()
         if typ not in ('Deposit', 'Withdrawal'):
             raise HTTPException(status_code=400, detail="type must be Deposit or Withdrawal")
@@ -1094,9 +1095,19 @@ and reconciliation against snapshots.
 
         desc = payload.get('description') or f"Manual {typ}"
 
+        # Require account_id for Primary/Secondary attribution
+        if acc_raw is None or str(acc_raw).strip() == '':
+            raise HTTPException(status_code=400, detail="account_id is required (Primary/Secondary)")
+        acc = str(acc_raw).strip()
+        if acc.lower() == 'primary':
+            acc = 'Main'
+        elif acc.lower() == 'secondary':
+            acc = 'User2'
+
         import uuid
         txn = {
             'provider': provider,
+            'account_id': acc,
             'txn_id': f"manual_{uuid.uuid4().hex[:12]}",
             'date': date,
             'type': typ,

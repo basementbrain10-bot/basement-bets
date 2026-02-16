@@ -954,27 +954,36 @@ class AnalyticsEngine:
         # (Current Equity + Withdrawals) - Deposits = realized gains from betting
         net_bet_profit = (total_equity + total_withdrawals) - total_deposits
 
-        # Breakdown by Provider
+        # Breakdown by Provider + Account
         provider_stats = defaultdict(lambda: {'deposited': 0.0, 'withdrawn': 0.0})
+        provider_account_stats = defaultdict(lambda: {'deposited': 0.0, 'withdrawn': 0.0})
         query_all = """
-        SELECT provider, type, amount, description 
+        SELECT provider, COALESCE(account_id,'Main') as account_id, type, amount
         FROM transactions
         WHERE (%(user_id)s IS NULL OR user_id = %(user_id)s)
         """
         try:
             with get_db_connection() as conn:
                 from src.database import _exec
+                # Defensive migration
+                try:
+                    _exec(conn, "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS account_id TEXT;")
+                except Exception:
+                    pass
                 cur = _exec(conn, query_all, {"user_id": user_id})
                 rows = cur.fetchall()
                 for r in rows:
                     p = r['provider']
+                    acc = r.get('account_id') or 'Main'
                     amt = float(r['amount'] or 0)
                     typ = r['type']
-                    
+
                     if typ == 'Deposit':
                         provider_stats[p]['deposited'] += amt
+                        provider_account_stats[(p, acc)]['deposited'] += amt
                     elif typ == 'Withdrawal':
                         provider_stats[p]['withdrawn'] += abs(amt)
+                        provider_account_stats[(p, acc)]['withdrawn'] += abs(amt)
         except Exception as e:
             # Transactions table may not exist yet - degrade gracefully
             print(f"[Analytics] Skipping provider breakdown (table may not exist): {e}")
@@ -1057,12 +1066,13 @@ class AnalyticsEngine:
                 prov_total_ledger_in_play += ledger_in_play
                 prov_total_ledger_delta += float(ledger_delta or 0)
 
+                acc_stats = provider_account_stats.get((p, str(acc_id)), {'deposited': 0.0, 'withdrawn': 0.0})
                 provider_breakdown.append({
                     "provider": p,
                     "account_id": acc_id,
-                    "deposited": 0.0,
-                    "withdrawn": 0.0,
-                    "net_profit": 0.0,
+                    "deposited": float(acc_stats.get('deposited') or 0.0),
+                    "withdrawn": float(acc_stats.get('withdrawn') or 0.0),
+                    "net_profit": float(acc_stats.get('withdrawn') or 0.0) - float(acc_stats.get('deposited') or 0.0),
                     "in_play": base_bal,
                     "captured_at": (snap or {}).get('captured_at'),
                     "ledger_delta": float(ledger_delta),

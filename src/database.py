@@ -1534,6 +1534,7 @@ def init_transactions_db():
     CREATE TABLE IF NOT EXISTS transactions (
         id SERIAL PRIMARY KEY,
         provider TEXT NOT NULL,
+        account_id TEXT,
         txn_id TEXT NOT NULL,
         date TEXT NOT NULL,
         type TEXT NOT NULL,
@@ -1548,6 +1549,7 @@ def init_transactions_db():
     CREATE INDEX IF NOT EXISTS idx_txn_user_date ON transactions(user_id, date DESC);
     CREATE INDEX IF NOT EXISTS idx_txn_type ON transactions(type);
     CREATE INDEX IF NOT EXISTS idx_txn_provider ON transactions(provider);
+    CREATE INDEX IF NOT EXISTS idx_txn_user_provider_account_date ON transactions(user_id, provider, COALESCE(account_id,'Main'), date DESC);
     """
     with get_admin_db_connection() as conn:
         with conn.cursor() as cur:
@@ -2284,9 +2286,9 @@ def insert_transaction(txn: dict) -> bool:
     dict/list payloads for safety.
     """
     query = """
-    INSERT INTO transactions (provider, txn_id, date, type, description, 
+    INSERT INTO transactions (provider, account_id, txn_id, date, type, description, 
                               amount, balance, user_id, raw_data)
-    VALUES (:provider, :txn_id, :date, :type, :description,
+    VALUES (:provider, :account_id, :txn_id, :date, :type, :description,
             :amount, :balance, :user_id, :raw_data)
     ON CONFLICT (provider, txn_id) DO UPDATE SET
         amount = EXCLUDED.amount,
@@ -2311,6 +2313,7 @@ def insert_transaction(txn: dict) -> bool:
     # Map incoming fields from parsers to schema
     doc = {
         'provider': txn.get('provider') or txn.get('sportsbook'),
+        'account_id': txn.get('account_id'),
         'txn_id': txn.get('id') or txn.get('txn_id'),
         'date': txn.get('date') or txn.get('txn_date'),
         'type': txn.get('type') or txn.get('txn_type'),
@@ -2323,6 +2326,11 @@ def insert_transaction(txn: dict) -> bool:
     
     try:
         with get_db_connection() as conn:
+            # Defensive migration for older DBs
+            try:
+                _exec(conn, "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS account_id TEXT;")
+            except Exception:
+                pass
             _exec(conn, query, doc)
             conn.commit()
             return True
