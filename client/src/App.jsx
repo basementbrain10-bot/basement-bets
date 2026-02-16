@@ -113,6 +113,7 @@ function App() {
     const [balances, setBalances] = useState({});
     const [error, setError] = useState(null);
     const [timeSeries, setTimeSeries] = useState([]);
+    const [inPlaySeries, setInPlaySeries] = useState([]);
     const [drawdown, setDrawdown] = useState(null);
     const [financials, setFinancials] = useState({ total_in_play: 0, total_deposited: 0, total_withdrawn: 0, realized_profit: 0 });
     const [reconciliation, setReconciliation] = useState(null);
@@ -168,6 +169,8 @@ function App() {
             setLoading(true);
             try {
                 const { data: d } = await api.get('/api/dashboard');
+                // Snapshot (reported) vs computed in-play series (snapshots + newly-added settled bets)
+                const { data: inplay } = await api.get('/api/financials/inplay/series', { params: { days: 120 } });
 
                 setStats(d.stats || { total_bets: 0, total_profit: 0, win_rate: 0, roi: 0 });
                 setBets(d.bets || []);
@@ -224,6 +227,7 @@ function App() {
                 setFinancials(d.financials || { total_in_play: 0, total_deposited: 0, total_withdrawn: 0, realized_profit: 0 });
                 setReconciliation(d.reconciliation || null);
                 setTimeSeries(d.time_series || []);
+                setInPlaySeries(inplay?.series || []);
                 setDrawdown(d.drawdown || { max_drawdown: 0.0, current_drawdown: 0.0, peak_profit: 0.0 });
                 setEdgeBreakdown(d.edge_breakdown || []);
 
@@ -433,6 +437,7 @@ function App() {
                             ) : (
                                 <PerformanceView
                                     timeSeries={timeSeries}
+                                    inPlaySeries={inPlaySeries}
                                     financials={financials}
                                     periodStats={periodStats}
                                     edgeBreakdown={edgeBreakdown}
@@ -453,7 +458,7 @@ function App() {
     );
 }
 
-function PerformanceView({ timeSeries, financials, periodStats, edgeBreakdown, bets, reconciliation, onOpenTransactions }) {
+function PerformanceView({ timeSeries, inPlaySeries, financials, periodStats, edgeBreakdown, bets, reconciliation, onOpenTransactions }) {
     // Performance tab is focused on actual betting performance + breakdowns.
 
     // Scatter / drivers controls
@@ -944,7 +949,7 @@ const BankrollCard = ({ provider, data }) => (
     </div>
 );
 
-function SummaryView({ stats, sportBreakdown, playerBreakdown, monthlyBreakdown, timeSeries, betTypeBreakdown, edgeBreakdown, balances, periodStats, financials }) {
+function SummaryView({ stats, sportBreakdown, playerBreakdown, monthlyBreakdown, timeSeries, inPlaySeries, betTypeBreakdown, edgeBreakdown, balances, periodStats, financials }) {
     const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
 
     // Sort sport breakdown by profit for chart
@@ -1089,22 +1094,30 @@ function SummaryView({ stats, sportBreakdown, playerBreakdown, monthlyBreakdown,
                     </h3>
                     <div className="h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={timeSeries}>
+                            <LineChart data={(inPlaySeries && inPlaySeries.length) ? inPlaySeries : timeSeries}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                                 <XAxis
-                                    dataKey="date"
+                                    dataKey={(inPlaySeries && inPlaySeries.length) ? "day" : "date"}
                                     stroke="#94a3b8"
                                     tickFormatter={(val) => formatDateMDY(val)}
                                     minTickGap={30}
                                 />
-                                <YAxis stroke="#94a3b8" />
+                                <YAxis stroke="#94a3b8" tickFormatter={(v) => formatCurrency(v)} />
                                 <Tooltip
                                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }}
                                     itemStyle={{ color: '#fff' }}
                                     formatter={(value) => formatCurrency(value)}
                                     labelFormatter={(label) => formatDateMDY(label)}
                                 />
-                                <Line type="monotone" dataKey="balance" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="Balance" />
+                                {(inPlaySeries && inPlaySeries.length) ? (
+                                    <>
+                                        <Legend />
+                                        <Line type="monotone" dataKey="reported_total_in_play" stroke="#64748b" strokeWidth={2} dot={false} activeDot={{ r: 5 }} name="Reported (snapshots)" />
+                                        <Line type="monotone" dataKey="computed_total_in_play" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 5 }} name="Computed (snapshots + settled bets)" />
+                                    </>
+                                ) : (
+                                    <Line type="monotone" dataKey="balance" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} name="Balance" />
+                                )}
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
