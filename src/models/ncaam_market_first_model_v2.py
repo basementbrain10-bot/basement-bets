@@ -738,12 +738,15 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 # Keep legacy key name for UI, but this is EV% not points.
                 "edge": f"{(r['ev']*100):.1f}%",
                 "win_prob": round(float(win_prob), 3) if win_prob is not None else None,
+                "win_prob_lb10": (round(float(r.get('win_prob_lb10')), 3) if r.get('win_prob_lb10') is not None else None),
+                "win_prob_ub90": (round(float(r.get('win_prob_ub90')), 3) if r.get('win_prob_ub90') is not None else None),
                 "market_line": (round(float(market_line_side), 1) if market_line_side is not None else None),
                 "fair_line": (round(float(fair_line_side), 1) if fair_line_side is not None else None),
                 "edge_points": edge_points_side,
                 "price": int(r.get('price')) if r.get('price') is not None else None,
                 "kelly": float(r.get('kelly')) if r.get('kelly') is not None else None,
-                "confidence": "High" if r['ev'] * 100 * 5 > 80 else "Medium" if r['ev'] * 100 * 5 > 50 else "Low", # Using new confidence calc
+                # Confidence = model confidence that the bet wins (based on calibrated win_prob lower bound)
+                "confidence": self._confidence_label_from_winprob(r.get('win_prob_lb10') if isinstance(r, dict) else None, fallback_win_prob=win_prob),
                 "book": r['book']
             })
             if not best_rec or r['ev'] > best_rec['ev']:
@@ -1074,6 +1077,125 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 return max(0.0, min(1.0, y))
         return p
 
+    _model_conf_params: Optional[Dict[str, Any]] = None
+
+    def _load_model_conf_params(self) -> Dict[str, Any]:
+        """Load model uncertainty params (tau) used for confidence intervals."""
+        if self._model_conf_params is not None:
+            return self._model_conf_params
+
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        path = os.path.join(repo_root, 'data', 'model_params', 'model_confidence_params_ncaam.json')
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                self._model_conf_params = json.load(f)
+        except Exception:
+            self._model_conf_params = {}
+        return self._model_conf_params
+
+    def _tau_for_market(self, market: str) -> float:
+        """Return tau for mu-uncertainty simulations.
+
+        Disabled by default (requires ENABLE_MU_UNCERTAINTY_CONF=1) because it depends on
+        close_line/mu_final data integrity.
+        """
+        try:
+            if str(os.getenv('ENABLE_MU_UNCERTAINTY_CONF', '0')).strip() != '1':
+                return 0.0
+            params = self._load_model_conf_params() or {}
+            if str(market).upper() == 'TOTAL':
+                return float(params.get('tau_total') or 0.0)
+            return float(params.get('tau_spread') or 0.0)
+        except Exception:
+            return 0.0
+
+    def _quantile(self, xs: List[float], q: float) -> Optional[float]:
+        if not xs:
+            return None
+        xs = sorted(xs)
+        q = max(0.0, min(1.0, float(q)))
+        idx = int(round(q * (len(xs) - 1)))
+        idx = max(0, min(len(xs) - 1, idx))
+        return float(xs[idx])
+
+    def _confidence_bounds_from_mu_uncertainty(
+        self,
+        market: str,
+        mu: float,
+        sigma: float,
+        line: float,
+        side: str,
+        n_sims: int = 600,
+    ) -> Dict[str, Optional[float]]:
+        """Compute win_prob bounds by sampling uncertainty in mu.
+
+        Returns calibrated p10/p90 bounds for P(bet wins).
+        """
+        import random
+
+        tau = self._tau_for_market(market)
+        if not (tau and tau > 0.0 and sigma and sigma > 0.0):
+            return {"lb10": None, "ub90": None}
+
+        probs: List[float] = []
+        mkt = str(market).upper()
+        side = str(side).lower().strip()
+
+        for _ in range(int(n_sims)):
+            mu_true = float(mu) + random.gauss(0.0, float(tau))
+
+            if mkt == 'SPREAD':
+                # line is HOME spread
+                prob_home_raw = 1.0 - self._normal_cdf(-float(line), float(mu_true), float(sigma))
+                push_prob = 0.0
+                try:
+                    # replicate push approx from _generate_recommendations
+                    if float(line) % 1 == 0:
+                        key_numbers = {2, 3, 4, 5, 6, 7, 10, 14}
+                        push_prob = 0.05 if abs(float(line)) in key_numbers else 0.03
+                except Exception:
+                    push_prob = 0.0
+
+                prob_home = prob_home_raw - (push_prob / 2)
+                prob_away = (1.0 - prob_home_raw) - (push_prob / 2)
+                p = prob_home if side == 'home' else prob_away
+
+            else:
+                # TOTAL: line is total points
+                prob_over_raw = 1.0 - self._normal_cdf(float(line), float(mu_true), float(sigma))
+                push_prob = 0.0
+                try:
+                    if float(line) % 1 == 0:
+                        key_numbers = {2, 3, 4, 5, 6, 7, 10, 14}
+                        push_prob = 0.05 if abs(float(line)) in key_numbers else 0.03
+                except Exception:
+                    push_prob = 0.0
+
+                prob_over = prob_over_raw - (push_prob / 2)
+                prob_under = (1.0 - prob_over_raw) - (push_prob / 2)
+                p = prob_over if side == 'over' else prob_under
+
+            probs.append(self._calibrate_win_prob(p))
+
+        return {
+            "lb10": self._quantile(probs, 0.10),
+            "ub90": self._quantile(probs, 0.90),
+        }
+
+    def _confidence_label_from_winprob(self, lb10: Optional[float], fallback_win_prob: Optional[float] = None) -> str:
+        # Use lower-bound if available; else fall back to point estimate.
+        p = lb10 if lb10 is not None else fallback_win_prob
+        try:
+            p = float(p)
+        except Exception:
+            return 'Low'
+
+        if p >= 0.55:
+            return 'High'
+        if p >= 0.52:
+            return 'Medium'
+        return 'Low'
+
     def _generate_recommendations(self, mu_s, sig_s, mu_t, sig_t, snap, event, torvik_view: Optional[Dict[str, Any]] = None) -> List[Dict]:
         recs: List[Dict[str, Any]] = []
         if not snap:
@@ -1143,6 +1265,14 @@ class NCAAMMarketFirstModelV2(BaseModel):
             best_away_line = (best_away or {}).get('line_value')
             best_home_line = best_home.get('line_value')
 
+            bounds_home = self._confidence_bounds_from_mu_uncertainty(
+                market='SPREAD',
+                mu=float(mu_s),
+                sigma=float(sig_s),
+                line=float(line_s),
+                side='home',
+            )
+
             cand_home = {
                 "market": "SPREAD",
                 "side": "home",
@@ -1151,11 +1281,21 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "price": int(best_home.get('price')) if best_home.get('price') is not None else int(price_home),
                 "prob": round(prob_home_cal, 3),
                 "win_prob": round(prob_home_cal, 3),
+                "win_prob_lb10": (round(float(bounds_home.get('lb10')), 3) if bounds_home.get('lb10') is not None else None),
+                "win_prob_ub90": (round(float(bounds_home.get('ub90')), 3) if bounds_home.get('ub90') is not None else None),
                 "ev": float(round(ev_home, 4)),
                 "kelly": float(round(kelly_home, 4)),
                 "book": best_home.get('book') or book_consensus,
                 "edge_points": float(round(edge_pts, 2)),
             }
+
+            bounds_away = self._confidence_bounds_from_mu_uncertainty(
+                market='SPREAD',
+                mu=float(mu_s),
+                sigma=float(sig_s),
+                line=float(line_s),
+                side='away',
+            )
 
             cand_away = {
                 "market": "SPREAD",
@@ -1165,6 +1305,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "price": int(price_away),
                 "prob": round(prob_away_cal, 3),
                 "win_prob": round(prob_away_cal, 3),
+                "win_prob_lb10": (round(float(bounds_away.get('lb10')), 3) if bounds_away.get('lb10') is not None else None),
+                "win_prob_ub90": (round(float(bounds_away.get('ub90')), 3) if bounds_away.get('ub90') is not None else None),
                 "ev": float(round(ev_away, 4)),
                 "kelly": float(round(kelly_away, 4)),
                 "book": (best_away or {}).get('book') or book_consensus,
@@ -1204,6 +1346,14 @@ class NCAAMMarketFirstModelV2(BaseModel):
             fair_line_t = float(mu_t)
             edge_pts_t = abs(fair_line_t - market_line_t)
 
+            bounds_over = self._confidence_bounds_from_mu_uncertainty(
+                market='TOTAL',
+                mu=float(mu_t),
+                sigma=float(sig_t),
+                line=float(line_t),
+                side='over',
+            )
+
             cand_over = {
                 "market": "TOTAL",
                 "side": "over",
@@ -1211,11 +1361,21 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "price": int(price_over),
                 "prob": round(prob_over_cal, 3),
                 "win_prob": round(prob_over_cal, 3),
+                "win_prob_lb10": (round(float(bounds_over.get('lb10')), 3) if bounds_over.get('lb10') is not None else None),
+                "win_prob_ub90": (round(float(bounds_over.get('ub90')), 3) if bounds_over.get('ub90') is not None else None),
                 "ev": float(round(ev_over, 4)),
                 "kelly": float(round(kelly_over, 4)),
                 "book": book_over,
                 "edge_points": float(round(edge_pts_t, 2)),
             }
+
+            bounds_under = self._confidence_bounds_from_mu_uncertainty(
+                market='TOTAL',
+                mu=float(mu_t),
+                sigma=float(sig_t),
+                line=float(line_t),
+                side='under',
+            )
 
             cand_under = {
                 "market": "TOTAL",
@@ -1224,6 +1384,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "price": int(price_under),
                 "prob": round(prob_under_cal, 3),
                 "win_prob": round(prob_under_cal, 3),
+                "win_prob_lb10": (round(float(bounds_under.get('lb10')), 3) if bounds_under.get('lb10') is not None else None),
+                "win_prob_ub90": (round(float(bounds_under.get('ub90')), 3) if bounds_under.get('ub90') is not None else None),
                 "ev": float(round(ev_under, 4)),
                 "kelly": float(round(kelly_under, 4)),
                 "book": book_under,
