@@ -28,8 +28,16 @@ export default function Picks() {
     setLoading(true);
     setErr(null);
     try {
+      // Primary source: recommended model history (all leagues)
       const res = await api.get('/api/research/history');
-      setHistory(res.data || []);
+      const rows = res.data || [];
+      if (Array.isArray(rows) && rows.length > 0) {
+        setHistory(rows);
+      } else {
+        // Fallback (UI-only): NCAAM history endpoint
+        const n = await api.get('/api/ncaam/history', { params: { limit: 2000 } }).catch(() => ({ data: [] }));
+        setHistory(n.data || []);
+      }
     } catch (e) {
       // Match other pages: if auth fails, prompt for Basement password.
       if (e?.response?.status === 403) {
@@ -209,7 +217,7 @@ export default function Picks() {
 
       {!loading && !err && (!history || history.length === 0) && (
         <div className="p-4 rounded-lg bg-slate-900/40 border border-slate-800 text-slate-400 text-sm">
-          No recommended-pick history returned yet. If you expect data here, try Refresh.
+          No model-performance history returned yet. If you expect data here, try Refresh. If it still shows empty, it usually means the backend isn’t returning any stored recommended picks for your user.
         </div>
       )}
 
