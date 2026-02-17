@@ -151,6 +151,31 @@ export default function Picks() {
         )}
       </div>
 
+      {/* Recommended bet performance bar chart (daily units) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Recommended bet performance (last 30 days)</div>
+        <div className="text-[11px] text-slate-500 mb-3">Daily net units (+1 win, -1 loss, 0 push), based on graded recommended picks.</div>
+        <div className="h-[260px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={dailyPerformance} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+              <XAxis dataKey="day" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+              <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
+                labelStyle={{ color: '#e2e8f0' }}
+                formatter={(v, name, props) => {
+                  if (name === 'units') return [Number(v).toFixed(0), 'Net Units'];
+                  return [v, name];
+                }}
+              />
+              <Legend />
+              <Bar dataKey="units" name="Net Units" fill="#60a5fa" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
       {/* Edge band chart */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
         <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Performance by EV% band (win rate)</div>
