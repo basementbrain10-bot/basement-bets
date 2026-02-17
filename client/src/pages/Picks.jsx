@@ -153,6 +153,60 @@ export default function Picks() {
     return { rows: out, avg: avg === null ? null : Number(avg.toFixed(1)) };
   }, [graded]);
 
+  const top6DailyWinRate30 = useMemo(() => {
+    // For each ET day (last 30 days), compute win% of that day's Top 6 recommended picks (ranked by EV/u).
+    const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
+    const isW = (r) => r === 'WON' || r === 'WIN';
+    const isL = (r) => r === 'LOST' || r === 'LOSS';
+    const ev = (h) => {
+      const n = Number(h?.ev_per_unit ?? h?.ev);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const now = new Date();
+    const days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const ymd = d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      days.push(ymd);
+    }
+
+    const byDay = {};
+    (graded || []).forEach((h) => {
+      const day = etDay(h.analyzed_at);
+      if (!day) return;
+      if (!days.includes(day)) return;
+      const e = ev(h);
+      if (!Number.isFinite(e)) return;
+      byDay[day] = byDay[day] || [];
+      byDay[day].push(h);
+    });
+
+    const rows = days.map((day) => {
+      const picks = (byDay[day] || []).slice().sort((a, b) => (ev(b) ?? -999) - (ev(a) ?? -999)).slice(0, 6);
+      let w = 0;
+      let l = 0;
+      picks.forEach((h) => {
+        const r = res(h);
+        if (isW(r)) w += 1;
+        else if (isL(r)) l += 1;
+      });
+      const decided = w + l;
+      const winRate = decided ? (w / decided) * 100 : null;
+      return {
+        day,
+        winRate: winRate === null ? null : Number(winRate.toFixed(1)),
+        n: decided,
+        _fill: (winRate !== null && winRate >= 50) ? '#34d399' : '#fb7185',
+      };
+    }).filter((x) => x.winRate !== null);
+
+    const vals = rows.map((x) => x.winRate).filter((x) => Number.isFinite(x));
+    const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    return { rows, avg: avg === null ? null : Number(avg.toFixed(1)) };
+  }, [graded]);
+
   const dailyPerformance = useMemo(() => {
     // Daily net units based on graded recommended picks.
     // Convention: +1u for win, -1u for loss, 0u for push.
@@ -350,6 +404,44 @@ export default function Picks() {
                   ))}
                 </Bar>
               </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Top 6 aggregate (daily win% last 30d) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Top 6 recommended — daily win% (last 30 days)</div>
+        <div className="text-[11px] text-slate-500 mb-3">Each bar = that day’s Top 6 picks (ranked by EV/u). Green ≥ 50%, red &lt; 50%.</div>
+
+        <div className="h-[260px] overflow-x-auto">
+          <div className="min-w-[520px] h-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={top6DailyWinRate30.rows} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                <XAxis dataKey="day" tick={{ fill: '#94a3b8', fontSize: 10 }} interval={4} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, 100]} />
+                <Tooltip
+                  contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                  formatter={(v, name, props) => {
+                    if (name === 'winRate') return [`${Number(v).toFixed(1)}%`, 'Win%'];
+                    if (name === 'n') return [props?.payload?.n, 'N (decided)'];
+                    return [v, name];
+                  }}
+                />
+                <Legend />
+                <ReferenceLine y={50} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: '50%', fill: '#94a3b8', fontSize: 11 }} />
+                {top6DailyWinRate30?.avg !== null && top6DailyWinRate30?.avg !== undefined ? (
+                  <ReferenceLine y={top6DailyWinRate30.avg} stroke="#60a5fa" strokeDasharray="4 4" label={{ value: `Avg ${top6DailyWinRate30.avg}%`, fill: '#60a5fa', fontSize: 11 }} />
+                ) : null}
+
+                <Bar dataKey="winRate" name="Win%" radius={[4, 4, 0, 0]}>
+                  {(top6DailyWinRate30.rows || []).map((entry, index) => (
+                    <Cell key={`cell-d-${index}`} fill={entry._fill} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
