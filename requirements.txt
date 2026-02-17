@@ -10,6 +10,7 @@ supabase
 python-jose[cryptography]
 openai
 python-dateutil
+numpy
 
 # NOTE: keep Vercel serverless bundle small.
 # Selenium + undetected-chromedriver are used for local ingestion only.
