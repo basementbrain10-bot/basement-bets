@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
-import { Trash, DollarSign, Activity } from 'lucide-react';
+import { Trash, DollarSign, Activity, Pencil, CheckCircle2 } from 'lucide-react';
 import EditBetModal from './EditBetModal';
 import SportAuditorModal from './SportAuditorModal';
 import ManualAddBetModal from './ManualAddBetModal';
@@ -604,9 +604,26 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                     {!openBetsLoading && openBets && openBets.length > 0 && (
                         <div className="space-y-2">
                             {openBets.slice(0, 25).map((b) => (
-                                <div key={b.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/20">
+                                <div
+                                    key={b.id}
+                                    className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/20 hover:bg-slate-950/40 transition cursor-pointer"
+                                    onClick={() => {
+                                        setEditBet({
+                                            ...b,
+                                            date: String(b.date_et || b.date || '').slice(0, 10),
+                                            wager: b.wager ?? b.stake ?? b.amount,
+                                        });
+                                        setEditNote('');
+                                        setShowEdit(true);
+                                    }}
+                                >
                                     <div className="min-w-0">
-                                        <div className="text-xs font-black text-slate-100 truncate">{b.provider} • {(b.account_id === 'User2' ? 'Secondary' : 'Primary')}</div>
+                                        <div className="text-xs font-black text-slate-100 truncate flex items-center gap-2">
+                                            <span>{b.provider} • {(b.account_id === 'User2' ? 'Secondary' : 'Primary')}</span>
+                                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 border border-slate-700/60 rounded px-1.5 py-0.5">
+                                                <Pencil size={12} /> Edit
+                                            </span>
+                                        </div>
                                         <div className="text-xs text-slate-300 truncate" title={b.selection || b.description}>{b.selection || b.description}</div>
                                         <div className="text-[11px] text-slate-500">{formatDateMDY(b.date_et || b.date)} • {String(b.status || 'PENDING').toUpperCase()}</div>
                                     </div>
