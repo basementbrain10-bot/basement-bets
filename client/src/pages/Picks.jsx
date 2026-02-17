@@ -31,14 +31,40 @@ export default function Picks() {
       // Primary source: recommended model history (all leagues)
       // Pull enough lookback to include all 2026 YTD.
       const res = await api.get('/api/research/history', { params: { limit: 20000, lookback_days: 400 } });
-      const rows = res.data || [];
-      if (Array.isArray(rows) && rows.length > 0) {
-        setHistory(rows);
-      } else {
+      let rows = res.data || [];
+      if (!(Array.isArray(rows) && rows.length > 0)) {
         // Fallback (UI-only): NCAAM history endpoint
         const n = await api.get('/api/ncaam/history', { params: { limit: 2000 } }).catch(() => ({ data: [] }));
-        setHistory(n.data || []);
+        rows = n.data || [];
       }
+
+      // Ensure yesterday is always settled: if any yesterday-slate picks are pending, trigger grading once.
+      try {
+        const yesterdayEt = (() => {
+          const d = new Date();
+          d.setDate(d.getDate() - 1);
+          return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+        })();
+        const etDay = (dt) => {
+          if (!dt) return null;
+          try { return new Date(dt).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); } catch (e) { return null; }
+        };
+        const isGraded = (x) => {
+          const s = String(x || '').toUpperCase();
+          return s === 'WON' || s === 'WIN' || s === 'LOST' || s === 'LOSS' || s === 'PUSH';
+        };
+        const dayKey = (h) => etDay(h?.start_time) || etDay(h?.analyzed_at);
+        const pendingYesterday = (rows || []).filter((h) => dayKey(h) === yesterdayEt && !isGraded(h.graded_result || h.outcome || h.result)).length;
+        const k = `grade_yesterday_attempt_${yesterdayEt}`;
+        if (pendingYesterday > 0 && !localStorage.getItem(k)) {
+          localStorage.setItem(k, '1');
+          await api.post('/api/research/grade');
+          const res2 = await api.get('/api/research/history', { params: { limit: 20000, lookback_days: 400 } });
+          rows = res2.data || rows;
+        }
+      } catch (e) { }
+
+      setHistory(rows);
     } catch (e) {
       // Match other pages: if auth fails, prompt for Basement password.
       if (e?.response?.status === 403) {
@@ -422,8 +448,8 @@ export default function Picks() {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={top6RankPerformance.rows} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis dataKey="rank" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, 100]} />
+                <XAxis dataKey="rank" tick={{ fill: '#94a3b8', fontSize: 12 }} label={{ value: 'Rank (Top 6)', position: 'insideBottom', offset: -5, fill: '#94a3b8', fontSize: 11 }} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, 100]} label={{ value: 'Win %', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 11 }} />
                 <Tooltip
                   contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
                   labelStyle={{ color: '#e2e8f0' }}
@@ -450,33 +476,6 @@ export default function Picks() {
         </div>
       </div>
 
-
-      {/* Recommended bet performance bar chart (daily units) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Recommended bet performance (last 30 days)</div>
-        <div className="text-[11px] text-slate-500 mb-3">Daily net units (+1 win, -1 loss, 0 push), based on graded recommended picks.</div>
-        <div className="h-[260px] overflow-x-auto">
-          <div className="min-w-[360px] h-full">
-            <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={dailyPerformance} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-              <XAxis dataKey="day" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-              <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
-                labelStyle={{ color: '#e2e8f0' }}
-                formatter={(v, name, props) => {
-                  if (name === 'units') return [Number(v).toFixed(0), 'Net Units'];
-                  return [v, name];
-                }}
-              />
-              <Legend />
-              <Bar dataKey="units" name="Net Units" fill="#60a5fa" radius={[6, 6, 0, 0]} />
-            </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
 
 
       {/* Existing analytics (kept) */}
