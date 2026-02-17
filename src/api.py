@@ -94,7 +94,14 @@ def edge_ncaab_recommendations(date: Optional[str] = None, season: int = 2026):
             date = _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text").fetchone()[0]
 
     try:
-        return recommend_for_date(date_et=date, season_end_year=int(season))
+        # Clamp/fallback season to avoid empty UI if an artifact isn't present on deploy.
+        try:
+            season_i = int(season)
+        except Exception:
+            season_i = 2026
+        if season_i < 2026:
+            season_i = 2026
+        return recommend_for_date(date_et=date, season_end_year=season_i)
     except FileNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

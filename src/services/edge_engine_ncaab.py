@@ -218,11 +218,26 @@ def load_models(season_end_year: int) -> Dict[str, Dict[str, Any]]:
 
     File schema: data/model_params/ncaab_edge_model_season_<season>.json
     Keys: spread/total/ml
+
+    Serverless robustness:
+    - If requested season artifact is missing, fall back to 2026 (current season baseline).
     """
-    path = os.path.join(REPO_ROOT, 'data', 'model_params', f'ncaab_edge_model_season_{season_end_year}.json')
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Missing model params: {path}")
-    raw = json.loads(open(path, 'r', encoding='utf-8').read())
+    candidates = [int(season_end_year)]
+    if int(season_end_year) != 2026:
+        candidates.append(2026)
+
+    path = None
+    raw = None
+    for s in candidates:
+        p = os.path.join(REPO_ROOT, 'data', 'model_params', f'ncaab_edge_model_season_{s}.json')
+        if os.path.exists(p):
+            path = p
+            raw = json.loads(open(p, 'r', encoding='utf-8').read())
+            break
+
+    if raw is None or path is None:
+        raise FileNotFoundError(f"Missing model params: {os.path.join(REPO_ROOT, 'data', 'model_params', f'ncaab_edge_model_season_{season_end_year}.json')}")
+
     models = (raw.get('params') or {}).get('models') or {}
 
     def norm_model(m: dict) -> dict:
