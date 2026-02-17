@@ -2053,7 +2053,7 @@ def update_bet_fields(bet_id: int, fields: dict, user_id: str | None = None, upd
     - Scoped to user_id when provided.
     """
     allowed = {
-        'provider', 'date', 'sport', 'bet_type', 'wager', 'odds', 'profit', 'status',
+        'provider', 'account_id', 'date', 'sport', 'bet_type', 'wager', 'odds', 'profit', 'status',
         'description', 'selection', 'event_text'
     }
 
