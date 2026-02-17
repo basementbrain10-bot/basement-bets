@@ -413,23 +413,6 @@ function App() {
                                 </button>
                             </div>
 
-                            {page === 'actuals' && (
-                                <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
-                                    <button
-                                        onClick={() => setActualsTab('performance')}
-                                        className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${actualsTab === 'performance' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
-                                    >
-                                        Performance
-                                    </button>
-                                    <button
-                                        onClick={() => setActualsTab('transactions')}
-                                        className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${actualsTab === 'transactions' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
-                                    >
-                                        Transactions
-                                    </button>
-                                </div>
-                            )}
-
                             <button
                                 onClick={handleSyncResults}
                                 disabled={isSyncing}
@@ -447,6 +430,26 @@ function App() {
                             </button>
                         </div>
                     </header>
+
+                    {page === 'actuals' && (
+                        <div className="mb-6 flex justify-end">
+                            <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
+                                <button
+                                    onClick={() => setActualsTab('performance')}
+                                    className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${actualsTab === 'performance' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                >
+                                    Performance
+                                </button>
+                                <button
+                                    onClick={() => setActualsTab('transactions')}
+                                    className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${actualsTab === 'transactions' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                >
+                                    Transactions
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
 
                     {/* Content */}
                     {showAddBet && (
