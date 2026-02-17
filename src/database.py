@@ -2233,13 +2233,14 @@ def delete_bet(bet_id: int, user_id: str | None = None) -> bool:
     """
     q_bet = "DELETE FROM bets WHERE id=%s AND (%s IS NULL OR user_id=%s)"
     q_txn = "DELETE FROM transactions WHERE txn_id=%s AND (%s IS NULL OR user_id=%s)"
-    q_legs = "DELETE FROM bet_legs WHERE bet_id=%s AND (%s IS NULL OR user_id=%s)"
-    q_sett = "DELETE FROM settlement_events WHERE bet_id=%s AND (%s IS NULL OR user_id=%s)"
+    # bet_legs / settlement_events do NOT have user_id columns; scope is enforced by deleting the bet row itself.
+    q_legs = "DELETE FROM bet_legs WHERE bet_id=%s"
+    q_sett = "DELETE FROM settlement_events WHERE bet_id=%s"
     try:
         with get_db_connection() as conn:
             # Delete dependents first to satisfy FK constraints
-            _exec(conn, q_legs, (int(bet_id), user_id, user_id))
-            _exec(conn, q_sett, (int(bet_id), user_id, user_id))
+            _exec(conn, q_legs, (int(bet_id),))
+            _exec(conn, q_sett, (int(bet_id),))
             _exec(conn, q_txn, (f"bet_{bet_id}", user_id, user_id))
             cur = _exec(conn, q_bet, (int(bet_id), user_id, user_id))
             conn.commit()
@@ -2252,13 +2253,14 @@ def bulk_delete_bets(bet_ids: list[int], user_id: str | None = None) -> int:
     """Delete multiple bets and their associated transactions + dependent rows."""
     q_bet = "DELETE FROM bets WHERE id=ANY(%s) AND (%s IS NULL OR user_id=%s)"
     q_txn = "DELETE FROM transactions WHERE txn_id=ANY(%s) AND (%s IS NULL OR user_id=%s)"
-    q_legs = "DELETE FROM bet_legs WHERE bet_id=ANY(%s) AND (%s IS NULL OR user_id=%s)"
-    q_sett = "DELETE FROM settlement_events WHERE bet_id=ANY(%s) AND (%s IS NULL OR user_id=%s)"
+    # bet_legs / settlement_events do NOT have user_id columns; scope is enforced by deleting bets.
+    q_legs = "DELETE FROM bet_legs WHERE bet_id=ANY(%s)"
+    q_sett = "DELETE FROM settlement_events WHERE bet_id=ANY(%s)"
     txn_ids = [f"bet_{bid}" for bid in bet_ids]
     try:
         with get_db_connection() as conn:
-            _exec(conn, q_legs, (list(bet_ids), user_id, user_id))
-            _exec(conn, q_sett, (list(bet_ids), user_id, user_id))
+            _exec(conn, q_legs, (list(bet_ids),))
+            _exec(conn, q_sett, (list(bet_ids),))
             _exec(conn, q_txn, (txn_ids, user_id, user_id))
             cur = _exec(conn, q_bet, (list(bet_ids), user_id, user_id))
             conn.commit()
