@@ -477,51 +477,6 @@ export default function Picks() {
         </div>
       </div>
 
-      {/* Edge band table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Performance by EV% band</div>
-        <div className="text-[11px] text-slate-500 mb-3">Bands are based on EV/u (decimal). Example: 0.08 = 8%.</div>
-
-        <div className="overflow-x-auto border border-slate-800 rounded-xl">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-950/50">
-              <tr className="text-slate-400 border-b border-slate-800">
-                <th className="py-3 px-4">EV% band</th>
-                <th className="py-3 px-4 text-right">W-L</th>
-                <th className="py-3 px-4 text-right">Win%</th>
-                <th className="py-3 px-4 text-right">ROI%</th>
-                <th className="py-3 px-4 text-right">N</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {(edgeBandChart || []).length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-6 px-4 text-slate-500">No graded picks in EV bands yet.</td>
-                </tr>
-              ) : (
-                (edgeBandChart || []).map((b) => {
-                  const w = Number(b.wins || 0);
-                  const l = Number(b.losses || 0);
-                  const n = Number(b.count || b.picks || 0);
-                  const winPct = (w + l) ? (w / (w + l) * 100) : null;
-                  // ROI% uses the same simplifying assumption as other UI: $10 stake, -110 style
-                  const roiPct = n ? ((w * 9.09 - l * 10) / (n * 10) * 100) : null;
-                  return (
-                    <tr key={b.band || b.label} className="hover:bg-slate-800/30">
-                      <td className="py-3 px-4 font-black text-slate-100">{b.band || b.label}</td>
-                      <td className="py-3 px-4 text-right font-mono text-slate-200">{w}-{l}</td>
-                      <td className="py-3 px-4 text-right font-mono text-slate-200">{winPct === null ? '—' : `${winPct.toFixed(1)}%`}</td>
-                      <td className={`py-3 px-4 text-right font-mono font-bold ${roiPct === null ? 'text-slate-500' : roiPct >= 0 ? 'text-green-300' : 'text-red-300'}`}>{roiPct === null ? '—' : `${roiPct.toFixed(1)}%`}</td>
-                      <td className="py-3 px-4 text-right font-mono text-slate-400">{n}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
 
       {/* Existing analytics (kept) */}
       <ModelPerformanceAnalytics history={history || []} />
