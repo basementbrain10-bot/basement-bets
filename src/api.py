@@ -2112,7 +2112,8 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
     cache_key = f"{date}:{days}:{limit_games}:{'compute' if compute_missing else 'stored'}"
     now = datetime.now()
     cached = _top_picks_cache.get(cache_key)
-    if cached and (now - cached["at"]) < TOP_PICKS_TTL:
+    # When compute_missing=True, bypass cache so UI always gets freshly-computed recs.
+    if (not compute_missing) and cached and (now - cached["at"]) < TOP_PICKS_TTL:
         return cached["data"]
 
     # Pull the same board window as /api/board, but NCAAM only.
