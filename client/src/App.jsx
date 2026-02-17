@@ -467,7 +467,12 @@ function App() {
                     )}
 
                     {page === 'today' ? (
-                        <Research onAddBet={() => setShowAddBet(true)} showModelPerformanceTab={false} />
+                        <Research
+                            onAddBet={() => setShowAddBet(true)}
+                            showModelPerformanceTab={false}
+                            formatCurrency={formatCurrency}
+                            formatDateMDY={formatDateMDY}
+                        />
                     ) : page === 'model' ? (
                         <Picks />
                     ) : page === 'bankroll' ? (

@@ -4,7 +4,7 @@ import { ArrowUpDown, ChevronUp, ChevronDown, Filter, RefreshCw, CheckCircle, Al
 import ModelPerformanceAnalytics from '../components/ModelPerformanceAnalytics';
 import OpenBetsPanel from '../components/OpenBetsPanel';
 
-const Research = ({ onAddBet, showModelPerformanceTab = true }) => {
+const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, formatDateMDY }) => {
     const [edges, setEdges] = useState([]);
     const [history, setHistory] = useState([]);
     // Top-level tabs: board vs history
@@ -393,11 +393,19 @@ const Research = ({ onAddBet, showModelPerformanceTab = true }) => {
             <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-6">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-400 to-green-400 bg-clip-text text-transparent">
-                        Model Recommendations
+                        {showModelPerformanceTab ? 'Model Recommendations' : "Today's Recommended Bets"}
                     </h1>
-                    {/* Balance tiles removed (tracked in Performance) */}
+                    <div className="text-slate-400 text-sm mt-1">
+                        {showModelPerformanceTab ? 'Board + model performance.' : 'Recommended plays + your open bets in one place.'}
+                    </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                    <button
+                        onClick={() => onAddBet?.()}
+                        className="px-4 py-2 bg-emerald-500/15 hover:bg-emerald-500/20 rounded-xl text-sm transition-all flex items-center gap-2 border border-emerald-500/25 text-emerald-200"
+                    >
+                        <PlusCircle size={14} /> Add Bet
+                    </button>
                     <button
                         onClick={fetchSchedule}
                         disabled={loading}
@@ -433,7 +441,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true }) => {
             {activeTab === 'live' && (
                 <>
                     <div className="mb-6">
-                        <OpenBetsPanel />
+                        <OpenBetsPanel formatCurrency={formatCurrency} formatDateMDY={formatDateMDY} />
                     </div>
                     <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
                         <div className="flex flex-wrap items-center gap-3">
