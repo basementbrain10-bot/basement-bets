@@ -110,6 +110,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
 
     const [manualBet, setManualBet] = useState({
         sportsbook: "DraftKings",
+        account_id: "Main", // Primary=Main, Secondary=User2
         sport: "NFL",
         market_type: "Straight",
         event_name: "",
@@ -283,6 +284,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
 
             await api.post('/api/bets/manual', {
                 sportsbook: manualBet.sportsbook,
+                account_id: manualBet.account_id,
                 sport: manualBet.sport,
                 market_type: manualBet.market_type,
                 event_name: manualBet.event_name,

@@ -34,6 +34,17 @@ export default function ManualAddBetModal({
             </select>
           </div>
           <div>
+            <label className="text-xs text-gray-400">Account</label>
+            <select
+              className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-2 text-sm text-white"
+              value={manualBet.account_id || 'Main'}
+              onChange={(e) => setManualBet({ ...manualBet, account_id: e.target.value })}
+            >
+              <option value="Main">Primary</option>
+              <option value="User2">Secondary</option>
+            </select>
+          </div>
+          <div>
             <label className="text-xs text-gray-400">Date (YYYY-MM-DD)</label>
             <input
               className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-2 text-sm text-white"

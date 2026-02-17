@@ -971,6 +971,11 @@ async def save_manual_bet(request: Request, user: dict = Depends(get_current_use
         # Account grouping (TEXT). We intentionally allow human-friendly values like "Main" or "User2".
         raw_acc_id = bet_data.get("account_id")
         account_id = str(raw_acc_id).strip() if raw_acc_id is not None and str(raw_acc_id).strip() else None
+        if account_id:
+            if account_id.lower() == 'primary':
+                account_id = 'Main'
+            elif account_id.lower() == 'secondary':
+                account_id = 'User2'
 
         # Normalize provider name
         provider_raw = bet_data.get("sportsbook") or bet_data.get("provider", "")
