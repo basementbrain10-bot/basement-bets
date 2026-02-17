@@ -607,7 +607,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                     <tr className="text-slate-400 border-b border-slate-800">
                                         <th className="py-3 px-4">Sportsbook</th>
                                         <th className="py-3 px-4 text-right">Current</th>
-                                        <th className="py-3 px-4 text-right">Δ (since snapshot)</th>
+                                        
                                         <th className="py-3 px-4 text-right">Deposits</th>
                                         <th className="py-3 px-4 text-right">Withdrawals</th>
                                         <th className="py-3 px-4 text-right">Realized P/L</th>
@@ -616,7 +616,6 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                 <tbody className="divide-y divide-slate-800">
                                     {topRows.map(({ p, top, primary, secondary }) => {
                                         const cur = Number((top.ledger_in_play ?? top.in_play) || 0);
-                                        const delta = Number(top.ledger_delta || 0);
                                         const isOpen = expandedBook === p;
 
                                         return (
@@ -632,7 +631,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                                         </div>
                                                     </td>
                                                     <td className={`py-3 px-4 text-right font-black ${cur >= 0 ? 'text-green-300' : 'text-red-300'}`}>{fmt(cur)}</td>
-                                                    <td className={`py-3 px-4 text-right font-mono font-bold ${delta >= 0 ? 'text-green-300' : 'text-red-300'}`}>{fmt(delta)}</td>
+                                                    
                                                     <td className="py-3 px-4 text-right text-slate-300 font-mono">{fmt(top.deposited)}</td>
                                                     <td className="py-3 px-4 text-right text-slate-300 font-mono">{fmt(top.withdrawn)}</td>
                                                     <td className={`py-3 px-4 text-right font-mono font-bold ${Number(top.net_profit || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{fmt(top.net_profit)}</td>
@@ -645,7 +644,6 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                                                 <div className="border border-slate-800 rounded-lg p-4 bg-slate-950/20">
                                                                     <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Primary</div>
                                                                     <div className="mt-1 text-xl font-black text-white">{fmt(Number((primary?.ledger_in_play ?? primary?.in_play) || 0))}</div>
-                                                                    <div className="text-[11px] text-slate-500 mt-1">Δ {fmt(Number(primary?.ledger_delta || 0))}</div>
                                                                     <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
                                                                         <div>Dep <span className="font-mono text-slate-200">{fmt(Number(primary?.deposited || 0))}</span></div>
                                                                         <div>Wdr <span className="font-mono text-slate-200">{fmt(Number(primary?.withdrawn || 0))}</span></div>
@@ -654,7 +652,6 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                                                 <div className="border border-slate-800 rounded-lg p-4 bg-slate-950/20">
                                                                     <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Secondary</div>
                                                                     <div className="mt-1 text-xl font-black text-white">{fmt(Number((secondary?.ledger_in_play ?? secondary?.in_play) || 0))}</div>
-                                                                    <div className="text-[11px] text-slate-500 mt-1">Δ {fmt(Number(secondary?.ledger_delta || 0))}</div>
                                                                     <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
                                                                         <div>Dep <span className="font-mono text-slate-200">{fmt(Number(secondary?.deposited || 0))}</span></div>
                                                                         <div>Wdr <span className="font-mono text-slate-200">{fmt(Number(secondary?.withdrawn || 0))}</span></div>
