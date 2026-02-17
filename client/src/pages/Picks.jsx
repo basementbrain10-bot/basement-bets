@@ -191,7 +191,7 @@ export default function Picks() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex items-center justify-between gap-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-white">Model Performance</h1>
           <p className="text-slate-400 text-sm mt-1">All recommended picks (all leagues) • windows based on recommendation date (ET).</p>
@@ -243,8 +243,9 @@ export default function Picks() {
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
         <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Recommended bet performance (last 30 days)</div>
         <div className="text-[11px] text-slate-500 mb-3">Daily net units (+1 win, -1 loss, 0 push), based on graded recommended picks.</div>
-        <div className="h-[260px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-[260px] overflow-x-auto">
+          <div className="min-w-[360px] h-full">
+            <ResponsiveContainer width="100%" height="100%">
             <BarChart data={dailyPerformance} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
               <XAxis dataKey="day" tick={{ fill: '#94a3b8', fontSize: 11 }} />
@@ -260,15 +261,17 @@ export default function Picks() {
               <Legend />
               <Bar dataKey="units" name="Net Units" fill="#60a5fa" radius={[6, 6, 0, 0]} />
             </BarChart>
-          </ResponsiveContainer>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
       {/* Edge band chart */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
         <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Performance by EV% band (win rate)</div>
-        <div className="h-[260px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-[260px] overflow-x-auto">
+          <div className="min-w-[360px] h-full">
+            <ResponsiveContainer width="100%" height="100%">
             <BarChart data={edgeBandChart} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
               <XAxis dataKey="band" tick={{ fill: '#94a3b8', fontSize: 12 }} />
@@ -280,7 +283,8 @@ export default function Picks() {
               <Legend />
               <Bar dataKey="winRate" name="Win%" fill="#34d399" radius={[6, 6, 0, 0]} />
             </BarChart>
-          </ResponsiveContainer>
+            </ResponsiveContainer>
+          </div>
         </div>
         <div className="mt-2 text-[11px] text-slate-500">Bands are based on EV/u (decimal). Example: 0.08 = 8%.</div>
       </div>
@@ -306,8 +310,9 @@ export default function Picks() {
             </div>
 
             {/* Bar chart */}
-            <div className="h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[260px] overflow-x-auto">
+              <div className="min-w-[360px] h-full">
+                <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={confidenceBreakdown} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                   <XAxis dataKey="bucket" tick={{ fill: '#94a3b8', fontSize: 12 }} />
@@ -326,7 +331,8 @@ export default function Picks() {
                   <Bar yAxisId="left" dataKey="winRate" name="Win%" fill="#34d399" radius={[6, 6, 0, 0]} />
                   <Bar yAxisId="right" dataKey="roi" name="ROI%" fill="#60a5fa" radius={[6, 6, 0, 0]} />
                 </BarChart>
-              </ResponsiveContainer>
+                </ResponsiveContainer>
+              </div>
             </div>
           </>
         )}
