@@ -2108,7 +2108,8 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
     # Still capped to keep this endpoint from becoming too expensive.
     limit_games = max(1, min(limit_games, 250))
 
-    cache_key = f"{date}:{days}:{limit_games}"
+    # Cache must distinguish between fast-path (stored only) and compute_missing mode.
+    cache_key = f"{date}:{days}:{limit_games}:{'compute' if compute_missing else 'stored'}"
     now = datetime.now()
     cached = _top_picks_cache.get(cache_key)
     if cached and (now - cached["at"]) < TOP_PICKS_TTL:
