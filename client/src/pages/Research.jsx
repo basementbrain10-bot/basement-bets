@@ -851,7 +851,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 </td>
                                             </tr>
                                         ) : (
-                                            {(() => {
+                                            (() => {
                                                 const isSameEtDay = (ts, ymd) => {
                                                     if (!ts || !ymd) return false;
                                                     try {
@@ -1061,7 +1061,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                     </tr>
                                                 );
                                             });
-                                            })()}
+                                            })()
                                         )}
                                     </tbody>
                                 </table>
