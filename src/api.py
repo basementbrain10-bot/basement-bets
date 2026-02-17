@@ -1533,7 +1533,12 @@ async def grade_research_history():
 @app.get("/api/research/history")
 async def get_history(user: dict = Depends(get_current_user)):
     user_id = user.get("sub")
-    return fetch_model_history(user_id=user_id, recommended_only=True)
+    # Primary: scoped to user
+    rows = fetch_model_history(user_id=user_id, recommended_only=True)
+    # Fallback: legacy single-user data may have NULL/mismatched user_id
+    if not rows:
+        rows = fetch_model_history(user_id=None, recommended_only=True)
+    return rows
 
 
 @app.get("/api/schedule")
@@ -2471,12 +2476,16 @@ async def get_net_team(team: str, asof_date: str | None = None):
 
 
 @app.get("/api/ncaam/history")
-async def get_ncaam_history(limit: int = 100):
-    """
-    Returns past model predictions/analysis.
+async def get_ncaam_history(limit: int = 100, user: dict = Depends(get_current_user)):
+    """Returns past model predictions/analysis (recommended picks).
+
+    Note: legacy single-user rows may have NULL/mismatched user_id; we fall back to unscoped.
     """
     from src.database import fetch_model_history
-    data = fetch_model_history(limit=limit, recommended_only=True)
+    uid = (user or {}).get('sub')
+    data = fetch_model_history(limit=limit, league='NCAAM', user_id=uid, recommended_only=True)
+    if not data:
+        data = fetch_model_history(limit=limit, league='NCAAM', user_id=None, recommended_only=True)
     return _ensure_utc(data)
 
 @app.get("/api/ncaam/performance-report")
