@@ -70,12 +70,16 @@ export default function Picks() {
     return (history || []).filter((h) => isGraded(h.graded_result || h.outcome || h.result));
   }, [history]);
 
-  const gradedYesterday = useMemo(() => {
-    // Use the game slate day (event start_time in ET) when available.
-    // analyzed_at can be earlier than the actual game day, which makes "yesterday" look empty.
+  const yesterdaySlate = useMemo(() => {
+    // Use slate day (event start_time in ET) when available.
     const dayKey = (h) => etDay(h?.start_time) || etDay(h?.analyzed_at);
-    return graded.filter((h) => dayKey(h) === yesterdayEt);
-  }, [graded, yesterdayEt]);
+    return (history || []).filter((h) => dayKey(h) === yesterdayEt);
+  }, [history, yesterdayEt]);
+
+  const gradedYesterday = useMemo(() => {
+    const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
+    return (yesterdaySlate || []).filter((h) => isGraded(res(h)));
+  }, [yesterdaySlate]);
 
   const yRecord = useMemo(() => {
     const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
@@ -369,8 +373,42 @@ export default function Picks() {
             <div className="text-white font-black">{gradedYesterday.length}</div>
           </div>
         </div>
-        {gradedYesterday.length === 0 && (
-          <div className="mt-3 text-xs text-slate-500">No graded recommended picks found for yesterday yet.</div>
+        {(() => {
+          const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
+          const pending = (yesterdaySlate || []).filter((h) => !isGraded(res(h))).length;
+          if ((yesterdaySlate || []).length === 0) {
+            return <div className="mt-3 text-xs text-slate-500">No recommended picks found for yesterday.</div>;
+          }
+          if (gradedYesterday.length === 0 && pending > 0) {
+            return <div className="mt-3 text-xs text-slate-500">Yesterday has {pending} pick(s) still pending / ungraded.</div>;
+          }
+          if (gradedYesterday.length === 0) {
+            return <div className="mt-3 text-xs text-slate-500">No graded recommended picks found for yesterday yet.</div>;
+          }
+          if (pending > 0) {
+            return <div className="mt-3 text-xs text-slate-500">Also pending: {pending}</div>;
+          }
+          return null;
+        })()}
+
+        {/* Quick list (yesterday slate) */}
+        {(yesterdaySlate || []).length > 0 && (
+          <div className="mt-4 space-y-2">
+            {(yesterdaySlate || []).slice(0, 6).map((h, idx) => {
+              const out = String(h.graded_result || h.outcome || h.result || 'PENDING').toUpperCase();
+              const cls = out === 'WON' || out === 'WIN' ? 'text-green-300' : out === 'LOST' || out === 'LOSS' ? 'text-red-300' : out === 'PUSH' ? 'text-slate-300' : 'text-slate-500';
+              return (
+                <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/20">
+                  <div className="min-w-0">
+                    <div className="text-xs font-black text-slate-100 truncate">{h.sport || '—'} • {(h.away_team && h.home_team) ? `${h.away_team} @ ${h.home_team}` : (h.matchup || '—')}</div>
+                    <div className="text-xs text-slate-400 truncate">{h.market_type || h.bet_type || '—'} • {h.selection || '—'}</div>
+                  </div>
+                  <div className={`text-xs font-mono font-black ${cls}`}>{out}</div>
+                </div>
+              );
+            })}
+            {(yesterdaySlate || []).length > 6 && <div className="text-[11px] text-slate-500">Showing first 6 picks.</div>}
+          </div>
         )}
       </div>
 
