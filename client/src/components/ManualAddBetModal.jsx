@@ -8,12 +8,12 @@ export default function ManualAddBetModal({
   isUpdating,
   onSave,
   onClose,
+  embedded = false,
 }) {
   if (!show) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-5">
+  const Card = (
+    <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="text-white font-bold">Add Bet (Manual)</div>
           <button type="button" className="text-gray-400 hover:text-white" onClick={() => onClose?.()}>
@@ -142,6 +142,13 @@ export default function ManualAddBetModal({
           This creates a bet row directly in your Transactions table (manual tracking).
         </div>
       </div>
+  );
+
+  if (embedded) return Card;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      {Card}
     </div>
   );
 }

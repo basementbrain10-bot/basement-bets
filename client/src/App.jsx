@@ -11,6 +11,7 @@ import Picks from './pages/Picks';
 import Bankroll from './pages/Bankroll';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 import TransactionView from './components/TransactionView';
+import ManualAddBetModal from './components/ManualAddBetModal';
 // import { StagingBanner } from './components/StagingBanner';
 
 console.log("Basement Bets Frontend v1.6.5 Loaded at " + new Date().toISOString());
@@ -122,6 +123,20 @@ function App() {
     const [periodStats, setPeriodStats] = useState({ '7d': null, '30d': null, 'ytd': null, 'all': null });
     const [edgeBreakdown, setEdgeBreakdown] = useState([]);
     const [showAddBet, setShowAddBet] = useState(false);
+    const [addBetMode, setAddBetMode] = useState('slip'); // slip | manual
+    const [manualBet, setManualBet] = useState({
+        sportsbook: "DraftKings",
+        account_id: "Main",
+        sport: "NFL",
+        market_type: "Straight",
+        event_name: "",
+        selection: "",
+        odds: "",
+        stake: "",
+        status: "PENDING",
+        placed_at: new Date().toISOString().slice(0, 10)
+    });
+    const [isManualSaving, setIsManualSaving] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [loading, setLoading] = useState(true);
 
@@ -133,6 +148,38 @@ function App() {
     const handleLogin = (pass) => {
         localStorage.setItem('basement_password', pass);
         window.location.reload();
+    };
+
+    const submitManualBet = async () => {
+        setIsManualSaving(true);
+        try {
+            const american = manualBet.odds ? parseInt(manualBet.odds, 10) : null;
+            const stake = manualBet.stake ? parseFloat(manualBet.stake) : 0;
+
+            await api.post('/api/bets/manual', {
+                sportsbook: manualBet.sportsbook,
+                account_id: manualBet.account_id,
+                sport: manualBet.sport,
+                market_type: manualBet.market_type,
+                event_name: manualBet.event_name,
+                selection: manualBet.selection,
+                price: { american },
+                stake,
+                status: manualBet.status,
+                placed_at: manualBet.placed_at,
+                raw_text: 'manual-ui'
+            });
+
+            setShowAddBet(false);
+            setAddBetMode('slip');
+            try { localStorage.setItem('nav_after_save', 'today'); } catch (e) { }
+            window.location.reload();
+        } catch (err) {
+            console.error('Manual bet save failed', err);
+            alert('Failed to add bet. Check required fields.');
+        } finally {
+            setIsManualSaving(false);
+        }
     };
 
     const handleSyncResults = async () => {
@@ -423,10 +470,10 @@ function App() {
                             </button>
                             {/* Sync DK temporarily removed (rate limits / unreliable) */}
                             <button
-                                onClick={() => setShowAddBet(true)}
+                                onClick={() => { setAddBetMode('slip'); setShowAddBet(true); }}
                                 className="px-4 py-2 bg-emerald-500/15 hover:bg-emerald-500/20 rounded-2xl flex items-center gap-2 font-semibold transition border border-emerald-500/25 text-emerald-200"
                             >
-                                <PlusCircle size={18} /> Add Bet Slip
+                                <PlusCircle size={18} /> Add Bet
                             </button>
                         </div>
                     </header>
@@ -455,16 +502,42 @@ function App() {
                     {showAddBet && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
                             <div className="w-full max-w-2xl relative">
-                                <PasteSlipContainer
-                                    onSaveSuccess={() => {
-                                        setShowAddBet(false);
-                                        // After reload, land back on Today (most common workflow)
-                                        try { localStorage.setItem('nav_after_save', 'today'); } catch (e) { }
-                                        // Refresh data
-                                        window.location.reload(); // Simple refresh for now
-                                    }}
-                                    onClose={() => setShowAddBet(false)}
-                                />
+                                <div className="mb-3 inline-flex gap-1 p-1 rounded-2xl bg-slate-900/60 border border-slate-700/50">
+                                    <button
+                                        onClick={() => setAddBetMode('slip')}
+                                        className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${addBetMode === 'slip' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                    >
+                                        Paste Slip
+                                    </button>
+                                    <button
+                                        onClick={() => setAddBetMode('manual')}
+                                        className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${addBetMode === 'manual' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                    >
+                                        Manual
+                                    </button>
+                                </div>
+
+                                {addBetMode === 'slip' ? (
+                                    <PasteSlipContainer
+                                        onSaveSuccess={() => {
+                                            setShowAddBet(false);
+                                            setAddBetMode('slip');
+                                            try { localStorage.setItem('nav_after_save', 'today'); } catch (e) { }
+                                            window.location.reload();
+                                        }}
+                                        onClose={() => setShowAddBet(false)}
+                                    />
+                                ) : (
+                                    <ManualAddBetModal
+                                        show={true}
+                                        embedded={true}
+                                        manualBet={manualBet}
+                                        setManualBet={setManualBet}
+                                        isUpdating={isManualSaving}
+                                        onSave={submitManualBet}
+                                        onClose={() => setShowAddBet(false)}
+                                    />
+                                )}
                             </div>
                         </div>
                     )}

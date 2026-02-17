@@ -39,7 +39,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
     // Sorting State
     const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
 
-    const BOARD_DAYS_DEFAULT = 3;
+    const BOARD_DAYS_DEFAULT = showModelPerformanceTab ? 3 : 1;
 
     useEffect(() => {
         // reset mobile expansion when the slate changes
@@ -400,12 +400,14 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    <button
-                        onClick={() => onAddBet?.()}
-                        className="px-4 py-2 bg-emerald-500/15 hover:bg-emerald-500/20 rounded-xl text-sm transition-all flex items-center gap-2 border border-emerald-500/25 text-emerald-200"
-                    >
-                        <PlusCircle size={14} /> Add Bet
-                    </button>
+                    {showModelPerformanceTab && (
+                        <button
+                            onClick={() => onAddBet?.()}
+                            className="px-4 py-2 bg-emerald-500/15 hover:bg-emerald-500/20 rounded-xl text-sm transition-all flex items-center gap-2 border border-emerald-500/25 text-emerald-200"
+                        >
+                            <PlusCircle size={14} /> Add Bet
+                        </button>
+                    )}
                     <button
                         onClick={fetchSchedule}
                         disabled={loading}
