@@ -349,7 +349,6 @@ export default function Picks() {
                     <Cell key={`cell-${index}`} fill={entry._fill} />
                   ))}
                 </Bar>
-                <Line type="monotone" dataKey="winRate" name="Trend" stroke="#eab308" strokeWidth={2} dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
