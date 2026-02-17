@@ -126,6 +126,8 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
     const sports = ["All", ...[...new Set(bets.map(b => b.sport).filter(Boolean))].sort()];
     const types = ["All", ...[...new Set(bets.map(b => b.bet_type).filter(Boolean))].sort()];
     const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'descending' });
+
+    const acctLabel = (b) => ((b?.account_id === 'User2' || String(b?.account_id || '').toLowerCase() === 'secondary') ? 'Secondary' : 'Primary');
     const [error, setError] = useState(null);
     const [isUpdating, setIsUpdating] = useState(false);
 
@@ -234,7 +236,8 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
             window.location.reload();
         } catch (err) {
             console.error("Delete Error:", err);
-            alert("Failed to delete bet.");
+            alert("Failed to delete bet. " + (err?.response?.data?.detail || err?.response?.data?.message || err?.message || ''));
+
         } finally {
             setIsUpdating(false);
         }
@@ -904,6 +907,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                             <tr className="bg-gray-900/20 backdrop-blur-sm">
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[84px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('date')}>Date{getSortIcon('date')}</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[80px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('provider')}>Book{getSortIcon('provider')}</th>
+                                <th className="px-3 py-3 border-b border-gray-700/50 select-none w-[72px] text-gray-500 font-black uppercase tracking-tighter">Acct</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[64px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('sport')}>Sport{getSortIcon('sport')}</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 cursor-pointer hover:bg-gray-800/50 select-none w-[70px] text-gray-500 font-black uppercase tracking-tighter" onClick={() => requestSort('bet_type')}>Type{getSortIcon('bet_type')}</th>
                                 <th className="px-3 py-3 border-b border-gray-700/50 select-none w-[180px] text-gray-500 font-black uppercase tracking-tighter">Event</th>
@@ -993,6 +997,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                             setEditBet({
                                                 id: bet.id,
                                                 provider: bet.provider,
+                                                account_id: bet.account_id || 'Main',
                                                 date: (bet.sort_date || bet.date || '').slice(0, 10),
                                                 sport: bet.sport,
                                                 bet_type: bet.bet_type,
@@ -1019,6 +1024,11 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                                     "bg-gray-800/40 text-gray-400 border-gray-700/50"
                                                 }`}>
                                                 {bet.provider}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-3">
+                                            <span className="text-[10px] px-2 py-0.5 rounded font-black tracking-tighter uppercase border border-slate-700/50 bg-slate-800/30 text-slate-300">
+                                                {(bet.account_id === 'User2' || String(bet.account_id || '').toLowerCase() === 'secondary') ? 'Secondary' : 'Primary'}
                                             </span>
                                         </td>
                                         <td className="px-3 py-3">
