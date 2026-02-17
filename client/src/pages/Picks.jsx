@@ -66,6 +66,50 @@ export default function Picks() {
     return { w, l, p, decided, winRate };
   }, [gradedYesterday]);
 
+  const confidenceBreakdown = useMemo(() => {
+    const normRes = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
+    const isW = (r) => r === 'WON' || r === 'WIN';
+    const isL = (r) => r === 'LOST' || r === 'LOSS';
+
+    const bucket = (h) => {
+      const c = Number(h?.confidence_0_100 ?? h?.confidence ?? 0);
+      if (c >= 80) return 'High';
+      if (c >= 50) return 'Medium';
+      return 'Low';
+    };
+
+    const base = { High: [], Medium: [], Low: [] };
+    graded.forEach((h) => {
+      base[bucket(h)].push(h);
+    });
+
+    const calc = (rows) => {
+      const w = rows.filter((h) => isW(normRes(h))).length;
+      const l = rows.filter((h) => isL(normRes(h))).length;
+      const p = rows.filter((h) => normRes(h) === 'PUSH').length;
+      const decided = w + l;
+      const winRate = decided > 0 ? (w / decided) * 100 : null;
+      // Same simplifying assumption used elsewhere in UI: $10 stake, -110 style
+      const roi = rows.length > 0 ? ((w * 9.09 - l * 10) / (rows.length * 10)) * 100 : null;
+      return { w, l, p, decided, winRate, roi, n: rows.length };
+    };
+
+    const out = ['High', 'Medium', 'Low'].map((k) => {
+      const s = calc(base[k]);
+      return {
+        bucket: k,
+        picks: s.n,
+        wins: s.w,
+        losses: s.l,
+        pushes: s.p,
+        winRate: s.winRate === null ? null : Number(s.winRate.toFixed(1)),
+        roi: s.roi === null ? null : Number(s.roi.toFixed(1)),
+      };
+    }).filter((x) => x.picks > 0);
+
+    return out;
+  }, [graded]);
+
   const edgeBandChart = useMemo(() => {
     // EV/u decimal bands
     const bands = [
@@ -195,6 +239,53 @@ export default function Picks() {
           </ResponsiveContainer>
         </div>
         <div className="mt-2 text-[11px] text-slate-500">Bands are based on EV/u (decimal). Example: 0.08 = 8%.</div>
+      </div>
+
+      {/* Confidence breakdown (win% + ROI) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Performance by confidence</div>
+        <div className="text-[11px] text-slate-500 mb-4">Buckets use confidence_0_100: High ≥80, Medium 50–79, Low &lt;50.</div>
+
+        {(!confidenceBreakdown || confidenceBreakdown.length === 0) ? (
+          <div className="text-xs text-slate-500">No graded picks with confidence yet.</div>
+        ) : (
+          <>
+            {/* Recap tiles */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              {confidenceBreakdown.map((b) => (
+                <div key={b.bucket} className="bg-slate-950/30 border border-slate-800 rounded-xl p-4">
+                  <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{b.bucket}</div>
+                  <div className="mt-1 text-white font-black text-lg">{b.wins}-{b.losses}{b.pushes ? `-${b.pushes}` : ''}</div>
+                  <div className="mt-1 text-slate-400 text-xs">Win% (W/L): <span className="text-slate-200 font-bold">{b.winRate === null ? '—' : `${b.winRate}%`}</span> • ROI: <span className={`font-bold ${Number(b.roi || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{b.roi === null ? '—' : `${b.roi}%`}</span> • N={b.picks}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Bar chart */}
+            <div className="h-[260px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={confidenceBreakdown} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                  <XAxis dataKey="bucket" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                  <YAxis yAxisId="left" tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, 100]} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                  <Tooltip
+                    contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
+                    labelStyle={{ color: '#e2e8f0' }}
+                    formatter={(v, name) => {
+                      if (name === 'winRate') return [`${Number(v).toFixed(1)}%`, 'Win%'];
+                      if (name === 'roi') return [`${Number(v).toFixed(1)}%`, 'ROI'];
+                      return [v, name];
+                    }}
+                  />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="winRate" name="Win%" fill="#34d399" radius={[6, 6, 0, 0]} />
+                  <Bar yAxisId="right" dataKey="roi" name="ROI%" fill="#60a5fa" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Existing analytics (kept) */}
