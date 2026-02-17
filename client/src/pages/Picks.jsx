@@ -31,7 +31,16 @@ export default function Picks() {
       const res = await api.get('/api/research/history');
       setHistory(res.data || []);
     } catch (e) {
-      setErr(e?.response?.data?.detail || e?.message || 'Failed to load model performance');
+      // Match other pages: if auth fails, prompt for Basement password.
+      if (e?.response?.status === 403) {
+        const pass = prompt('Authentication failed. Please enter the Basement Password:');
+        if (pass) {
+          try { localStorage.setItem('basement_password', pass); } catch (err) { }
+          window.location.reload();
+          return;
+        }
+      }
+      setErr(e?.response?.data?.detail || e?.response?.data?.message || e?.message || 'Failed to load model performance');
     } finally {
       setLoading(false);
     }
@@ -197,6 +206,12 @@ export default function Picks() {
       </div>
 
       {err && <div className="p-3 rounded-lg bg-red-900/20 border border-red-800 text-red-200 text-sm">{err}</div>}
+
+      {!loading && !err && (!history || history.length === 0) && (
+        <div className="p-4 rounded-lg bg-slate-900/40 border border-slate-800 text-slate-400 text-sm">
+          No recommended-pick history returned yet. If you expect data here, try Refresh.
+        </div>
+      )}
 
       {/* Yesterday graded results */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
