@@ -155,6 +155,18 @@ function App() {
         }
     };
 
+    // If we reloaded after saving a bet/transaction, respect the requested landing tab.
+    useEffect(() => {
+        try {
+            const nav = localStorage.getItem('nav_after_save');
+            if (nav === 'transactions') {
+                setView('actuals');
+                setActualsTab('transactions');
+            }
+            if (nav) localStorage.removeItem('nav_after_save');
+        } catch (e) { }
+    }, []);
+
     // StrictMode guard - prevents double initial fetch in development
     const didLoad = useRef(false);
 
@@ -421,6 +433,8 @@ function App() {
                                 <PasteSlipContainer
                                     onSaveSuccess={() => {
                                         setShowAddBet(false);
+                                        // After reload, land back on Actuals → Transactions
+                                        try { localStorage.setItem('nav_after_save', 'transactions'); } catch (e) { }
                                         // Refresh data
                                         window.location.reload(); // Simple refresh for now
                                     }}

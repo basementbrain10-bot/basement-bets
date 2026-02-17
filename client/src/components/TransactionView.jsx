@@ -229,6 +229,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
             await api.delete(`/api/bets/${betId}`);
 
             // Refresh everything (open bets list + balances/tiles)
+            try { localStorage.setItem('nav_after_save', 'transactions'); } catch (e) { }
             window.location.reload();
         } catch (err) {
             console.error("Delete Error:", err);
@@ -297,6 +298,8 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
             });
 
             // easiest: refresh to pick up the inserted bet + refreshed analytics
+            // After reload, land back on Actuals → Transactions
+            try { localStorage.setItem('nav_after_save', 'transactions'); } catch (e) { }
             window.location.reload();
         } catch (err) {
             console.error('Manual bet save failed', err);
