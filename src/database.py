@@ -1026,7 +1026,11 @@ def _sync_transaction_for_bet(bet_id, doc=None):
 
 
 def update_bet_status(bet_id: int, status: str, user_id: str | None = None) -> bool:
-    """Update bet status for a user's bet."""
+    """Update bet status for a user's bet.
+
+    Important: for manual/open bets, profit is often 0 while pending. When a bet is marked LOST,
+    we must set profit = -wager (if profit is missing/0) so bankroll math reflects the loss.
+    """
     st = (status or '').upper()
     if st not in ('WON', 'LOST', 'PUSH', 'PENDING'):
         return False
@@ -1038,12 +1042,32 @@ def update_bet_status(bet_id: int, status: str, user_id: str | None = None) -> b
     try:
         with get_db_connection() as conn:
             cur = _exec(conn, q, (st, int(bet_id), user_id, user_id))
+
+            # Ensure profit reflects settlement for common manual workflows
+            if st == 'LOST':
+                _exec(conn, """
+                    UPDATE bets
+                    SET profit = -1 * COALESCE(NULLIF(wager,0), wager)
+                    WHERE id=%s
+                      AND (%s IS NULL OR user_id=%s)
+                      AND COALESCE(profit, 0) = 0
+                      AND COALESCE(wager, 0) > 0
+                """, (int(bet_id), user_id, user_id))
+            elif st in ('PUSH', 'VOID'):
+                _exec(conn, """
+                    UPDATE bets
+                    SET profit = 0
+                    WHERE id=%s
+                      AND (%s IS NULL OR user_id=%s)
+                      AND profit IS NULL
+                """, (int(bet_id), user_id, user_id))
+
             conn.commit()
             success = bool(cur.rowcount and cur.rowcount > 0)
-            
+
         if success:
             _sync_transaction_for_bet(bet_id)
-            
+
         return success
     except Exception as e:
         print(f"[DB] update_bet_status error: {e}")

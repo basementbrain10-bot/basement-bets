@@ -36,11 +36,6 @@ export default function Bankroll({ financials, formatCurrency }) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <h1 className="text-2xl font-black text-white">Bankroll</h1>
-        <p className="text-slate-400 text-sm mt-1">All bankroll + financials info is centralized here.</p>
-      </div>
-
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
         <div className="p-6 border-b border-slate-800">
           <div className="flex items-center justify-between">
