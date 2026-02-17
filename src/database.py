@@ -1303,7 +1303,9 @@ def fetch_model_history(limit=100, league=None, user_id=None, recommended_only: 
     params = []
 
     if user_id:
-        conditions.append("m.user_id = %s")
+        # Many legacy model_predictions rows were created without a user_id.
+        # In single-user mode, treat NULL/empty user_id as belonging to the current user.
+        conditions.append("(m.user_id = %s OR m.user_id IS NULL OR m.user_id = '')")
         params.append(user_id)
 
     if league:
