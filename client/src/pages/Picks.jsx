@@ -23,6 +23,18 @@ export default function Picks() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
+  const [isGrading, setIsGrading] = useState(false);
+
+  const gradeNow = async () => {
+    try {
+      setIsGrading(true);
+      await api.post('/api/research/grade');
+    } catch (e) {
+      // ignore
+    } finally {
+      setIsGrading(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -105,6 +117,11 @@ export default function Picks() {
   const gradedYesterday = useMemo(() => {
     const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
     return (yesterdaySlate || []).filter((h) => isGraded(res(h)));
+  }, [yesterdaySlate]);
+
+  const pendingYesterday = useMemo(() => {
+    const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
+    return (yesterdaySlate || []).filter((h) => !isGraded(res(h))).length;
   }, [yesterdaySlate]);
 
   const yRecord = useMemo(() => {
@@ -383,7 +400,19 @@ export default function Picks() {
         <div className="flex items-center gap-2 mb-2">
           <BarChart3 size={18} className="text-emerald-300" />
           <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Yesterday (graded)</div>
-          <div className="ml-auto text-xs text-slate-500">{yesterdayEt}</div>
+          <div className="ml-auto flex items-center gap-2">
+            <div className="text-xs text-slate-500">{yesterdayEt}</div>
+            {pendingYesterday > 0 && (
+              <button
+                onClick={async () => { await gradeNow(); await load(); }}
+                disabled={isGrading}
+                className={`px-2 py-1 rounded-lg text-xs font-bold border transition ${isGrading ? 'text-slate-500 border-slate-800 bg-slate-900/40' : 'text-amber-200 border-amber-900/40 bg-amber-900/20 hover:bg-amber-900/30'}`}
+                title="Run grading now"
+              >
+                {isGrading ? 'Grading…' : 'Grade now'}
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap gap-6 text-sm">
           <div>
@@ -431,13 +460,12 @@ export default function Picks() {
           );
         })()}
         {(() => {
-          const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
-          const pending = (yesterdaySlate || []).filter((h) => !isGraded(res(h))).length;
+          const pending = pendingYesterday;
           if ((yesterdaySlate || []).length === 0) {
             return <div className="mt-3 text-xs text-slate-500">No recommended picks found for yesterday.</div>;
           }
           if (gradedYesterday.length === 0 && pending > 0) {
-            return <div className="mt-3 text-xs text-slate-500">Yesterday has {pending} pick(s) still pending / ungraded.</div>;
+            return <div className="mt-3 text-xs text-slate-500">Yesterday has {pending} pick(s) still pending / ungraded. Click “Grade now”.</div>;
           }
           if (gradedYesterday.length === 0) {
             return <div className="mt-3 text-xs text-slate-500">No graded recommended picks found for yesterday yet.</div>;
