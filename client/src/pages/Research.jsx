@@ -851,7 +851,23 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 </td>
                                             </tr>
                                         ) : (
-                                            getProcessedEdges().map((edge, idx) => {
+                                            {(() => {
+                                                const isSameEtDay = (ts, ymd) => {
+                                                    if (!ts || !ymd) return false;
+                                                    try {
+                                                        const d = new Date(ts);
+                                                        const s = d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+                                                        return s === ymd;
+                                                    } catch (e) {
+                                                        return false;
+                                                    }
+                                                };
+
+                                                const boardEdges = (!showModelPerformanceTab)
+                                                    ? getProcessedEdges().filter((e) => isSameEtDay(e?.start_time, selectedDate))
+                                                    : getProcessedEdges();
+
+                                                return boardEdges.map((edge, idx) => {
                                                 const date = edge.start_time ? new Date(edge.start_time) : null;
                                                 const dateStr = date ? date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', timeZone: 'America/New_York' }) : '-';
                                                 const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
@@ -1044,7 +1060,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                         </td>
                                                     </tr>
                                                 );
-                                            })
+                                            });
+                                            })()}
                                         )}
                                     </tbody>
                                 </table>
