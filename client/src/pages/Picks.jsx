@@ -1,15 +1,180 @@
-import React from 'react';
-import PerformanceReportNCAAM from '../components/PerformanceReportNCAAM';
+import React, { useEffect, useMemo, useState } from 'react';
+import api from '../api/axios';
+import { RefreshCw, BarChart3 } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import ModelPerformanceAnalytics from '../components/ModelPerformanceAnalytics';
+
+const etDay = (dt) => {
+  if (!dt) return null;
+  try {
+    const d = new Date(dt);
+    return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  } catch (e) {
+    return null;
+  }
+};
+
+const isGraded = (x) => {
+  const s = String(x || '').toUpperCase();
+  return s === 'WON' || s === 'WIN' || s === 'LOST' || s === 'LOSS' || s === 'PUSH';
+};
 
 export default function Picks() {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await api.get('/api/research/history');
+      setHistory(res.data || []);
+    } catch (e) {
+      setErr(e?.response?.data?.detail || e?.message || 'Failed to load model performance');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const yesterdayEt = useMemo(() => {
+    const d = new Date();
+    // Convert to ET day string by forcing timezone formatting after subtracting 1 day
+    d.setDate(d.getDate() - 1);
+    return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  }, []);
+
+  const graded = useMemo(() => {
+    return (history || []).filter((h) => isGraded(h.graded_result || h.outcome || h.result));
+  }, [history]);
+
+  const gradedYesterday = useMemo(() => {
+    return graded.filter((h) => etDay(h.analyzed_at) === yesterdayEt);
+  }, [graded, yesterdayEt]);
+
+  const yRecord = useMemo(() => {
+    const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
+    const w = gradedYesterday.filter((h) => res(h) === 'WON' || res(h) === 'WIN').length;
+    const l = gradedYesterday.filter((h) => res(h) === 'LOST' || res(h) === 'LOSS').length;
+    const p = gradedYesterday.filter((h) => res(h) === 'PUSH').length;
+    const decided = w + l;
+    const winRate = decided > 0 ? (w / decided) * 100 : 0;
+    return { w, l, p, decided, winRate };
+  }, [gradedYesterday]);
+
+  const edgeBandChart = useMemo(() => {
+    // EV/u decimal bands
+    const bands = [
+      { lo: 0.0, hi: 0.05, label: '0–5%' },
+      { lo: 0.05, hi: 0.1, label: '5–10%' },
+      { lo: 0.1, hi: 0.15, label: '10–15%' },
+      { lo: 0.15, hi: 0.2, label: '15–20%' },
+      { lo: 0.2, hi: 0.25, label: '20–25%' },
+      { lo: 0.25, hi: 0.3, label: '25–30%' },
+      { lo: 0.3, hi: null, label: '30%+' },
+    ];
+
+    const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
+    const ev = (h) => {
+      const n = Number(h?.ev_per_unit ?? h?.ev);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    return bands
+      .map((b) => {
+        const rows = graded.filter((h) => {
+          const e = ev(h);
+          if (!Number.isFinite(e)) return false;
+          if (b.hi == null) return e >= b.lo;
+          return e >= b.lo && e < b.hi;
+        });
+        const w = rows.filter((h) => res(h) === 'WON' || res(h) === 'WIN').length;
+        const l = rows.filter((h) => res(h) === 'LOST' || res(h) === 'LOSS').length;
+        const decided = w + l;
+        const winRate = decided > 0 ? (w / decided) * 100 : 0;
+        return {
+          band: b.label,
+          picks: rows.length,
+          wins: w,
+          losses: l,
+          winRate: Number(winRate.toFixed(1)),
+        };
+      })
+      .filter((x) => x.picks > 0);
+  }, [graded]);
+
   return (
     <div className="space-y-6">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <h1 className="text-2xl font-black text-white">Picks</h1>
-        <p className="text-slate-400 text-sm mt-1">Daily recommended bets + recent model performance.</p>
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-white">Model Performance</h1>
+          <p className="text-slate-400 text-sm mt-1">All recommended picks (all leagues) • windows based on recommendation date (ET).</p>
+        </div>
+        <button
+          onClick={load}
+          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-bold flex items-center gap-2"
+        >
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          Refresh
+        </button>
       </div>
 
-      <PerformanceReportNCAAM />
+      {err && <div className="p-3 rounded-lg bg-red-900/20 border border-red-800 text-red-200 text-sm">{err}</div>}
+
+      {/* Yesterday graded results */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <BarChart3 size={18} className="text-emerald-300" />
+          <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Yesterday (graded)</div>
+          <div className="ml-auto text-xs text-slate-500">{yesterdayEt}</div>
+        </div>
+        <div className="flex flex-wrap gap-6 text-sm">
+          <div>
+            <div className="text-slate-400 text-xs">Record</div>
+            <div className="text-white font-black">{yRecord.w}-{yRecord.l}-{yRecord.p}</div>
+          </div>
+          <div>
+            <div className="text-slate-400 text-xs">Win rate</div>
+            <div className="text-white font-black">{yRecord.decided ? `${yRecord.winRate.toFixed(1)}%` : '—'}</div>
+          </div>
+          <div>
+            <div className="text-slate-400 text-xs">Graded picks</div>
+            <div className="text-white font-black">{gradedYesterday.length}</div>
+          </div>
+        </div>
+        {gradedYesterday.length === 0 && (
+          <div className="mt-3 text-xs text-slate-500">No graded recommended picks found for yesterday yet.</div>
+        )}
+      </div>
+
+      {/* Edge band chart */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Performance by EV% band (win rate)</div>
+        <div className="h-[260px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={edgeBandChart} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+              <XAxis dataKey="band" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+              <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, 100]} />
+              <Tooltip
+                contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
+                labelStyle={{ color: '#e2e8f0' }}
+              />
+              <Legend />
+              <Bar dataKey="winRate" name="Win%" fill="#34d399" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="mt-2 text-[11px] text-slate-500">Bands are based on EV/u (decimal). Example: 0.08 = 8%.</div>
+      </div>
+
+      {/* Existing analytics (kept) */}
+      <ModelPerformanceAnalytics history={history || []} />
     </div>
   );
 }
+
