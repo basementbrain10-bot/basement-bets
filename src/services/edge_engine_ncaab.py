@@ -1,185 +1,325 @@
-"""NCAAB Edge Engine (Phase A) — training + on-demand recommendations.
+"""NCAAB Edge Engine — serverless-safe recommendations.
 
-Designed to be callable from FastAPI (Vercel) and from local scripts.
+This module backs /api/edge/ncaab/recommendations.
 
-Uses:
-- historical_games_action_network for completed games (training)
-- events + odds_snapshots for today's slate (recommendations)
-- ncaab_edge_engine_config_<season>.json artifact for learned thresholds/caps
+IMPORTANT (Vercel/serverless):
+- Do NOT depend on numpy or other heavy scientific packages.
+- Load pre-trained model params from JSON artifacts in data/model_params.
 
-Note: This keeps the implementation numpy-only (no sklearn/pandas).
+We keep the same model logic as the walk-forward backtest:
+    logit(p_model) = logit(p_market_no_vig) + (Z @ w + b)
+where Z standardizes features using training mean/std.
+
+Artifacts:
+- data/model_params/ncaab_edge_engine_config_<season>.json
+- data/model_params/ncaab_edge_model_season_<season>.json
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
+import re
+from dataclasses import dataclass
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
-
-import numpy as np
 
 from src.database import get_db_connection, _exec
 
-# Reuse proven helpers from the walkforward script (kept numpy-only)
-from scripts.backtest_ncaab_edge_engine_walkforward import (
-    american_to_decimal,
-    devig_two_sided,
-    ev_per_unit,
-    logit,
-    sigmoid,
-    confidence_from_ev,
-    units_from_conf,
-    bet_narrative,
-    train_residual_logreg,
-    standardize_fit,
-    standardize_apply,
-    build_team_mapper,
-    compute_torvik_margin_total,
-)
-
-
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+LEAGUE_AVG_EFF = 1.0  # Torvik features are already scaled; keep as 1.0 for legacy formula
+
+
+# ----------------------------
+# Odds + math (no numpy)
+# ----------------------------
+
+def american_to_decimal(odds: float) -> float | None:
+    if odds is None:
+        return None
+    try:
+        o = float(odds)
+    except Exception:
+        return None
+    if o == 0:
+        return None
+    if o > 0:
+        return 1.0 + (o / 100.0)
+    return 1.0 + (100.0 / abs(o))
+
+
+def implied_prob_american(odds: float) -> float | None:
+    dec = american_to_decimal(odds)
+    if dec is None or dec <= 1.0:
+        return None
+    return 1.0 / dec
+
+
+def devig_two_sided(home_odds: float, away_odds: float) -> tuple[float | None, float | None]:
+    p1 = implied_prob_american(home_odds)
+    p2 = implied_prob_american(away_odds)
+    if p1 is None or p2 is None:
+        return None, None
+    s = p1 + p2
+    if s <= 1e-12:
+        return None, None
+    return p1 / s, p2 / s
+
+
+def logit(p: float) -> float:
+    p = min(1 - 1e-9, max(1e-9, float(p)))
+    return math.log(p / (1 - p))
+
+
+def sigmoid(z: float) -> float:
+    z = max(-50.0, min(50.0, float(z)))
+    return 1.0 / (1.0 + math.exp(-z))
+
+
+def ev_per_unit(p_win: float, american_odds: float) -> float | None:
+    dec = american_to_decimal(american_odds)
+    if dec is None:
+        return None
+    b = dec - 1.0
+    return float(p_win) * b - (1.0 - float(p_win))
+
+
+# ----------------------------
+# Betting policy
+# ----------------------------
+
+def confidence_from_ev(ev: float, p_model: float, p_market: float) -> float:
+    diff = abs(float(p_model) - float(p_market))
+    c = 50.0 + 400.0 * float(ev) + 50.0 * diff
+    return max(0.0, min(100.0, c))
+
+
+def units_from_conf(conf: float) -> int:
+    conf = float(conf or 0.0)
+    if conf >= 85:
+        return 3
+    if conf >= 70:
+        return 2
+    if conf >= 55:
+        return 1
+    return 0
+
+
+# ----------------------------
+# Torvik feature helpers (copied from walkforward)
+# ----------------------------
+
+def _norm(s: str) -> str:
+    return re.sub(r'[^a-zA-Z0-9\s]', '', (s or '').lower()).strip()
+
+
+def build_team_mapper(conn) -> callable:
+    src = _exec(conn, "SELECT DISTINCT team_text FROM bt_team_features_daily").fetchall()
+    source_names = [r[0] for r in src if r and r[0]]
+    norm_to_source = {_norm(s): s for s in source_names if s}
+    norm_sources = [(_norm(s), s) for s in source_names if s]
+    norm_sources.sort(key=lambda t: len(t[0]), reverse=True)
+
+    manual = {
+        'southern miss golden eagles': 'Southern Miss',
+        'miami fl hurricanes': 'Miami FL',
+        'miami (fl) hurricanes': 'Miami FL',
+        'uconn huskies': 'Connecticut',
+        'ole miss rebels': 'Ole Miss',
+        'kent state golden flashes': 'Kent St.',
+    }
+
+    def map_name(name: str) -> str:
+        n = _norm(name)
+        if n in norm_to_source:
+            return norm_to_source[n]
+        for k, v in manual.items():
+            if k in n:
+                vv = _norm(v)
+                if vv in norm_to_source:
+                    return norm_to_source[vv]
+        for ns, orig in norm_sources:
+            if ns and (n.startswith(ns) and (len(n) == len(ns) or n[len(ns)] == ' ')):
+                return orig
+        return name
+
+    return map_name
+
+
+def get_metrics_cached(conn, cache: dict, team_text: str, date_iso: str | None):
+    k = (team_text, date_iso)
+    if k in cache:
+        return cache[k]
+
+    if date_iso:
+        row = _exec(
+            conn,
+            """
+            SELECT adj_off, adj_def, adj_tempo
+            FROM bt_team_features_daily
+            WHERE team_text=:t AND date <= :d
+            ORDER BY date DESC
+            LIMIT 1
+            """,
+            {"t": team_text, "d": date_iso},
+        ).fetchone()
+    else:
+        row = _exec(
+            conn,
+            """
+            SELECT adj_off, adj_def, adj_tempo
+            FROM bt_team_features_daily
+            WHERE team_text=:t
+            ORDER BY date DESC
+            LIMIT 1
+            """,
+            {"t": team_text},
+        ).fetchone()
+
+    cache[k] = dict(row) if row else None
+    return cache[k]
+
+
+def compute_torvik_margin_total(conn, cache: dict, home_bt: str, away_bt: str, date_key: str | None) -> tuple[float, float]:
+    date_iso = None
+    if date_key and len(date_key) == 8 and date_key.isdigit():
+        date_iso = f"{date_key[:4]}-{date_key[4:6]}-{date_key[6:8]}"
+
+    h = get_metrics_cached(conn, cache, home_bt, date_iso)
+    a = get_metrics_cached(conn, cache, away_bt, date_iso)
+    if not h or not a:
+        return 0.0, 0.0
+
+    tempo = (float(h['adj_tempo']) + float(a['adj_tempo'])) / 2.0
+    h_score = (float(h['adj_off']) * float(a['adj_def']) / LEAGUE_AVG_EFF) * (tempo / 100.0)
+    a_score = (float(a['adj_off']) * float(h['adj_def']) / LEAGUE_AVG_EFF) * (tempo / 100.0)
+    margin = round(h_score - a_score, 1)
+    total = round(h_score + a_score, 1)
+    return margin, total
+
+
+# ----------------------------
+# Model params loading
+# ----------------------------
 
 def load_config(season_end_year: int) -> Dict[str, Any]:
     path = os.path.join(REPO_ROOT, 'data', 'model_params', f'ncaab_edge_engine_config_{season_end_year}.json')
     if not os.path.exists(path):
-        raise FileNotFoundError(
-            f"Missing config: {path}. Run sweep+config to generate it."
-        )
+        raise FileNotFoundError(f"Missing config: {path}. Run sweep+config to generate it.")
     with open(path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
 
-def train_models(season_end_year: int, steps: int = 400, lr: float = 0.05, l2: float = 0.5) -> Dict[str, Dict[str, Any]]:
-    """Train residual models on completed NCAAB games for the season.
+def load_models(season_end_year: int) -> Dict[str, Dict[str, Any]]:
+    """Load pre-trained residual models from JSON.
 
-    Returns dict keyed by market: SPREAD/TOTAL/ML.
+    File schema: data/model_params/ncaab_edge_model_season_<season>.json
+    Keys: spread/total/ml
     """
+    path = os.path.join(REPO_ROOT, 'data', 'model_params', f'ncaab_edge_model_season_{season_end_year}.json')
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Missing model params: {path}")
+    raw = json.loads(open(path, 'r', encoding='utf-8').read())
+    models = (raw.get('params') or {}).get('models') or {}
 
-    q = """
-    WITH latest AS (
-      SELECT game_id, MAX(date_scraped) AS max_scraped
-      FROM historical_games_action_network
-      WHERE sport='ncaab'
-        AND season_end_year=%(season)s
-        AND status='complete'
-        AND home_score IS NOT NULL AND away_score IS NOT NULL
-        AND home_spread IS NOT NULL AND total_score IS NOT NULL
-      GROUP BY game_id
-    )
-    SELECT h.*
-    FROM historical_games_action_network h
-    JOIN latest l
-      ON l.game_id=h.game_id AND l.max_scraped=h.date_scraped
-    WHERE h.sport='ncaab'
-    ORDER BY h.start_time ASC
-    """
+    def norm_model(m: dict) -> dict:
+        return {
+            'mu': [float(x) for x in (m.get('feature_mean') or [])],
+            'sd': [float(x) if float(x) != 0 else 1.0 for x in (m.get('feature_std') or [])],
+            'w': [float(x) for x in (m.get('weights') or [])],
+            'b': float(m.get('bias') or 0.0),
+        }
 
-    with get_db_connection() as conn:
-        rows = _exec(conn, q, {"season": season_end_year}).fetchall()
-        map_team = build_team_mapper(conn)
-        cache: dict = {}
-
-        buckets = {"SPREAD": [], "TOTAL": [], "ML": []}
-
-        for r in rows:
-            st = r['start_time']
-            date_key = st.strftime('%Y%m%d') if st else None
-
-            home = r['home_team']
-            away = r['away_team']
-            home_bt = map_team(home)
-            away_bt = map_team(away)
-            tv_margin, tv_total = compute_torvik_margin_total(conn, cache, home_bt, away_bt, date_key)
-
-            home_score = int(r['home_score'] or 0)
-            away_score = int(r['away_score'] or 0)
-            actual_margin = home_score - away_score
-            actual_total = home_score + away_score
-
-            # SPREAD (home)
-            if r['home_spread_odds'] is not None and r['away_spread_odds'] is not None:
-                p_home, _ = devig_two_sided(float(r['home_spread_odds']), float(r['away_spread_odds']))
-                if p_home is not None:
-                    y = 1.0 if (actual_margin + float(r['home_spread'])) > 0 else 0.0
-                    X = np.array([
-                        float(r['home_spread']),
-                        0.0,  # movement (not in deduped training)
-                        float(tv_margin),
-                        float((-float(r['home_spread'])) - float(tv_margin)),
-                        float(r['total_score']),
-                        float(tv_total - float(r['total_score'])),
-                        float((r['home_spread_money_pct'] or 0.0) - (r['home_spread_ticket_pct'] or 0.0)),
-                    ], dtype=np.float64)
-                    buckets['SPREAD'].append((X, y, float(p_home)))
-
-            # TOTAL (over)
-            if r['over_odds'] is not None and r['under_odds'] is not None:
-                p_over, _ = devig_two_sided(float(r['over_odds']), float(r['under_odds']))
-                if p_over is not None:
-                    y = 1.0 if (actual_total > float(r['total_score'])) else 0.0
-                    X = np.array([
-                        float(r['total_score']),
-                        0.0,  # movement
-                        float(tv_total),
-                        float(tv_total - float(r['total_score'])),
-                        float(tv_margin),
-                        float((r['over_money_pct'] or 0.0) - (r['over_ticket_pct'] or 0.0)),
-                    ], dtype=np.float64)
-                    buckets['TOTAL'].append((X, y, float(p_over)))
-
-            # ML (home)
-            if r['home_money_line'] is not None and r['away_money_line'] is not None:
-                p_home, _ = devig_two_sided(float(r['home_money_line']), float(r['away_money_line']))
-                if p_home is not None:
-                    y = 1.0 if (actual_margin > 0) else 0.0
-                    X = np.array([
-                        float(r['home_money_line']),
-                        float(r['home_spread']),
-                        float(tv_margin),
-                        float(tv_total),
-                        float((r['home_ml_money_pct'] or 0.0) - (r['home_ml_ticket_pct'] or 0.0)),
-                    ], dtype=np.float64)
-                    buckets['ML'].append((X, y, float(p_home)))
-
-        models: Dict[str, Dict[str, Any]] = {}
-        for kind, rows_k in buckets.items():
-            if len(rows_k) < 300:
-                continue
-
-            Xtr = np.stack([a[0] for a in rows_k], axis=0)
-            ytr = np.array([a[1] for a in rows_k], dtype=np.float64)
-            off = np.array([logit(a[2]) for a in rows_k], dtype=np.float64)
-
-            Ztr, mu, sd = standardize_fit(Xtr)
-            w, b = train_residual_logreg(Ztr, ytr, off, l2=float(l2), lr=float(lr), steps=int(steps))
-            models[kind] = {"w": w, "b": b, "mu": mu, "sd": sd}
-
-    return models
+    out: Dict[str, Dict[str, Any]] = {}
+    if 'spread' in models:
+        out['SPREAD'] = norm_model(models['spread'])
+    if 'total' in models:
+        out['TOTAL'] = norm_model(models['total'])
+    if 'ml' in models:
+        out['ML'] = norm_model(models['ml'])
+    return out
 
 
-def recommend_for_date(
-    date_et: str,
-    season_end_year: int = 2026,
-    models: Optional[Dict[str, Dict[str, Any]]] = None,
-    steps: int = 400,
-    lr: float = 0.05,
-    l2: float = 0.5,
-) -> Dict[str, Any]:
-    """Recommend bets for a given ET date using latest odds_snapshots.
+def _dot(a: List[float], b: List[float]) -> float:
+    return sum(float(x) * float(y) for x, y in zip(a, b))
 
-    Returns payload with picks + narratives.
-    """
 
+def _standardize(x: List[float], mu: List[float], sd: List[float]) -> List[float]:
+    out = []
+    for i, xi in enumerate(x):
+        m = mu[i] if i < len(mu) else 0.0
+        s = sd[i] if i < len(sd) else 1.0
+        if abs(s) < 1e-9:
+            s = 1.0
+        out.append((float(xi) - float(m)) / float(s))
+    return out
+
+
+def bet_narrative(kind: str, g: Any, p_model: float, p_market: float, ev: float, conf: float) -> dict:
+    # Keep schema stable for UI.
+    if kind == 'SPREAD':
+        line = g.close_home_spread
+        odds = g.close_home_spread_odds
+        if line is not None and float(line) < 0:
+            selection = f"{g.away_team} +{abs(float(line)):.1f}".replace('+.0', '').replace('.0', '')
+        else:
+            selection = f"{g.home_team} {float(line):+.1f}".replace('+.0', '').replace('.0', '') if line is not None else g.home_team
+        win_cond = f"{selection} must cover"
+        keys = [
+            ("Torvik margin", g.torvik_margin),
+            ("Line (close)", g.close_home_spread),
+        ]
+    elif kind == 'TOTAL':
+        line = g.close_total
+        odds = g.close_over_odds
+        selection = f"OVER {float(line):.1f}".replace('.0', '') if line is not None else 'OVER'
+        win_cond = f"Game total points must finish {selection}"
+        keys = [
+            ("Torvik total", g.torvik_total),
+            ("Total (close)", g.close_total),
+        ]
+    else:
+        line = None
+        odds = g.close_home_ml
+        selection = g.home_team
+        win_cond = f"{selection} must win outright"
+        keys = [
+            ("Torvik margin", g.torvik_margin),
+            ("Spread (close)", g.close_home_spread),
+        ]
+
+    drivers = []
+    for k, v in keys:
+        drivers.append(f"{k}: {v:+.2f}" if isinstance(v, (int, float)) else f"{k}: {v}")
+
+    return {
+        'game_id': g.game_id,
+        'date': g.date_et,
+        'match': f"{g.away_team} @ {g.home_team}",
+        'bet_type': kind,
+        'selection': selection,
+        'line': line,
+        'odds': odds,
+        'p_market': round(float(p_market), 4),
+        'p_model': round(float(p_model), 4),
+        'ev_per_unit': round(float(ev), 4),
+        'confidence': round(float(conf), 1),
+        'why': drivers,
+        'needs_to_happen': win_cond,
+        'risks': ["Variance/late-game fouls", "Injuries/rotation changes"],
+    }
+
+
+def recommend_for_date(date_et: str, season_end_year: int = 2026) -> Dict[str, Any]:
     cfg = load_config(season_end_year)
     min_ev = float(cfg['learned']['min_ev'])
     max_units_day = int(cfg['constraints']['max_units_day'])
     max_units_game = int(cfg['constraints']['max_units_game'])
 
-    if models is None:
-        models = train_models(season_end_year, steps=steps, lr=lr, l2=l2)
+    models = load_models(season_end_year)
 
     with get_db_connection() as conn:
         evs = _exec(
@@ -196,12 +336,12 @@ def recommend_for_date(
 
         if not evs:
             return {
-                "generated_at": datetime.now().isoformat(),
-                "date": date_et,
-                "season_end_year": season_end_year,
-                "config": cfg,
-                "picks": [],
-                "note": "No NCAAM events found for date",
+                'generated_at': datetime.now().isoformat(),
+                'date': date_et,
+                'season_end_year': season_end_year,
+                'config': cfg,
+                'picks': [],
+                'note': 'No NCAAM events found for date',
             }
 
         map_team = build_team_mapper(conn)
@@ -220,63 +360,60 @@ def recommend_for_date(
                 (eid, market_type, side),
             ).fetchone()
 
-        candidates = []
+        candidates: List[Dict[str, Any]] = []
 
-        for ev in evs:
-            eid = ev['id']
-            home = ev['home_team']
-            away = ev['away_team']
-            st = ev['start_time']
-            date_key = st.strftime('%Y%m%d') if st else None
+        for r in evs:
+            eid = r['id']
+            home = r['home_team']
+            away = r['away_team']
+            st = r['start_time']
+            date_key = None
+            try:
+                if st and hasattr(st, 'strftime'):
+                    date_key = st.strftime('%Y%m%d')
+            except Exception:
+                date_key = None
 
             home_bt = map_team(home)
             away_bt = map_team(away)
             tv_margin, tv_total = compute_torvik_margin_total(conn, cache, home_bt, away_bt, date_key)
 
+            base = {
+                'game_id': eid,
+                'date_et': date_et,
+                'home_team': home,
+                'away_team': away,
+                'torvik_margin': float(tv_margin),
+                'torvik_total': float(tv_total),
+                'open_home_spread': None,
+                'open_total': None,
+            }
+
             sp_h = latest(eid, 'SPREAD', 'HOME')
             sp_a = latest(eid, 'SPREAD', 'AWAY')
             tot_o = latest(eid, 'TOTAL', 'OVER')
             tot_u = latest(eid, 'TOTAL', 'UNDER')
-            ml_h = latest(eid, 'MONEYLINE', 'HOME')
-            ml_a = latest(eid, 'MONEYLINE', 'AWAY')
+            ml_h = latest(eid, 'ML', 'HOME')
+            ml_a = latest(eid, 'ML', 'AWAY')
 
-            # We build a minimal object for bet_narrative
-            from types import SimpleNamespace
-
-            base = {
-                "game_id": eid,
-                "date_et": date_et,
-                "home_team": home,
-                "away_team": away,
-                "open_home_spread": float(sp_h['line_value']) if sp_h and sp_h['line_value'] is not None else 0.0,
-                "open_total": float(tot_o['line_value']) if tot_o and tot_o['line_value'] is not None else 0.0,
-                "home_spread_money_pct": None,
-                "home_spread_ticket_pct": None,
-                "over_money_pct": None,
-                "over_ticket_pct": None,
-                "home_ml_money_pct": None,
-                "home_ml_ticket_pct": None,
-                "torvik_margin": float(tv_margin),
-                "torvik_total": float(tv_total),
-            }
-
-            # SPREAD home-side
-            if 'SPREAD' in models and sp_h and sp_a and sp_h['line_value'] is not None and sp_h['price'] is not None and sp_a['price'] is not None:
+            # SPREAD home-side features (matches trained model)
+            if 'SPREAD' in models and sp_h and sp_a and sp_h['price'] is not None and sp_a['price'] is not None and sp_h['line_value'] is not None:
                 p_home, _ = devig_two_sided(float(sp_h['price']), float(sp_a['price']))
                 if p_home is not None:
-                    X = np.array([
-                        float(sp_h['line_value']),
+                    line = float(sp_h['line_value'])
+                    X = [
+                        line,
                         0.0,
                         float(tv_margin),
-                        float((-float(sp_h['line_value'])) - float(tv_margin)),
+                        float((-line) - float(tv_margin)),
                         float(tot_o['line_value']) if tot_o and tot_o['line_value'] is not None else 0.0,
-                        float(tv_total - (float(tot_o['line_value']) if tot_o and tot_o['line_value'] is not None else 0.0)),
+                        float(float(tv_total) - float(tot_o['line_value'])) if tot_o and tot_o['line_value'] is not None else 0.0,
                         0.0,
-                    ], dtype=np.float64)
+                    ]
                     m = models['SPREAD']
-                    Z = standardize_apply(X.reshape(1, -1), m['mu'], m['sd'])
-                    z = logit(p_home) + float((Z @ m['w'])[0] + m['b'])
-                    p_model = float(sigmoid(np.array([z]))[0])
+                    Z = _standardize(X, m['mu'], m['sd'])
+                    z = logit(p_home) + (_dot(Z, m['w']) + m['b'])
+                    p_model = sigmoid(z)
                     evu = ev_per_unit(p_model, float(sp_h['price']))
                     if evu is not None and evu >= min_ev:
                         conf = confidence_from_ev(evu, p_model, p_home)
@@ -284,30 +421,31 @@ def recommend_for_date(
                         if units > 0:
                             g = SimpleNamespace(
                                 **base,
-                                close_home_spread=float(sp_h['line_value']),
+                                close_home_spread=line,
                                 close_total=float(tot_o['line_value']) if tot_o and tot_o['line_value'] is not None else 0.0,
                                 close_home_spread_odds=float(sp_h['price']),
                                 close_over_odds=float(tot_o['price']) if tot_o and tot_o['price'] is not None else None,
                                 close_home_ml=float(ml_h['price']) if ml_h and ml_h['price'] is not None else None,
                             )
-                            candidates.append({"units": units, "score": evu * units, "narr": bet_narrative('SPREAD', g, p_model, p_home, evu, conf)})
+                            candidates.append({'units': units, 'score': float(evu) * units, 'narr': bet_narrative('SPREAD', g, p_model, p_home, evu, conf)})
 
             # TOTAL over-side
-            if 'TOTAL' in models and tot_o and tot_u and tot_o['line_value'] is not None and tot_o['price'] is not None and tot_u['price'] is not None:
+            if 'TOTAL' in models and tot_o and tot_u and tot_o['price'] is not None and tot_u['price'] is not None and tot_o['line_value'] is not None:
                 p_over, _ = devig_two_sided(float(tot_o['price']), float(tot_u['price']))
                 if p_over is not None:
-                    X = np.array([
-                        float(tot_o['line_value']),
+                    line = float(tot_o['line_value'])
+                    X = [
+                        line,
                         0.0,
                         float(tv_total),
-                        float(tv_total - float(tot_o['line_value'])),
+                        float(float(tv_total) - line),
                         float(tv_margin),
                         0.0,
-                    ], dtype=np.float64)
+                    ]
                     m = models['TOTAL']
-                    Z = standardize_apply(X.reshape(1, -1), m['mu'], m['sd'])
-                    z = logit(p_over) + float((Z @ m['w'])[0] + m['b'])
-                    p_model = float(sigmoid(np.array([z]))[0])
+                    Z = _standardize(X, m['mu'], m['sd'])
+                    z = logit(p_over) + (_dot(Z, m['w']) + m['b'])
+                    p_model = sigmoid(z)
                     evu = ev_per_unit(p_model, float(tot_o['price']))
                     if evu is not None and evu >= min_ev:
                         conf = confidence_from_ev(evu, p_model, p_over)
@@ -316,28 +454,28 @@ def recommend_for_date(
                             g = SimpleNamespace(
                                 **base,
                                 close_home_spread=float(sp_h['line_value']) if sp_h and sp_h['line_value'] is not None else 0.0,
-                                close_total=float(tot_o['line_value']),
+                                close_total=line,
                                 close_home_spread_odds=float(sp_h['price']) if sp_h and sp_h['price'] is not None else None,
                                 close_over_odds=float(tot_o['price']),
                                 close_home_ml=float(ml_h['price']) if ml_h and ml_h['price'] is not None else None,
                             )
-                            candidates.append({"units": units, "score": evu * units, "narr": bet_narrative('TOTAL', g, p_model, p_over, evu, conf)})
+                            candidates.append({'units': units, 'score': float(evu) * units, 'narr': bet_narrative('TOTAL', g, p_model, p_over, evu, conf)})
 
             # ML home-side
             if 'ML' in models and ml_h and ml_a and ml_h['price'] is not None and ml_a['price'] is not None:
                 p_home, _ = devig_two_sided(float(ml_h['price']), float(ml_a['price']))
                 if p_home is not None:
-                    X = np.array([
+                    X = [
                         float(ml_h['price']),
                         float(sp_h['line_value']) if sp_h and sp_h['line_value'] is not None else 0.0,
                         float(tv_margin),
                         float(tv_total),
                         0.0,
-                    ], dtype=np.float64)
+                    ]
                     m = models['ML']
-                    Z = standardize_apply(X.reshape(1, -1), m['mu'], m['sd'])
-                    z = logit(p_home) + float((Z @ m['w'])[0] + m['b'])
-                    p_model = float(sigmoid(np.array([z]))[0])
+                    Z = _standardize(X, m['mu'], m['sd'])
+                    z = logit(p_home) + (_dot(Z, m['w']) + m['b'])
+                    p_model = sigmoid(z)
                     evu = ev_per_unit(p_model, float(ml_h['price']))
                     if evu is not None and evu >= min_ev:
                         conf = confidence_from_ev(evu, p_model, p_home)
@@ -351,9 +489,9 @@ def recommend_for_date(
                                 close_over_odds=float(tot_o['price']) if tot_o and tot_o['price'] is not None else None,
                                 close_home_ml=float(ml_h['price']),
                             )
-                            candidates.append({"units": units, "score": evu * units, "narr": bet_narrative('ML', g, p_model, p_home, evu, conf)})
+                            candidates.append({'units': units, 'score': float(evu) * units, 'narr': bet_narrative('ML', g, p_model, p_home, evu, conf)})
 
-        candidates.sort(key=lambda c: c['score'], reverse=True)
+        candidates.sort(key=lambda c: float(c.get('score') or 0), reverse=True)
 
         units_left = max_units_day
         units_by_game: Dict[str, int] = {}
@@ -375,9 +513,9 @@ def recommend_for_date(
             picks.append(c['narr'])
 
         return {
-            "generated_at": datetime.now().isoformat(),
-            "date": date_et,
-            "season_end_year": season_end_year,
-            "config": cfg,
-            "picks": picks,
+            'generated_at': datetime.now().isoformat(),
+            'date': date_et,
+            'season_end_year': season_end_year,
+            'config': cfg,
+            'picks': picks,
         }
