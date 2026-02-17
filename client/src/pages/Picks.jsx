@@ -71,7 +71,10 @@ export default function Picks() {
   }, [history]);
 
   const gradedYesterday = useMemo(() => {
-    return graded.filter((h) => etDay(h.analyzed_at) === yesterdayEt);
+    // Use the game slate day (event start_time in ET) when available.
+    // analyzed_at can be earlier than the actual game day, which makes "yesterday" look empty.
+    const dayKey = (h) => etDay(h?.start_time) || etDay(h?.analyzed_at);
+    return graded.filter((h) => dayKey(h) === yesterdayEt);
   }, [graded, yesterdayEt]);
 
   const yRecord = useMemo(() => {
