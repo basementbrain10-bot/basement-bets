@@ -9,6 +9,9 @@ import SevenDayTrendSparkline from './SevenDayTrendSparkline';
 // Extracted from App.jsx. Keep behavior identical; dependencies are passed as props when needed.
 
 export default function TransactionView({ bets, setBets, financials, reconciliation, loading, formatCurrency, formatDateMDY }) {
+    const [openBets, setOpenBets] = useState([]);
+    const [openBetsLoading, setOpenBetsLoading] = useState(false);
+    const [openBetsError, setOpenBetsError] = useState(null);
     // Row selection disabled (checkbox column removed)
     const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
@@ -59,6 +62,23 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
 
     // Bulk selection actions removed (checkbox column removed)
 
+
+    // Load open bets (pending/open) into a separate section
+    useEffect(() => {
+        const load = async () => {
+            try {
+                setOpenBetsLoading(true);
+                setOpenBetsError(null);
+                const res = await api.get('/api/bets/open');
+                setOpenBets(res.data || []);
+            } catch (e) {
+                setOpenBetsError('Failed to load open bets');
+            } finally {
+                setOpenBetsLoading(false);
+            }
+        };
+        load();
+    }, []);
 
     // Optional prefill from other charts (e.g., Performance scatter)
     useEffect(() => {
@@ -566,6 +586,41 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                     })()}
                 </div>
             )}
+
+            {/* Open Bets (separate section) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl mb-6">
+                <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                    <div>
+                        <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Open Bets</div>
+                        <div className="text-[11px] text-slate-500">Pending wagers reduce displayed balances immediately.</div>
+                    </div>
+                    <div className="text-xs text-slate-400">{openBetsLoading ? 'Loading…' : `${(openBets || []).length} open`}</div>
+                </div>
+                <div className="p-4">
+                    {openBetsError && <div className="text-xs text-red-300">{openBetsError}</div>}
+                    {!openBetsLoading && (!openBets || openBets.length === 0) && (
+                        <div className="text-xs text-slate-500">No open bets.</div>
+                    )}
+                    {!openBetsLoading && openBets && openBets.length > 0 && (
+                        <div className="space-y-2">
+                            {openBets.slice(0, 25).map((b) => (
+                                <div key={b.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/20">
+                                    <div className="min-w-0">
+                                        <div className="text-xs font-black text-slate-100 truncate">{b.provider} • {(b.account_id === 'User2' ? 'Secondary' : 'Primary')}</div>
+                                        <div className="text-xs text-slate-300 truncate" title={b.selection || b.description}>{b.selection || b.description}</div>
+                                        <div className="text-[11px] text-slate-500">{formatDateMDY(b.date_et || b.date)} • {String(b.status || 'PENDING').toUpperCase()}</div>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <div className="text-xs font-mono font-black text-slate-200">{formatCurrency(Number(b.wager || 0))}</div>
+                                        <div className="text-[11px] text-slate-500 font-mono">{b.odds ? (Number(b.odds) > 0 ? `+${b.odds}` : String(b.odds)) : '—'}</div>
+                                    </div>
+                                </div>
+                            ))}
+                            {openBets.length > 25 && <div className="text-[11px] text-slate-500">Showing first 25 open bets.</div>}
+                        </div>
+                    )}
+                </div>
+            </div>
 
             {/* Sportsbook Financials (statement-style; collapsed by default) */}
             {normalizedFinancials?.breakdown && (() => {

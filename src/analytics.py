@@ -603,15 +603,32 @@ class AnalyticsEngine:
         and adding subsequent transactions (deposits/withdrawals) and bet results.
         Returns a dict: { provider: { balance: float, last_bet: str|None } }
         """
-        from dateutil.parser import parse as parse_date
+        try:
+            from dateutil.parser import parse as parse_date  # type: ignore
+        except Exception:
+            parse_date = None
         from src.database import get_db_connection
         from collections import defaultdict
-        
+
         def _to_naive(d):
-            if not d: return None
+            if not d:
+                return None
             if isinstance(d, str):
-                try: d = parse_date(d)
-                except: return None
+                if parse_date is not None:
+                    try:
+                        d = parse_date(d)
+                    except Exception:
+                        return None
+                else:
+                    # best-effort YYYY-MM-DD
+                    try:
+                        s = str(d).split('T')[0].split(' ')[0]
+                        if len(s) == 10:
+                            d = datetime.strptime(s, '%Y-%m-%d')
+                        else:
+                            return None
+                    except Exception:
+                        return None
             if hasattr(d, 'replace') and hasattr(d, 'tzinfo') and d.tzinfo:
                 return d.replace(tzinfo=None)
             return d
@@ -1060,6 +1077,28 @@ class AnalyticsEngine:
                         if bc <= cap0:
                             continue
                     ledger_delta += float(b.get('profit') or 0)
+
+                # 1b) Open/pending wagers after snapshot (reduce displayed balance immediately)
+                for b in (bets or []):
+                    if (b.get('provider') or '') != p:
+                        continue
+                    if str(b.get('account_id') or 'Main') != str(acc_id):
+                        continue
+                    st = str(b.get('status') or '').upper().strip()
+                    if st not in ('PENDING', 'OPEN'):
+                        continue
+                    bc = _to_naive_dt(b.get('created_at'))
+                    if cap0:
+                        if not bc:
+                            continue
+                        if bc <= cap0:
+                            continue
+                    try:
+                        w = float(b.get('wager') or 0.0)
+                    except Exception:
+                        w = 0.0
+                    if w > 0:
+                        ledger_delta -= w
 
                 # 2) Cashflows (deposits/withdrawals) after snapshot
                 # These should move the computed bankroll immediately, even before the next sportsbook snapshot.
