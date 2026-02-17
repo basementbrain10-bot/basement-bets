@@ -31,8 +31,9 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
     // Quick-pick state (board row badges)
     const [rowTopPicks, setRowTopPicks] = useState({}); // event_id -> { rec, analyzedAt }
-    const [edgeRecs, setEdgeRecs] = useState(null); // /api/edge/ncaab/recommendations payload
-    const [edgeRecsError, setEdgeRecsError] = useState(null);
+    // Edge-engine recs removed: Today should use the core model (stored top picks) to avoid mismatches.
+    // const [edgeRecs, setEdgeRecs] = useState(null);
+    // const [edgeRecsError, setEdgeRecsError] = useState(null);
     const [rowPickingId, setRowPickingId] = useState(null);
 
     // Mobile UX: collapse recommended list to Top 6 by default (expandable)
@@ -54,42 +55,19 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
             setLoading(true);
             setError(null);
             // Fetch board + history
-            const [boardRes, historyRes, topPicksRes, edgeRecsRes] = await Promise.all([
+            const [boardRes, historyRes, topPicksRes] = await Promise.all([
                 api.get('/api/board', { params: { league: leagueFilter, date: selectedDate, days: BOARD_DAYS_DEFAULT } }),
                 api.get('/api/ncaam/history', { params: { limit: 500 } }).catch((e) => {
                     console.warn("History fetch failed:", e);
                     return { data: [] };
                 }),
                 (leagueFilter === 'NCAAM'
-                    ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 200 } }).catch(() => ({ data: null }))
+                    ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 250, compute_missing: true } }).catch(() => ({ data: null }))
                     : Promise.resolve({ data: null })
-                ),
-                (!showModelPerformanceTab && leagueFilter === 'NCAAM'
-                    ? api.get('/api/edge/ncaab/recommendations', { params: { date: selectedDate, season: 2026 } })
-                        .then((r) => ({ ...r, _error: null }))
-                        .catch((e) => ({ data: null, _error: e }))
-                    : Promise.resolve({ data: null, _error: null })
                 )
             ]);
 
-            try {
-                setEdgeRecs(edgeRecsRes?.data || null);
-                const e = edgeRecsRes?._error;
-                if (e) {
-                    // Match other pages: if auth fails, prompt for Basement password.
-                    if (e?.response?.status === 403) {
-                        const pass = prompt("Authentication failed. Please enter the Basement Password:");
-                        if (pass) {
-                            localStorage.setItem('basement_password', pass);
-                            window.location.reload();
-                            return;
-                        }
-                    }
-                    setEdgeRecsError(e?.response?.data?.detail || e?.response?.data?.message || e?.message || 'Edge engine failed');
-                } else {
-                    setEdgeRecsError(null);
-                }
-            } catch (e) { }
+
 
             setEdges(boardRes.data || []);
             setHistory(historyRes.data || []);
@@ -443,25 +421,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                         Refresh Board
                     </button>
-                    {!showModelPerformanceTab && leagueFilter === 'NCAAM' && (
-                        <button
-                            onClick={async () => {
-                                try {
-                                    setLoading(true);
-                                    await api.get('/api/edge/ncaab/recommendations', { params: { date: selectedDate, season: 2026 } });
-                                } catch (e) {
-                                    alert(e?.response?.data?.detail || e?.response?.data?.message || e?.message || 'Edge engine failed');
-                                } finally {
-                                    setLoading(false);
-                                    fetchSchedule();
-                                }
-                            }}
-                            className="px-4 py-2 bg-indigo-500/15 hover:bg-indigo-500/20 rounded-xl text-sm transition-all flex items-center gap-2 border border-indigo-500/25 text-indigo-200"
-                            title="Debug: ping edge engine"
-                        >
-                            Test Edge Engine
-                        </button>
-                    )}
+
 
 
                 </div>
@@ -608,30 +568,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                     };
 
                                     const rows = (() => {
-                                        // Preferred for Today: edge engine recommendations (matches cron output)
-                                        if (!showModelPerformanceTab && leagueFilter === 'NCAAM' && (edgeRecs?.picks || []).length > 0) {
-                                            return (edgeRecs.picks || [])
-                                                .filter((p) => String(p?.date || '') === String(selectedDate))
-                                                .map((p) => ({
-                                                    edge: { id: p.game_id, away_team: String(p.match || '').split(' @ ')[0], home_team: String(p.match || '').split(' @ ')[1], sport: 'NCAAM' },
-                                                    top: {
-                                                        bet_type: p.bet_type,
-                                                        selection: p.selection,
-                                                        market_line: p.line,
-                                                        price: p.odds,
-                                                        edge: `${((Number(p.ev_per_unit) || 0) * 100).toFixed(1)}%`,
-                                                        confidence: Number(p.confidence || 0) >= 80 ? 'High' : Number(p.confidence || 0) >= 50 ? 'Medium' : 'Low',
-                                                        book: 'consensus',
-                                                    }
-                                                }))
-                                                .sort((a, b) => {
-                                                    const aEv = Number(String(a.top?.edge ?? '').replace('%', '').trim()) || 0;
-                                                    const bEv = Number(String(b.top?.edge ?? '').replace('%', '').trim()) || 0;
-                                                    return bEv - aEv;
-                                                });
-                                        }
-
-                                        // Fallback: stored top-picks per row
+                                        // Stored top-picks (core model)
                                         return getProcessedEdges()
                                             .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null }))
                                             .filter(({ edge, top }) => {
@@ -664,7 +601,6 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 No recommendations available for this window.
                                                 {!showModelPerformanceTab && leagueFilter === 'NCAAM' && (
                                                     <div className="mt-2 text-[11px] text-slate-600">
-                                                        Edge engine picks: {(edgeRecs?.picks || []).length} {edgeRecsError ? `• Error: ${edgeRecsError}` : ''}
                                                     </div>
                                                 )}
                                             </div>
