@@ -66,6 +66,35 @@ export default function Picks() {
     return { w, l, p, decided, winRate };
   }, [gradedYesterday]);
 
+  const dailyPerformance = useMemo(() => {
+    // Daily net units based on graded recommended picks.
+    // Convention: +1u for win, -1u for loss, 0u for push.
+    const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
+    const unit = (h) => {
+      const r = res(h);
+      if (r === 'WON' || r === 'WIN') return 1;
+      if (r === 'LOST' || r === 'LOSS') return -1;
+      return 0;
+    };
+
+    const byDay = {};
+    graded.forEach((h) => {
+      const day = etDay(h.analyzed_at) || '—';
+      byDay[day] = byDay[day] || { day, units: 0, wins: 0, losses: 0, pushes: 0, picks: 0 };
+      const r = res(h);
+      byDay[day].picks += 1;
+      byDay[day].units += unit(h);
+      if (r === 'WON' || r === 'WIN') byDay[day].wins += 1;
+      else if (r === 'LOST' || r === 'LOSS') byDay[day].losses += 1;
+      else if (r === 'PUSH') byDay[day].pushes += 1;
+    });
+
+    return Object.values(byDay)
+      .filter((x) => x.day && x.day !== '—')
+      .sort((a, b) => String(a.day).localeCompare(String(b.day)))
+      .slice(-30);
+  }, [graded, yesterdayEt]);
+
   const confidenceBreakdown = useMemo(() => {
     const normRes = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
     const isW = (r) => r === 'WON' || r === 'WIN';
