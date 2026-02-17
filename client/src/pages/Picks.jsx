@@ -399,6 +399,37 @@ export default function Picks() {
             <div className="text-white font-black">{gradedYesterday.length}</div>
           </div>
         </div>
+
+        {/* Breakdown by confidence (yesterday only) */}
+        {(() => {
+          const bucket = (h) => {
+            const c = Number(h?.confidence_0_100 ?? h?.confidence ?? 0);
+            if (c >= 80) return 'High';
+            if (c >= 50) return 'Medium';
+            return 'Low';
+          };
+          const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
+          const norm = (r) => (r === 'WIN') ? 'WON' : (r === 'LOSS') ? 'LOST' : r;
+          const rows = (gradedYesterday || []).map((h) => ({ b: bucket(h), r: norm(res(h)) }));
+          const by = { High: { w: 0, l: 0, p: 0 }, Medium: { w: 0, l: 0, p: 0 }, Low: { w: 0, l: 0, p: 0 } };
+          rows.forEach(({ b, r }) => {
+            if (r === 'WON') by[b].w += 1;
+            else if (r === 'LOST') by[b].l += 1;
+            else if (r === 'PUSH') by[b].p += 1;
+          });
+          const tiles = ['High', 'Medium', 'Low'].map((k) => ({ k, ...by[k] }));
+          if (!gradedYesterday || gradedYesterday.length === 0) return null;
+          return (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+              {tiles.map((t) => (
+                <div key={t.k} className="bg-slate-950/20 border border-slate-800 rounded-xl p-4">
+                  <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{t.k} confidence</div>
+                  <div className="mt-1 text-slate-100 font-black text-xl">{t.w}-{t.l}{t.p ? `-${t.p}` : ''}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         {(() => {
           const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
           const pending = (yesterdaySlate || []).filter((h) => !isGraded(res(h))).length;

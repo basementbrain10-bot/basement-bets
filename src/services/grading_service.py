@@ -280,7 +280,6 @@ class GradingService:
           AND m.selection IS NOT NULL
           AND TRIM(m.selection) <> ''
           AND m.selection <> '—'
-          AND m.analyzed_at <= (e.start_time - INTERVAL '10 minutes')
         ORDER BY m.analyzed_at DESC
         LIMIT %(lim)s
         """
