@@ -32,6 +32,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
     // Quick-pick state (board row badges)
     const [rowTopPicks, setRowTopPicks] = useState({}); // event_id -> { rec, analyzedAt }
     const [edgeRecs, setEdgeRecs] = useState(null); // /api/edge/ncaab/recommendations payload
+    const [edgeRecsError, setEdgeRecsError] = useState(null);
     const [rowPickingId, setRowPickingId] = useState(null);
 
     // Mobile UX: collapse recommended list to Top 6 by default (expandable)
@@ -64,12 +65,22 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                     : Promise.resolve({ data: null })
                 ),
                 (!showModelPerformanceTab && leagueFilter === 'NCAAM'
-                    ? api.get('/api/edge/ncaab/recommendations', { params: { date: selectedDate, season: 2026 } }).catch(() => ({ data: null }))
-                    : Promise.resolve({ data: null })
+                    ? api.get('/api/edge/ncaab/recommendations', { params: { date: selectedDate, season: 2026 } })
+                        .then((r) => ({ ...r, _error: null }))
+                        .catch((e) => ({ data: null, _error: e }))
+                    : Promise.resolve({ data: null, _error: null })
                 )
             ]);
 
-            try { setEdgeRecs(edgeRecsRes?.data || null); } catch (e) { }
+            try {
+                setEdgeRecs(edgeRecsRes?.data || null);
+                const e = edgeRecsRes?._error;
+                if (e) {
+                    setEdgeRecsError(e?.response?.data?.detail || e?.response?.data?.message || e?.message || 'Edge engine failed');
+                } else {
+                    setEdgeRecsError(null);
+                }
+            } catch (e) { }
 
             setEdges(boardRes.data || []);
             setHistory(historyRes.data || []);
@@ -423,6 +434,25 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                         Refresh Board
                     </button>
+                    {!showModelPerformanceTab && leagueFilter === 'NCAAM' && (
+                        <button
+                            onClick={async () => {
+                                try {
+                                    setLoading(true);
+                                    await api.get('/api/edge/ncaab/recommendations', { params: { date: selectedDate, season: 2026 } });
+                                } catch (e) {
+                                    alert(e?.response?.data?.detail || e?.response?.data?.message || e?.message || 'Edge engine failed');
+                                } finally {
+                                    setLoading(false);
+                                    fetchSchedule();
+                                }
+                            }}
+                            className="px-4 py-2 bg-indigo-500/15 hover:bg-indigo-500/20 rounded-xl text-sm transition-all flex items-center gap-2 border border-indigo-500/25 text-indigo-200"
+                            title="Debug: ping edge engine"
+                        >
+                            Test Edge Engine
+                        </button>
+                    )}
 
 
                 </div>
@@ -620,7 +650,16 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                     })();
 
                                     if (!rows.length) {
-                                        return <div className="text-slate-500">No recommendations available for this window.</div>;
+                                        return (
+                                            <div className="text-slate-500">
+                                                No recommendations available for this window.
+                                                {!showModelPerformanceTab && leagueFilter === 'NCAAM' && (
+                                                    <div className="mt-2 text-[11px] text-slate-600">
+                                                        Edge engine picks: {(edgeRecs?.picks || []).length} {edgeRecsError ? `• Error: ${edgeRecsError}` : ''}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
                                     }
 
                                     const fmtPick = (edge, top) => {
