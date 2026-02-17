@@ -33,6 +33,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
     const [filters, setFilters] = useState({
         date: "",
         sportsbook: "All",
+        account: "All",
         sport: "All",
         type: "All",
         selection: "",
@@ -365,11 +366,12 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
 
         const matchDate = b.date.includes(filters.date);
         const matchSportsbook = filters.sportsbook === "All" || b.provider === filters.sportsbook;
+        const matchAccount = filters.account === "All" || acctLabel(b) === filters.account;
         const matchSport = filters.sport === "All" || b.sport === filters.sport;
         const matchType = filters.type === "All" || b.bet_type === filters.type;
         const matchSelection = (b.selection || b.description || "").toLowerCase().includes(filters.selection.toLowerCase());
         const matchStatus = filters.status === "All" || b.status === filters.status;
-        return matchDate && matchSportsbook && matchSport && matchType && matchSelection && matchStatus;
+        return matchDate && matchSportsbook && matchAccount && matchSport && matchType && matchSelection && matchStatus;
     });
 
     const sortedBets = React.useMemo(() => {
@@ -941,6 +943,17 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                 <th className="px-1 py-1">
                                     <select
                                         className="w-full bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-white focus:border-blue-500 outline-none"
+                                        value={filters.account}
+                                        onChange={e => setFilters({ ...filters, account: e.target.value })}
+                                    >
+                                        <option value="All">All</option>
+                                        <option value="Primary">Primary</option>
+                                        <option value="Secondary">Secondary</option>
+                                    </select>
+                                </th>
+                                <th className="px-1 py-1">
+                                    <select
+                                        className="w-full bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-[10px] text-white focus:border-blue-500 outline-none"
                                         value={filters.sport}
                                         onChange={e => setFilters({ ...filters, sport: e.target.value })}
                                     >
@@ -957,6 +970,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                         {types.map(t => <option key={t} value={t}>{t}</option>)}
                                     </select>
                                 </th>
+                                <th className="px-1 py-1"></th>
                                 <th className="px-1 py-1">
                                     <input
                                         type="text"
@@ -966,7 +980,6 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                         onChange={e => setFilters({ ...filters, selection: e.target.value })}
                                     />
                                 </th>
-                                <th className="px-1 py-1"></th>
                                 <th className="px-1 py-1"></th>
                                 <th className="px-1 py-1"></th>
                                 <th className="px-1 py-1">
