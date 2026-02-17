@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { ArrowUpDown, ChevronUp, ChevronDown, Filter, RefreshCw, CheckCircle, AlertCircle, Info, Shield, ShieldAlert, ShieldCheck, PlusCircle } from 'lucide-react';
 import ModelPerformanceAnalytics from '../components/ModelPerformanceAnalytics';
+import OpenBetsPanel from '../components/OpenBetsPanel';
 
-const Research = ({ onAddBet }) => {
+const Research = ({ onAddBet, showModelPerformanceTab = true }) => {
     const [edges, setEdges] = useState([]);
     const [history, setHistory] = useState([]);
     // Top-level tabs: board vs history
@@ -411,6 +412,7 @@ const Research = ({ onAddBet }) => {
             </div>
 
             {/* Tabs */}
+            {showModelPerformanceTab && (
             <div className="inline-flex gap-1 mb-6 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
                 <button
                     onClick={() => setActiveTab('live')}
@@ -425,10 +427,14 @@ const Research = ({ onAddBet }) => {
                     Model Performance
                 </button>
             </div>
+            )}
 
 
             {activeTab === 'live' && (
                 <>
+                    <div className="mb-6">
+                        <OpenBetsPanel />
+                    </div>
                     <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
                         <div className="flex flex-wrap items-center gap-3">
                             {/* League Filter */}

@@ -8,7 +8,7 @@ import SevenDayTrendSparkline from './SevenDayTrendSparkline';
 
 // Extracted from App.jsx. Keep behavior identical; dependencies are passed as props when needed.
 
-export default function TransactionView({ bets, setBets, financials, reconciliation, loading, formatCurrency, formatDateMDY }) {
+export default function TransactionView({ bets, setBets, financials, reconciliation, loading, formatCurrency, formatDateMDY, showOpenBets = true, showFinancials = true }) {
     const [openBets, setOpenBets] = useState([]);
     const [openBetsLoading, setOpenBetsLoading] = useState(false);
     const [openBetsError, setOpenBetsError] = useState(null);
@@ -593,6 +593,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
             )}
 
             {/* Open Bets (separate section) */}
+            {showOpenBets && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl mb-6">
                 <div className="p-4 border-b border-slate-800 flex items-center justify-between">
                     <div>
@@ -643,9 +644,10 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                     )}
                 </div>
             </div>
+            )}
 
             {/* Sportsbook Financials (statement-style; collapsed by default) */}
-            {normalizedFinancials?.breakdown && (() => {
+            {showFinancials && normalizedFinancials?.breakdown && (() => {
                 const rows = normalizedFinancials.breakdown || [];
                 const provTop = (name) => rows.find(r => r.provider === name && r.account_id === null);
                 const provAcc = (name, acc) => rows.find(r => r.provider === name && String(r.account_id || '') === String(acc));

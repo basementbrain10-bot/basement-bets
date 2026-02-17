@@ -7,6 +7,8 @@ import {
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Activity, BarChart3, LayoutDashboard, Search, X, PlusCircle, Trash, RefreshCw, AlertCircle, Filter, Table } from 'lucide-react';
 
 import Research from './pages/Research';
+import Picks from './pages/Picks';
+import Bankroll from './pages/Bankroll';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 import TransactionView from './components/TransactionView';
 // import { StagingBanner } from './components/StagingBanner';
@@ -100,7 +102,7 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
-    const [view, setView] = useState('research'); // research | actuals
+    const [page, setPage] = useState('today'); // today | model | actuals | bankroll
     // Actuals sub-tab (combined Performance + Transactions)
     const [actualsTab, setActualsTab] = useState('performance'); // performance | transactions
 
@@ -160,8 +162,12 @@ function App() {
         try {
             const nav = localStorage.getItem('nav_after_save');
             if (nav === 'transactions') {
-                setView('actuals');
+                setPage('actuals');
                 setActualsTab('transactions');
+            } else if (nav === 'today') {
+                setPage('today');
+            } else if (nav === 'bankroll') {
+                setPage('bankroll');
             }
             if (nav) localStorage.removeItem('nav_after_save');
         } catch (e) { }
@@ -374,24 +380,40 @@ function App() {
                             {/* Primary nav (segmented control) */}
                             <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
                                 <button
-                                    onClick={() => setView('research')}
-                                    className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${view === 'research' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                    onClick={() => setPage('today')}
+                                    className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${page === 'today' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                                 >
                                     <TrendingUp size={18} />
-                                    <span className="hidden sm:inline">Model Recommendations</span>
-                                    <span className="sm:hidden">Board</span>
+                                    <span className="hidden sm:inline">Today</span>
+                                    <span className="sm:hidden">Today</span>
                                 </button>
                                 <button
-                                    onClick={() => setView('actuals')}
-                                    className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${view === 'actuals' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                    onClick={() => setPage('model')}
+                                    className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${page === 'model' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                >
+                                    <BarChart3 size={18} />
+                                    <span className="hidden sm:inline">Model Performance</span>
+                                    <span className="sm:hidden">Model</span>
+                                </button>
+                                <button
+                                    onClick={() => setPage('actuals')}
+                                    className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${page === 'actuals' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                                 >
                                     <LayoutDashboard size={18} />
                                     <span className="hidden sm:inline">Actuals</span>
                                     <span className="sm:hidden">Actuals</span>
                                 </button>
+                                <button
+                                    onClick={() => setPage('bankroll')}
+                                    className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${page === 'bankroll' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                >
+                                    <DollarSign size={18} />
+                                    <span className="hidden sm:inline">Bankroll</span>
+                                    <span className="sm:hidden">Bankroll</span>
+                                </button>
                             </div>
 
-                            {view === 'actuals' && (
+                            {page === 'actuals' && (
                                 <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
                                     <button
                                         onClick={() => setActualsTab('performance')}
@@ -433,8 +455,8 @@ function App() {
                                 <PasteSlipContainer
                                     onSaveSuccess={() => {
                                         setShowAddBet(false);
-                                        // After reload, land back on Actuals → Transactions
-                                        try { localStorage.setItem('nav_after_save', 'transactions'); } catch (e) { }
+                                        // After reload, land back on Today (most common workflow)
+                                        try { localStorage.setItem('nav_after_save', 'today'); } catch (e) { }
                                         // Refresh data
                                         window.location.reload(); // Simple refresh for now
                                     }}
@@ -444,8 +466,12 @@ function App() {
                         </div>
                     )}
 
-                    {view === 'research' ? (
-                        <Research onAddBet={() => setShowAddBet(true)} />
+                    {page === 'today' ? (
+                        <Research onAddBet={() => setShowAddBet(true)} showModelPerformanceTab={false} />
+                    ) : page === 'model' ? (
+                        <Picks />
+                    ) : page === 'bankroll' ? (
+                        <Bankroll financials={financials} formatCurrency={formatCurrency} />
                     ) : (
                         <>
                             {actualsTab === 'transactions' ? (
@@ -457,6 +483,8 @@ function App() {
                                     loading={loading}
                                     formatCurrency={formatCurrency}
                                     formatDateMDY={formatDateMDY}
+                                    showOpenBets={false}
+                                    showFinancials={false}
                                 />
                             ) : (
                                 <PerformanceView
@@ -469,7 +497,7 @@ function App() {
                                     reconciliation={reconciliation}
                                     onOpenTransactions={(prefill) => {
                                         try { localStorage.setItem('txn_prefill', JSON.stringify(prefill || {})); } catch (e) { }
-                                        setView('actuals');
+                                        setPage('actuals');
                                         setActualsTab('transactions');
                                     }}
                                 />
