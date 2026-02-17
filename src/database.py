@@ -1351,7 +1351,8 @@ def fetch_model_history(limit=100, league=None, user_id=None, recommended_only: 
             FROM model_predictions m
             JOIN events e ON m.event_id = e.id
             {where_sql}
-            AND (e.start_time IS NULL OR m.analyzed_at <= (e.start_time - INTERVAL '10 minutes'))
+            -- Do not exclude recs that were computed close to (or even after) start_time.
+            -- Start times can be corrected/shifted and we still want to display the recommendation.
         ), deduped AS (
             SELECT DISTINCT ON (event_id, market_type)
                 *
