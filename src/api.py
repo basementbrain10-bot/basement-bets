@@ -1531,13 +1531,34 @@ async def grade_research_history():
 
 
 @app.get("/api/research/history")
-async def get_history(user: dict = Depends(get_current_user)):
+async def get_history(limit: int = 2000, lookback_days: int = 400, user: dict = Depends(get_current_user)):
+    """Model prediction history (recommended picks by default).
+
+    Parameters:
+      - limit: max rows
+      - lookback_days: how far back to scan when recommended_only=True (default widened for year-to-date)
+
+    Notes:
+      We fall back to unscoped history to support legacy single-user rows.
+    """
     user_id = user.get("sub")
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 2000
+    limit = max(100, min(limit, 20000))
+
+    try:
+        lookback_days = int(lookback_days)
+    except Exception:
+        lookback_days = 400
+    lookback_days = max(30, min(lookback_days, 1200))
+
     # Primary: scoped to user
-    rows = fetch_model_history(user_id=user_id, recommended_only=True)
+    rows = fetch_model_history(user_id=user_id, recommended_only=True, limit=limit, lookback_days=lookback_days)
     # Fallback: legacy single-user data may have NULL/mismatched user_id
     if not rows:
-        rows = fetch_model_history(user_id=None, recommended_only=True)
+        rows = fetch_model_history(user_id=None, recommended_only=True, limit=limit, lookback_days=lookback_days)
     return rows
 
 

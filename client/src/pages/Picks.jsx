@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
 import { RefreshCw, BarChart3 } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine, ComposedChart, Line, Cell } from 'recharts';
 import ModelPerformanceAnalytics from '../components/ModelPerformanceAnalytics';
 
 const etDay = (dt) => {
@@ -29,7 +29,8 @@ export default function Picks() {
     setErr(null);
     try {
       // Primary source: recommended model history (all leagues)
-      const res = await api.get('/api/research/history');
+      // Pull enough lookback to include all 2026 YTD.
+      const res = await api.get('/api/research/history', { params: { limit: 20000, lookback_days: 400 } });
       const rows = res.data || [];
       if (Array.isArray(rows) && rows.length > 0) {
         setHistory(rows);
@@ -82,6 +83,75 @@ export default function Picks() {
     const winRate = decided > 0 ? (w / decided) * 100 : 0;
     return { w, l, p, decided, winRate };
   }, [gradedYesterday]);
+
+  const top6RankPerformance = useMemo(() => {
+    // Compute win% by rank for the daily Top 6 recommended picks (ranked by EV/u).
+    // Only include 2026 YTD.
+    const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
+    const isW = (r) => r === 'WON' || r === 'WIN';
+    const isL = (r) => r === 'LOST' || r === 'LOSS';
+
+    const ev = (h) => {
+      const n = Number(h?.ev_per_unit ?? h?.ev);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const ymd = (h) => etDay(h.analyzed_at);
+
+    // group graded picks by day
+    const byDay = {};
+    (graded || []).forEach((h) => {
+      const day = ymd(h);
+      if (!day) return;
+      if (!String(day).startsWith('2026-')) return;
+      const r = res(h);
+      if (!(isW(r) || isL(r) || r === 'PUSH')) return;
+      const e = ev(h);
+      if (!Number.isFinite(e)) return;
+      byDay[day] = byDay[day] || [];
+      byDay[day].push(h);
+    });
+
+    const agg = {
+      1: { w: 0, l: 0 },
+      2: { w: 0, l: 0 },
+      3: { w: 0, l: 0 },
+      4: { w: 0, l: 0 },
+      5: { w: 0, l: 0 },
+      6: { w: 0, l: 0 },
+    };
+
+    Object.keys(byDay).forEach((day) => {
+      const rows = (byDay[day] || [])
+        .slice()
+        .sort((a, b) => (ev(b) ?? -999) - (ev(a) ?? -999));
+      const top6 = rows.slice(0, 6);
+      top6.forEach((h, idx) => {
+        const rank = idx + 1;
+        const r = res(h);
+        if (isW(r)) agg[rank].w += 1;
+        else if (isL(r)) agg[rank].l += 1;
+      });
+    });
+
+    const out = [1, 2, 3, 4, 5, 6].map((rank) => {
+      const w = agg[rank].w;
+      const l = agg[rank].l;
+      const decided = w + l;
+      const winRate = decided ? (w / decided) * 100 : null;
+      return {
+        rank: `#${rank}`,
+        winRate: winRate === null ? null : Number(winRate.toFixed(1)),
+        n: decided,
+        _fill: (winRate !== null && winRate >= 50) ? '#34d399' : '#fb7185',
+      };
+    });
+
+    const vals = out.map((x) => x.winRate).filter((x) => Number.isFinite(x));
+    const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+
+    return { rows: out, avg: avg === null ? null : Number(avg.toFixed(1)) };
+  }, [graded]);
 
   const dailyPerformance = useMemo(() => {
     // Daily net units based on graded recommended picks.
@@ -245,6 +315,45 @@ export default function Picks() {
         {gradedYesterday.length === 0 && (
           <div className="mt-3 text-xs text-slate-500">No graded recommended picks found for yesterday yet.</div>
         )}
+      </div>
+
+      {/* Top 6 recommended: win% by rank */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Top 6 recommended (2026 YTD) — win% by rank</div>
+        <div className="text-[11px] text-slate-500 mb-3">Each day, picks are ranked by EV/u and the Top 6 are tracked by rank.</div>
+
+        <div className="h-[260px] overflow-x-auto">
+          <div className="min-w-[360px] h-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={top6RankPerformance.rows} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                <XAxis dataKey="rank" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, 100]} />
+                <Tooltip
+                  contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                  formatter={(v, name, props) => {
+                    if (name === 'winRate') return [`${Number(v).toFixed(1)}%`, 'Win%'];
+                    if (name === 'n') return [v, 'N (decided)'];
+                    return [v, name];
+                  }}
+                />
+                <Legend />
+                <ReferenceLine y={50} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: '50%', fill: '#94a3b8', fontSize: 11 }} />
+                {top6RankPerformance?.avg !== null && top6RankPerformance?.avg !== undefined ? (
+                  <ReferenceLine y={top6RankPerformance.avg} stroke="#60a5fa" strokeDasharray="4 4" label={{ value: `Avg ${top6RankPerformance.avg}%`, fill: '#60a5fa', fontSize: 11 }} />
+                ) : null}
+
+                <Bar dataKey="winRate" name="Win%" radius={[6, 6, 0, 0]}>
+                  {(top6RankPerformance.rows || []).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry._fill} />
+                  ))}
+                </Bar>
+                <Line type="monotone" dataKey="winRate" name="Trend" stroke="#eab308" strokeWidth={2} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       {/* Recommended bet performance bar chart (daily units) */}
