@@ -31,6 +31,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
     // Quick-pick state (board row badges)
     const [rowTopPicks, setRowTopPicks] = useState({}); // event_id -> { rec, analyzedAt }
+    const [topPicksError, setTopPicksError] = useState(null);
+    const [topPicksStats, setTopPicksStats] = useState({ games: 0, withPick: 0 });
     // Edge-engine recs removed: Today should use the core model (stored top picks) to avoid mismatches.
     // const [edgeRecs, setEdgeRecs] = useState(null);
     // const [edgeRecsError, setEdgeRecsError] = useState(null);
@@ -62,8 +64,10 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                     return { data: [] };
                 }),
                 (leagueFilter === 'NCAAM'
-                    ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 250, compute_missing: true } }).catch(() => ({ data: null }))
-                    : Promise.resolve({ data: null })
+                    ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 250, compute_missing: true } })
+                        .then((r) => ({ ...r, _error: null }))
+                        .catch((e) => ({ data: null, _error: e }))
+                    : Promise.resolve({ data: null, _error: null })
                 )
             ]);
 
@@ -74,6 +78,13 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
             // Hydrate row badges from server-side top picks (avoid N analyze calls)
             try {
+                const errTp = topPicksRes?._error;
+                if (errTp) {
+                    setTopPicksError(errTp?.response?.data?.detail || errTp?.response?.data?.message || errTp?.message || 'Top picks failed');
+                } else {
+                    setTopPicksError(null);
+                }
+
                 const tp = topPicksRes?.data?.picks || null;
                 if (tp && typeof tp === 'object') {
                     const mapped = {};
@@ -81,10 +92,16 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                         mapped[eid] = { rec: tp[eid]?.rec, analyzedAt: tp[eid]?.analyzed_at };
                     });
                     setRowTopPicks(mapped);
+                    const nGames = Object.keys(tp).length;
+                    const nWith = Object.values(tp).filter((x) => x && x.rec).length;
+                    setTopPicksStats({ games: nGames, withPick: nWith });
                     // Default board sub-tab to "Recommended" if we have at least one pick.
                     if (Object.keys(mapped).length > 0) {
                         setBoardTab('recommended');
                     }
+                } else {
+                    setRowTopPicks({});
+                    setTopPicksStats({ games: 0, withPick: 0 });
                 }
             } catch (e) { }
 
@@ -601,6 +618,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 No recommendations available for this window.
                                                 {!showModelPerformanceTab && leagueFilter === 'NCAAM' && (
                                                     <div className="mt-2 text-[11px] text-slate-600">
+                                                        Board games: {edges.length} • Top-picks games: {topPicksStats.games} • With pick: {topPicksStats.withPick}{topPicksError ? ` • Top-picks error: ${topPicksError}` : ''}
                                                     </div>
                                                 )}
                                             </div>
