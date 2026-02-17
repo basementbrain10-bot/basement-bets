@@ -522,54 +522,6 @@ export default function Picks() {
         </div>
       </div>
 
-      {/* Confidence breakdown (win% + ROI) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Performance by confidence</div>
-        <div className="text-[11px] text-slate-500 mb-4">Buckets use confidence_0_100: High ≥80, Medium 50–79, Low &lt;50.</div>
-
-        {(!confidenceBreakdown || confidenceBreakdown.length === 0) ? (
-          <div className="text-xs text-slate-500">No graded picks with confidence yet.</div>
-        ) : (
-          <>
-            {/* Recap tiles */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-              {confidenceBreakdown.map((b) => (
-                <div key={b.bucket} className="bg-slate-950/30 border border-slate-800 rounded-xl p-4">
-                  <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{b.bucket}</div>
-                  <div className="mt-1 text-white font-black text-lg">{b.wins}-{b.losses}{b.pushes ? `-${b.pushes}` : ''}</div>
-                  <div className="mt-1 text-slate-400 text-xs">Win% (W/L): <span className="text-slate-200 font-bold">{b.winRate === null ? '—' : `${b.winRate}%`}</span> • ROI: <span className={`font-bold ${Number(b.roi || 0) >= 0 ? 'text-green-300' : 'text-red-300'}`}>{b.roi === null ? '—' : `${b.roi}%`}</span> • N={b.picks}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Bar chart */}
-            <div className="h-[260px] overflow-x-auto">
-              <div className="min-w-[360px] h-full">
-                <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={confidenceBreakdown} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                  <XAxis dataKey="bucket" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                  <YAxis yAxisId="left" tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, 100]} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                  <Tooltip
-                    contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
-                    labelStyle={{ color: '#e2e8f0' }}
-                    formatter={(v, name) => {
-                      if (name === 'winRate') return [`${Number(v).toFixed(1)}%`, 'Win%'];
-                      if (name === 'roi') return [`${Number(v).toFixed(1)}%`, 'ROI'];
-                      return [v, name];
-                    }}
-                  />
-                  <Legend />
-                  <Bar yAxisId="left" dataKey="winRate" name="Win%" fill="#34d399" radius={[6, 6, 0, 0]} />
-                  <Bar yAxisId="right" dataKey="roi" name="ROI%" fill="#60a5fa" radius={[6, 6, 0, 0]} />
-                </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
 
       {/* Existing analytics (kept) */}
       <ModelPerformanceAnalytics history={history || []} />
