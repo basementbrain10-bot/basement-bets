@@ -90,10 +90,26 @@ export default function OpenBetsPanel({ formatCurrency, formatDateMDY, title = '
       };
 
       await api.patch(`/api/bets/${editBet.id}`, payload);
+
+      // If user just settled an open bet, also hit the dedicated settle endpoint
+      // (keeps transaction sync logic consistent).
+      try {
+        const orig = String(editBet?._originalStatus || '').toUpperCase();
+        const next = String(editBet?.status || '').toUpperCase();
+        const wasOpen = orig === 'PENDING' || orig === 'OPEN';
+        const isSettled = next === 'WON' || next === 'LOST' || next === 'PUSH';
+        if (wasOpen && isSettled) {
+          await api.patch(`/api/bets/${editBet.id}/settle`, { status: next });
+        }
+      } catch (e) { }
+
       setShowEdit(false);
       setEditBet(null);
       setEditNote('');
-      await load();
+
+      // Refresh full dashboard so the bet appears in Actuals immediately.
+      try { localStorage.setItem('nav_after_save', 'transactions'); } catch (e) { }
+      window.location.reload();
     } catch (e) {
       alert('Failed to update bet.');
     } finally {
@@ -109,7 +125,8 @@ export default function OpenBetsPanel({ formatCurrency, formatDateMDY, title = '
       setShowEdit(false);
       setEditBet(null);
       setEditNote('');
-      await load();
+      try { localStorage.setItem('nav_after_save', 'transactions'); } catch (e) { }
+      window.location.reload();
     } catch (e) {
       alert('Failed to delete bet.');
     } finally {
@@ -145,6 +162,7 @@ export default function OpenBetsPanel({ formatCurrency, formatDateMDY, title = '
                   onClick={() => {
                     setEditBet({
                       ...b,
+                      _originalStatus: b.status,
                       date: String(b.date_et || b.date || '').slice(0, 10),
                       wager: b.wager ?? b.stake ?? b.amount,
                     });
