@@ -31,6 +31,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
     // Quick-pick state (board row badges)
     const [rowTopPicks, setRowTopPicks] = useState({}); // event_id -> { rec, analyzedAt }
+    const [edgeRecs, setEdgeRecs] = useState(null); // /api/edge/ncaab/recommendations payload
     const [rowPickingId, setRowPickingId] = useState(null);
 
     // Mobile UX: collapse recommended list to Top 6 by default (expandable)
@@ -52,7 +53,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
             setLoading(true);
             setError(null);
             // Fetch board + history
-            const [boardRes, historyRes, topPicksRes] = await Promise.all([
+            const [boardRes, historyRes, topPicksRes, edgeRecsRes] = await Promise.all([
                 api.get('/api/board', { params: { league: leagueFilter, date: selectedDate, days: BOARD_DAYS_DEFAULT } }),
                 api.get('/api/ncaam/history', { params: { limit: 500 } }).catch((e) => {
                     console.warn("History fetch failed:", e);
@@ -61,8 +62,14 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                 (leagueFilter === 'NCAAM'
                     ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 200 } }).catch(() => ({ data: null }))
                     : Promise.resolve({ data: null })
+                ),
+                (!showModelPerformanceTab && leagueFilter === 'NCAAM'
+                    ? api.get('/api/edge/ncaab/recommendations', { params: { date: selectedDate, season: 2026 } }).catch(() => ({ data: null }))
+                    : Promise.resolve({ data: null })
                 )
             ]);
+
+            try { setEdgeRecs(edgeRecsRes?.data || null); } catch (e) { }
 
             setEdges(boardRes.data || []);
             setHistory(historyRes.data || []);
@@ -561,30 +568,56 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         }
                                     };
 
-                                    const rows = getProcessedEdges()
-                                        .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null }))
-                                        .filter(({ edge, top }) => {
-                                            if (!top) return false;
-                                            // Recommended view should reflect the calendar day selected (ET)
-                                            if (!isSameEtDay(edge?.start_time, selectedDate)) return false;
-                                            const bt = String(top.bet_type || '').toUpperCase();
-                                            const sel = String(top.selection || '').trim();
-                                            const edgeStr = String(top.edge ?? '').replace('%', '').trim();
-                                            const edgeNum = Number(edgeStr);
+                                    const rows = (() => {
+                                        // Preferred for Today: edge engine recommendations (matches cron output)
+                                        if (!showModelPerformanceTab && leagueFilter === 'NCAAM' && (edgeRecs?.picks || []).length > 0) {
+                                            return (edgeRecs.picks || [])
+                                                .filter((p) => String(p?.date || '') === String(selectedDate))
+                                                .map((p) => ({
+                                                    edge: { id: p.game_id, away_team: String(p.match || '').split(' @ ')[0], home_team: String(p.match || '').split(' @ ')[1], sport: 'NCAAM' },
+                                                    top: {
+                                                        bet_type: p.bet_type,
+                                                        selection: p.selection,
+                                                        market_line: p.line,
+                                                        price: p.odds,
+                                                        edge: `${((Number(p.ev_per_unit) || 0) * 100).toFixed(1)}%`,
+                                                        confidence: Number(p.confidence || 0) >= 80 ? 'High' : Number(p.confidence || 0) >= 50 ? 'Medium' : 'Low',
+                                                        book: 'consensus',
+                                                    }
+                                                }))
+                                                .sort((a, b) => {
+                                                    const aEv = Number(String(a.top?.edge ?? '').replace('%', '').trim()) || 0;
+                                                    const bEv = Number(String(b.top?.edge ?? '').replace('%', '').trim()) || 0;
+                                                    return bEv - aEv;
+                                                });
+                                        }
 
-                                            // Only show actionable recommendations (hide AUTO/blank/0-EV rows).
-                                            // NOTE: odds/price can be missing if the board ingest didn't capture a book yet;
-                                            // we still want to show the recommended play.
-                                            if (!bt || bt === 'AUTO') return false;
-                                            if (!sel || sel === '—') return false;
-                                            if (!Number.isFinite(edgeNum) || edgeNum <= 0) return false;
-                                            return true;
-                                        })
-                                        .sort((a, b) => {
-                                            const aEv = Number(String(a.top?.edge ?? '').replace('%', '').trim()) || 0;
-                                            const bEv = Number(String(b.top?.edge ?? '').replace('%', '').trim()) || 0;
-                                            return bEv - aEv;
-                                        });
+                                        // Fallback: stored top-picks per row
+                                        return getProcessedEdges()
+                                            .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null }))
+                                            .filter(({ edge, top }) => {
+                                                if (!top) return false;
+                                                // Recommended view should reflect the calendar day selected (ET)
+                                                if (!isSameEtDay(edge?.start_time, selectedDate)) return false;
+                                                const bt = String(top.bet_type || '').toUpperCase();
+                                                const sel = String(top.selection || '').trim();
+                                                const edgeStr = String(top.edge ?? '').replace('%', '').trim();
+                                                const edgeNum = Number(edgeStr);
+
+                                                // Only show actionable recommendations (hide AUTO/blank/0-EV rows).
+                                                // NOTE: odds/price can be missing if the board ingest didn't capture a book yet;
+                                                // we still want to show the recommended play.
+                                                if (!bt || bt === 'AUTO') return false;
+                                                if (!sel || sel === '—') return false;
+                                                if (!Number.isFinite(edgeNum) || edgeNum <= 0) return false;
+                                                return true;
+                                            })
+                                            .sort((a, b) => {
+                                                const aEv = Number(String(a.top?.edge ?? '').replace('%', '').trim()) || 0;
+                                                const bEv = Number(String(b.top?.edge ?? '').replace('%', '').trim()) || 0;
+                                                return bEv - aEv;
+                                            });
+                                    })();
 
                                     if (!rows.length) {
                                         return <div className="text-slate-500">No recommendations available for this window.</div>;

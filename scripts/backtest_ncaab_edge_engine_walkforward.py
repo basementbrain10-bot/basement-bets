@@ -513,7 +513,13 @@ def bet_narrative(kind: str, g: GameAgg, p_model: float, p_market: float, ev: fl
     if kind == 'SPREAD':
         line = g.close_home_spread
         odds = g.close_home_spread_odds
-        win_cond = f"{g.home_team} must cover {line:+.1f} (win margin > {-line:+.1f})"
+        # Recommended side is the better of home/away given the home spread line.
+        # If home is favored (negative), recommendation is away +abs(line). If home is dog (positive), home +line.
+        if line is not None and float(line) < 0:
+            selection = f"{g.away_team} +{abs(float(line)):.1f}".replace('+.0', '').replace('.0', '')
+        else:
+            selection = f"{g.home_team} {float(line):+.1f}".replace('+.0', '').replace('.0', '') if line is not None else g.home_team
+        win_cond = f"{selection} must cover"
         keys = [
             ("Line move (close-open)", (g.close_home_spread - (g.open_home_spread or g.close_home_spread))),
             ("Torvik margin", g.torvik_margin),
@@ -522,7 +528,8 @@ def bet_narrative(kind: str, g: GameAgg, p_model: float, p_market: float, ev: fl
     elif kind == 'TOTAL':
         line = g.close_total
         odds = g.close_over_odds
-        win_cond = f"Game total points must finish OVER {line:.1f}"
+        selection = f"OVER {float(line):.1f}".replace('.0', '') if line is not None else 'OVER'
+        win_cond = f"Game total points must finish {selection}"
         keys = [
             ("Total move (close-open)", (g.close_total - (g.open_total or g.close_total))),
             ("Torvik total", g.torvik_total),
@@ -530,7 +537,8 @@ def bet_narrative(kind: str, g: GameAgg, p_model: float, p_market: float, ev: fl
         ]
     else:
         odds = g.close_home_ml
-        win_cond = f"{g.home_team} must win outright"
+        selection = g.home_team
+        win_cond = f"{selection} must win outright"
         keys = [
             ("Torvik margin", g.torvik_margin),
             ("Spread (close)", g.close_home_spread),
@@ -546,6 +554,8 @@ def bet_narrative(kind: str, g: GameAgg, p_model: float, p_market: float, ev: fl
         "date": g.date_et,
         "match": f"{g.away_team} @ {g.home_team}",
         "bet_type": kind,
+        "selection": selection,
+        "line": line,
         "odds": odds,
         "p_market": round(p_market, 4),
         "p_model": round(p_model, 4),
