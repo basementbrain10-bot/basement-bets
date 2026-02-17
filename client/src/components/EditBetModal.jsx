@@ -53,6 +53,17 @@ export default function EditBetModal({
             </select>
           </div>
           <div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Account</div>
+            <select
+              className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-sm text-white"
+              value={editBet.account_id || 'Main'}
+              onChange={(e) => setEditBet({ ...editBet, account_id: e.target.value })}
+            >
+              <option value="Main">Primary</option>
+              <option value="User2">Secondary</option>
+            </select>
+          </div>
+          <div>
             <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">Sport</div>
             <input
               type="text"

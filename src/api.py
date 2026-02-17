@@ -1183,7 +1183,7 @@ async def update_bet(bet_id: int, request: Request, user: dict = Depends(get_cur
             raise HTTPException(status_code=400, detail="Invalid payload")
 
         allowed = {
-            'provider', 'date', 'sport', 'bet_type', 'wager', 'odds', 'profit', 'status',
+            'provider', 'account_id', 'date', 'sport', 'bet_type', 'wager', 'odds', 'profit', 'status',
             'description', 'selection', 'event_text'
         }
         fields = {k: payload.get(k) for k in allowed if k in payload}
@@ -1260,6 +1260,9 @@ async def remove_bet(bet_id: int, user: dict = Depends(get_current_user)):
         uid = user.get("sub")
         from src.database import delete_bet
         success = delete_bet(bet_id, user_id=uid)
+        if not success:
+            # Fallback for legacy single-user rows where bets.user_id may be NULL/empty or a fixed id.
+            success = delete_bet(bet_id, user_id=None)
         if not success:
             raise HTTPException(status_code=404, detail="Bet not found")
         invalidate_analytics_cache(uid)

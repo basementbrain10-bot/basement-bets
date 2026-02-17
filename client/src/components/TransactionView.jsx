@@ -164,6 +164,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
         try {
             const payload = {
                 provider: editBet.provider,
+                account_id: editBet.account_id,
                 date: editBet.date,
                 sport: editBet.sport,
                 bet_type: editBet.bet_type,
