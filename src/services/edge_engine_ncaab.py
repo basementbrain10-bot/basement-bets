@@ -29,6 +29,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.database import get_db_connection, _exec
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SERVICE_DIR = os.path.dirname(os.path.abspath(__file__))
+BUNDLED_PARAMS_DIR = os.path.join(SERVICE_DIR, 'model_params')
 
 LEAGUE_AVG_EFF = 1.0  # Torvik features are already scaled; keep as 1.0 for legacy formula
 
@@ -206,7 +208,10 @@ def compute_torvik_margin_total(conn, cache: dict, home_bt: str, away_bt: str, d
 # ----------------------------
 
 def load_config(season_end_year: int) -> Dict[str, Any]:
-    path = os.path.join(REPO_ROOT, 'data', 'model_params', f'ncaab_edge_engine_config_{season_end_year}.json')
+    # Prefer bundled params (ships with serverless function), fallback to repo data/.
+    p1 = os.path.join(BUNDLED_PARAMS_DIR, f'ncaab_edge_engine_config_{season_end_year}.json')
+    p2 = os.path.join(REPO_ROOT, 'data', 'model_params', f'ncaab_edge_engine_config_{season_end_year}.json')
+    path = p1 if os.path.exists(p1) else p2
     if not os.path.exists(path):
         raise FileNotFoundError(f"Missing config: {path}. Run sweep+config to generate it.")
     with open(path, 'r', encoding='utf-8') as f:
@@ -229,7 +234,10 @@ def load_models(season_end_year: int) -> Dict[str, Dict[str, Any]]:
     path = None
     raw = None
     for s in candidates:
-        p = os.path.join(REPO_ROOT, 'data', 'model_params', f'ncaab_edge_model_season_{s}.json')
+        # Prefer bundled params (ships with serverless function), fallback to repo data/.
+        p1 = os.path.join(BUNDLED_PARAMS_DIR, f'ncaab_edge_model_season_{s}.json')
+        p2 = os.path.join(REPO_ROOT, 'data', 'model_params', f'ncaab_edge_model_season_{s}.json')
+        p = p1 if os.path.exists(p1) else p2
         if os.path.exists(p):
             path = p
             raw = json.loads(open(p, 'r', encoding='utf-8').read())
