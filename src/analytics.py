@@ -1040,6 +1040,8 @@ class AnalyticsEngine:
                 cap0 = _to_naive_dt((snap or {}).get('captured_at'))
 
                 ledger_delta = 0.0
+
+                # 1) Settled bet P/L after snapshot
                 for b in (bets or []):
                     if (b.get('provider') or '') != p:
                         continue
@@ -1057,8 +1059,36 @@ class AnalyticsEngine:
                             continue
                         if bc <= cap0:
                             continue
-                    # If no snapshot exists for this account, treat baseline=0 and include all settled bet P/L.
                     ledger_delta += float(b.get('profit') or 0)
+
+                # 2) Cashflows (deposits/withdrawals) after snapshot
+                # These should move the computed bankroll immediately, even before the next sportsbook snapshot.
+                try:
+                    with get_db_connection() as conn:
+                        from src.database import _exec
+                        # Defensive migration
+                        try:
+                            _exec(conn, "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS account_id TEXT;")
+                        except Exception:
+                            pass
+
+                        tx_rows = _exec(conn, """
+                            SELECT date, type, amount
+                            FROM transactions
+                            WHERE (%(user_id)s IS NULL OR user_id = %(user_id)s)
+                              AND provider = %(prov)s
+                              AND COALESCE(account_id,'Main') = %(acc)s
+                              AND type IN ('Deposit','Withdrawal')
+                        """, {"user_id": user_id, "prov": p, "acc": str(acc_id)}).fetchall()
+
+                    for tr in tx_rows:
+                        dt = _to_naive_dt(tr.get('date'))
+                        if cap0 and dt and dt <= cap0:
+                            continue
+                        # Deposits are positive, withdrawals often negative. Add raw amount.
+                        ledger_delta += float(tr.get('amount') or 0.0)
+                except Exception:
+                    pass
 
                 ledger_in_play = base_bal + float(ledger_delta or 0)
 
