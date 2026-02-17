@@ -76,6 +76,15 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                 setEdgeRecs(edgeRecsRes?.data || null);
                 const e = edgeRecsRes?._error;
                 if (e) {
+                    // Match other pages: if auth fails, prompt for Basement password.
+                    if (e?.response?.status === 403) {
+                        const pass = prompt("Authentication failed. Please enter the Basement Password:");
+                        if (pass) {
+                            localStorage.setItem('basement_password', pass);
+                            window.location.reload();
+                            return;
+                        }
+                    }
                     setEdgeRecsError(e?.response?.data?.detail || e?.response?.data?.message || e?.message || 'Edge engine failed');
                 } else {
                     setEdgeRecsError(null);
