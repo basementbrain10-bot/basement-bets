@@ -474,27 +474,49 @@ export default function Picks() {
         </div>
       </div>
 
-      {/* Edge band chart */}
+      {/* Edge band table */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Performance by EV% band (win rate)</div>
-        <div className="h-[260px] overflow-x-auto">
-          <div className="min-w-[360px] h-full">
-            <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={edgeBandChart} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-              <XAxis dataKey="band" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-              <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, 100]} />
-              <Tooltip
-                contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
-                labelStyle={{ color: '#e2e8f0' }}
-              />
-              <Legend />
-              <Bar dataKey="winRate" name="Win%" fill="#34d399" radius={[6, 6, 0, 0]} />
-            </BarChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Performance by EV% band</div>
+        <div className="text-[11px] text-slate-500 mb-3">Bands are based on EV/u (decimal). Example: 0.08 = 8%.</div>
+
+        <div className="overflow-x-auto border border-slate-800 rounded-xl">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-950/50">
+              <tr className="text-slate-400 border-b border-slate-800">
+                <th className="py-3 px-4">EV% band</th>
+                <th className="py-3 px-4 text-right">W-L</th>
+                <th className="py-3 px-4 text-right">Win%</th>
+                <th className="py-3 px-4 text-right">ROI%</th>
+                <th className="py-3 px-4 text-right">N</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {(edgeBandChart || []).length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-6 px-4 text-slate-500">No graded picks in EV bands yet.</td>
+                </tr>
+              ) : (
+                (edgeBandChart || []).map((b) => {
+                  const w = Number(b.wins || 0);
+                  const l = Number(b.losses || 0);
+                  const n = Number(b.count || b.picks || 0);
+                  const winPct = (w + l) ? (w / (w + l) * 100) : null;
+                  // ROI% uses the same simplifying assumption as other UI: $10 stake, -110 style
+                  const roiPct = n ? ((w * 9.09 - l * 10) / (n * 10) * 100) : null;
+                  return (
+                    <tr key={b.band || b.label} className="hover:bg-slate-800/30">
+                      <td className="py-3 px-4 font-black text-slate-100">{b.band || b.label}</td>
+                      <td className="py-3 px-4 text-right font-mono text-slate-200">{w}-{l}</td>
+                      <td className="py-3 px-4 text-right font-mono text-slate-200">{winPct === null ? '—' : `${winPct.toFixed(1)}%`}</td>
+                      <td className={`py-3 px-4 text-right font-mono font-bold ${roiPct === null ? 'text-slate-500' : roiPct >= 0 ? 'text-green-300' : 'text-red-300'}`}>{roiPct === null ? '—' : `${roiPct.toFixed(1)}%`}</td>
+                      <td className="py-3 px-4 text-right font-mono text-slate-400">{n}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-        <div className="mt-2 text-[11px] text-slate-500">Bands are based on EV/u (decimal). Example: 0.08 = 8%.</div>
       </div>
 
       {/* Confidence breakdown (win% + ROI) */}
