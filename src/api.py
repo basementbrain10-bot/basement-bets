@@ -2126,15 +2126,26 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         }
 
     import json
-    from dateutil.parser import parse as parse_date
 
     def _dt(x):
+        """Best-effort datetime parser without python-dateutil."""
         if not x:
             return None
         if isinstance(x, str):
+            s = str(x).strip()
             try:
-                return parse_date(x)
+                # handle trailing Z
+                if s.endswith('Z'):
+                    s = s[:-1] + '+00:00'
+                return datetime.fromisoformat(s)
             except Exception:
+                # fallback: YYYY-MM-DD
+                try:
+                    s0 = s.split('T')[0].split(' ')[0]
+                    if len(s0) == 10:
+                        return datetime.strptime(s0, '%Y-%m-%d')
+                except Exception:
+                    pass
                 return None
         if hasattr(x, 'isoformat'):
             return x
