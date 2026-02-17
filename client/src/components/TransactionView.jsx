@@ -227,9 +227,9 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
         setIsUpdating(true);
         try {
             await api.delete(`/api/bets/${betId}`);
-            if (typeof setBets === 'function') {
-                setBets((prev) => (prev || []).filter((b) => Number(b.id) !== Number(betId)));
-            }
+
+            // Refresh everything (open bets list + balances/tiles)
+            window.location.reload();
         } catch (err) {
             console.error("Delete Error:", err);
             alert("Failed to delete bet.");
