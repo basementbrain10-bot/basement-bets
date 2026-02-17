@@ -412,43 +412,6 @@ export default function Picks() {
         </div>
       </div>
 
-      {/* Top 6 aggregate (daily win% last 30d) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Top 6 recommended — daily win% (last 30 days)</div>
-        <div className="text-[11px] text-slate-500 mb-3">Each bar = that day’s Top 6 picks (ranked by EV/u). Green ≥ 50%, red &lt; 50%.</div>
-
-        <div className="h-[260px] overflow-x-auto">
-          <div className="min-w-[520px] h-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={top6DailyWinRate30.rows} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis dataKey="day" tick={{ fill: '#94a3b8', fontSize: 10 }} interval={4} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, 100]} />
-                <Tooltip
-                  contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
-                  labelStyle={{ color: '#e2e8f0' }}
-                  formatter={(v, name, props) => {
-                    if (name === 'winRate') return [`${Number(v).toFixed(1)}%`, 'Win%'];
-                    if (name === 'n') return [props?.payload?.n, 'N (decided)'];
-                    return [v, name];
-                  }}
-                />
-                <Legend />
-                <ReferenceLine y={50} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: '50%', fill: '#94a3b8', fontSize: 11 }} />
-                {top6DailyWinRate30?.avg !== null && top6DailyWinRate30?.avg !== undefined ? (
-                  <ReferenceLine y={top6DailyWinRate30.avg} stroke="#60a5fa" strokeDasharray="4 4" label={{ value: `Avg ${top6DailyWinRate30.avg}%`, fill: '#60a5fa', fontSize: 11 }} />
-                ) : null}
-
-                <Bar dataKey="winRate" name="Win%" radius={[4, 4, 0, 0]}>
-                  {(top6DailyWinRate30.rows || []).map((entry, index) => (
-                    <Cell key={`cell-d-${index}`} fill={entry._fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
 
       {/* Recommended bet performance bar chart (daily units) */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
