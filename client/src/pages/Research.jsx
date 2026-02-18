@@ -600,15 +600,11 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 if (!isSameEtDay(edge?.start_time, selectedDate)) return false;
                                                 const bt = String(top.bet_type || '').toUpperCase();
                                                 const sel = String(top.selection || '').trim();
-                                                const edgeStr = String(top.edge ?? '').replace('%', '').trim();
-                                                const edgeNum = Number(edgeStr);
-
-                                                // Only show actionable recommendations (hide AUTO/blank/0-EV rows).
-                                                // NOTE: odds/price can be missing if the board ingest didn't capture a book yet;
-                                                // we still want to show the recommended play.
+                                                // Recommended view: show any concrete pick (bet_type + selection).
+                                                // We'll still sort by edge if present, but don't hide rows just because edge is 0/blank.
+                                                // (Stored model_predictions may not always include EV% in a consistent format.)
                                                 if (!bt || bt === 'AUTO') return false;
                                                 if (!sel || sel === '—') return false;
-                                                if (!Number.isFinite(edgeNum) || edgeNum <= 0) return false;
                                                 return true;
                                             })
                                             .sort((a, b) => {
