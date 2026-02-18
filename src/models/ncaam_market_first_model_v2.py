@@ -1527,54 +1527,27 @@ class NCAAMMarketFirstModelV2(BaseModel):
         return 0.5 * (1 + math.erf((x - mu) / (sigma * math.sqrt(2))))
 
     def _sanitize_price(self, price: Any) -> int:
-        """Normalize/validate American odds.
-
-        We occasionally ingest malformed odds like -9 (missing trailing 0) which would
-        produce absurd payouts/EV. If odds are not plausible, default to -110.
-        """
-        try:
-            if price is None:
-                return -110
-            p = int(price)
-        except Exception:
-            return -110
-
-        # Typical American odds are <= -100 or >= +100.
-        # Treat anything in (-100, 100) as malformed and default.
-        if -100 < p < 100:
-            return -110
-        return p
+        # Back-compat wrapper.
+        from src.utils.ev import sanitize_american_odds
+        return int(sanitize_american_odds(price, default=-110) or -110)
 
     def _clamp_prob(self, win_prob: Any) -> float:
-        try:
-            p = float(win_prob)
-        except Exception:
-            return 0.5
-        if p < 0.0:
-            return 0.0
-        if p > 1.0:
-            return 1.0
-        return p
+        # Back-compat wrapper.
+        from src.utils.ev import clamp_prob
+        return float(clamp_prob(win_prob, default=0.5))
 
     def _calculate_ev(self, win_prob, price):
         """Estimated Value (ROI) per 1u risked."""
-        p = self._clamp_prob(win_prob)
-        price = self._sanitize_price(price)
-
-        payout = (price / 100.0) if price > 0 else (100.0 / abs(price))
-        ev = (p * payout) - (1.0 - p)
-        return ev
+        from src.utils.ev import ev_per_unit
+        ev = ev_per_unit(win_prob, price)
+        # Guardrail: if odds invalid, treat as no edge.
+        return float(ev) if ev is not None else 0.0
 
     def _calculate_kelly(self, win_prob, price):
         """Quarter Kelly stake fraction."""
-        p = self._clamp_prob(win_prob)
-        price = self._sanitize_price(price)
-
-        b = (price / 100.0) if price > 0 else (100.0 / abs(price))
-        q = 1.0 - p
-        fraction = (b * p - q) / b
-
-        return max(0.0, fraction * 0.25)
+        from src.utils.ev import kelly_fraction
+        k = kelly_fraction(win_prob, price, kelly_mult=0.25)
+        return float(k) if k is not None else 0.0
 
     def _generate_narrative(self, event, snap, torvik, kenpom, news, recs, raw_snaps: Optional[List[Dict]] = None, debug_info: Optional[Dict] = None) -> Dict:
         """Generate matchup-specific narrative + factors.

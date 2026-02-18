@@ -24,18 +24,10 @@ class RiskManager:
         return [p / total_p for p in implied_probs]
 
     def calculate_ev(self, win_prob: float, american_odds: int) -> float:
-        """
-        Calculates Expected Value (EV) percentage.
-        EV = (WinProb * Profit) - (LossProb * Stake)
-        """
-        if american_odds > 0:
-            decimal_odds = (american_odds / 100) + 1
-        else:
-            decimal_odds = (100 / abs(american_odds)) + 1
-            
-        profit = decimal_odds - 1
-        ev = (win_prob * profit) - (1 - win_prob)
-        return ev * 100 # Return as percentage
+        """Calculates Expected Value (EV) percentage using the central EV calculator."""
+        from src.utils.ev import ev_per_unit
+        ev = ev_per_unit(win_prob, american_odds)
+        return (float(ev) * 100.0) if ev is not None else 0.0
 
     def kelly_size(self, win_prob: float, american_odds: int, bankroll: float, fraction: float = 0.25) -> Dict[str, Any]:
         """
