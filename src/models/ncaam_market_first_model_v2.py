@@ -566,15 +566,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
         sigma_spread = (base_sigma_spread * tempo_factor) + 0.1 * abs(diff_torvik)
         sigma_total = (base_sigma_total * tempo_factor) + 0.1 * abs(mu_torvik_total - mu_market_total)
 
-        # Guardrails: prevent unrealistically tight sigmas (leads to extreme win_probs/EV).
-        try:
-            sigma_spread = max(float(os.getenv('MIN_SIGMA_SPREAD', '7.5')), float(sigma_spread))
-        except Exception:
-            sigma_spread = max(7.5, float(sigma_spread))
-        try:
-            sigma_total = max(float(os.getenv('MIN_SIGMA_TOTAL', '11.0')), float(sigma_total))
-        except Exception:
-            sigma_total = max(11.0, float(sigma_total))
+        # NOTE: We avoid hard sigma clamps; data-quality guardrails are applied later via
+        # sanity scoring (sigma inflation / higher EV thresholds) rather than forcing caps.
         
         # --- Feature: Advanced Home Court (Geo) ---
         # Travel Fatigue & Altitude
@@ -1346,6 +1339,93 @@ class NCAAMMarketFirstModelV2(BaseModel):
             push_prob = get_push_prob(float(total_line), float(sigma))
             return prob_over_raw - (push_prob / 2)
 
+        def _sanity_adjust(market: str, side: str, win_prob: float, ev: float, mc: Optional[Dict[str, Any]]):
+            """Soft guardrails for bad-data extreme EV.
+
+            Returns: (score:int, reasons:list[str], sigma_mult:float, min_ev_bump:float)
+            """
+            from src.utils.ev import implied_prob_american
+
+            score = 0
+            reasons = []
+            sigma_mult = 1.0
+            min_ev_bump = 0.0
+
+            # Odds/prob mismatch
+            try:
+                # We only have consensus prices in this function; treat as best-effort.
+                ip = implied_prob_american(snap.get('spread_price_home') if market == 'SPREAD' and side == 'home' else (
+                    (snap.get('_best_spread_away') or {}).get('price') if market == 'SPREAD' and side == 'away' else (
+                        (snap.get('_best_total_over') or {}).get('price') if market == 'TOTAL' and side == 'over' else (
+                            (snap.get('_best_total_under') or {}).get('price') if market == 'TOTAL' and side == 'under' else None
+                        )
+                    )
+                ))
+                if ip is not None:
+                    dp = float(win_prob) - float(ip)
+                    if abs(dp) >= float(os.getenv('SANITY_MAX_PROB_GAP', '0.18')):
+                        score += 2
+                        reasons.append(f"prob_gap={dp:+.2f}")
+                        sigma_mult *= 1.35
+                        min_ev_bump += 0.01
+            except Exception:
+                pass
+
+            # Market movement against
+            try:
+                if mc:
+                    m = str(market).upper()
+                    s = str(side).lower().strip()
+                    if m == 'SPREAD':
+                        mv = mc.get('spread_move_home')
+                        if mv is not None:
+                            mv = float(mv)
+                            against = (mv > 0) if s == 'away' else (mv < 0)
+                            if against and abs(mv) >= float(os.getenv('SANITY_STEAM_WARN', '1.5')):
+                                score += 1
+                                reasons.append(f"steam_against={mv:+.1f}")
+                                sigma_mult *= 1.20
+                            if against and abs(mv) >= float(os.getenv('SANITY_STEAM_BLOCK', '2.5')):
+                                score += 2
+                                reasons.append(f"steam_block={mv:+.1f}")
+                    if m == 'TOTAL':
+                        mv = mc.get('total_move')
+                        if mv is not None:
+                            mv = float(mv)
+                            against = (mv > 0) if s == 'over' else (mv < 0)
+                            if against and abs(mv) >= float(os.getenv('SANITY_STEAM_WARN_TOTAL', '2.0')):
+                                score += 1
+                                reasons.append(f"steam_against={mv:+.1f}")
+                                sigma_mult *= 1.15
+                            if against and abs(mv) >= float(os.getenv('SANITY_STEAM_BLOCK_TOTAL', '3.0')):
+                                score += 2
+                                reasons.append(f"steam_block={mv:+.1f}")
+            except Exception:
+                pass
+
+            # Disagreement across books
+            try:
+                if mc:
+                    dis = mc.get('spread_disagreement') if str(market).upper() == 'SPREAD' else mc.get('total_disagreement')
+                    if dis is not None and abs(float(dis)) >= float(os.getenv('SANITY_DISAGREE_WARN', '1.0')):
+                        score += 1
+                        reasons.append(f"disagree={float(dis):.1f}")
+                        sigma_mult *= 1.10
+            except Exception:
+                pass
+
+            # Extreme EV itself is a signal, but we don't cap; we demand better data.
+            try:
+                if abs(float(ev)) >= float(os.getenv('SANITY_EV_EXTREME', '0.20')):
+                    score += 1
+                    reasons.append(f"ev_extreme={float(ev):+.2f}")
+                    sigma_mult *= 1.15
+                    min_ev_bump += 0.01
+            except Exception:
+                pass
+
+            return score, reasons, sigma_mult, min_ev_bump
+
 
         # --- Spread ---
         line_s = snap.get("spread_home")
@@ -1361,15 +1441,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             ev_home = self._calculate_ev(prob_home_cal, price_home)
             kelly_home = self._calculate_kelly(prob_home_cal, price_home)
 
-            # Guardrail: cap extreme EVs (almost always indicates bad odds or bad probability math)
-            try:
-                ev_cap = float(os.getenv('EV_CAP_PER_UNIT', '0.20'))  # 20% ROI per bet cap
-            except Exception:
-                ev_cap = 0.20
-            if abs(ev_home) > ev_cap:
-                ev_home = 0.0
-                kelly_home = 0.0
-
+            # No hard EV caps; extreme EVs are handled by sanity scoring (below).
             # Away cover prob = 1 - P(home covers) - push (approx already baked into helper via -push/2)
             # For symmetry we compute raw home cover without calibration then derive away.
             prob_home_raw = 1.0 - self._normal_cdf(-float(line_s), -float(mu_s), float(sig_s))
@@ -1379,9 +1451,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
             ev_away = self._calculate_ev(prob_away_cal, price_away)
             kelly_away = self._calculate_kelly(prob_away_cal, price_away)
-            if abs(ev_away) > ev_cap:
-                ev_away = 0.0
-                kelly_away = 0.0
+            # (removed hard EV cap; handled by sanity scoring)
 
             # Use consensus for model math, but use a bettable line for the displayed recommendation.
             # Some consensus aggregations can produce quarter-points (e.g. -10.25) which are not real lines.
@@ -1484,17 +1554,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             ev_under = self._calculate_ev(prob_under_cal, price_under)
             kelly_under = self._calculate_kelly(prob_under_cal, price_under)
 
-            try:
-                ev_cap = float(os.getenv('EV_CAP_PER_UNIT', '0.20'))
-            except Exception:
-                ev_cap = 0.20
-            if abs(ev_over) > ev_cap:
-                ev_over = 0.0
-                kelly_over = 0.0
-            if abs(ev_under) > ev_cap:
-                ev_under = 0.0
-                kelly_under = 0.0
-
+            # No hard EV caps; extreme EVs are handled by sanity scoring (below).
             market_line_t = float(line_t)
             fair_line_t = float(mu_t)
             edge_pts_t = abs(fair_line_t - market_line_t)
