@@ -2106,7 +2106,7 @@ async def get_ncaam_board(date: Optional[str] = None, days: int = 1):
 
 
 @app.get("/api/ncaam/top-picks")
-async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_games: int = 25, compute_missing: bool = False, relax_gates: bool = False):
+async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_games: int = 25, compute_missing: bool = False, relax_gates: bool = False, max_compute: int = 20):
     """Return top model pick per game for the NCAAM board window.
 
     Goal: allow UI to render a 'Top pick' badge without firing /analyze for every row.
@@ -2393,7 +2393,13 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         now_dt = datetime.now(timezone.utc)
 
         # Fast path (default): use stored recommended picks only.
-        # This avoids expensive server-side analysis which can time out on Vercel.
+        # compute_missing can be expensive in serverless; cap the number of computed analyses.
+        try:
+            max_compute_i = int(max_compute)
+        except Exception:
+            max_compute_i = 20
+        max_compute_i = max(0, min(max_compute_i, 250))
+
         for eid in event_ids:
             stats['scanned'] += 1
             try:
@@ -2419,6 +2425,9 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                     continue
 
                 # Optional slow path: compute missing picks on-demand.
+                if max_compute_i and stats['computed_attempted'] >= max_compute_i:
+                    continue
+
                 stats['computed_attempted'] += 1
                 # In top-picks, do not persist predictions (serverless runtime + avoid DB churn).
                 res = model.analyze(eid, relax_gates=bool(relax_gates), persist=False)
