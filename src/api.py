@@ -2326,9 +2326,12 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         'stored': 0,
         'computed_attempted': 0,
         'computed_with_pick': 0,
+        'computed_no_pick': 0,
+        'no_pick_reasons': {},
         'errors': 0,
     }
     errors = []
+    no_pick_samples = []
 
     with get_db_connection() as conn:
         now_dt = datetime.now(timezone.utc)
@@ -2370,6 +2373,15 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                         'locked': False,
                         'source': 'computed',
                     }
+                else:
+                    stats['computed_no_pick'] += 1
+                    reason = None
+                    if isinstance(res, dict):
+                        reason = res.get('headline') or res.get('recommendation') or res.get('error')
+                    reason = str(reason or 'No recommendations')
+                    stats['no_pick_reasons'][reason] = int(stats['no_pick_reasons'].get(reason, 0)) + 1
+                    if len(no_pick_samples) < 20:
+                        no_pick_samples.append({'event_id': eid, 'reason': reason})
             except Exception as e:
                 stats['errors'] += 1
                 msg = str(e)
@@ -2385,6 +2397,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         "limit_games": limit_games,
         "stats": stats,
         "errors": errors,
+        "no_pick_samples": no_pick_samples,
         "picks": picks,
     }
 
