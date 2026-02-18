@@ -596,8 +596,13 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                             .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null }))
                                             .filter(({ edge, top }) => {
                                                 if (!top) return false;
-                                                // Board is already scoped to selectedDate window; don't drop picks due to timezone parsing quirks.
-                                                // if (!isSameEtDay(edge?.start_time, selectedDate)) return false;
+                                                // Recommended view should reflect the selected ET date.
+                                                // Prefer server-provided day_et (more reliable than client-side timezone parsing).
+                                                if (edge?.day_et) {
+                                                    if (String(edge.day_et) !== String(selectedDate)) return false;
+                                                } else {
+                                                    if (!isSameEtDay(edge?.start_time, selectedDate)) return false;
+                                                }
                                                 const bt = String(top.bet_type || '').toUpperCase();
                                                 const sel = String(top.selection || '').trim();
                                                 // Recommended view: show any concrete pick (bet_type + selection).

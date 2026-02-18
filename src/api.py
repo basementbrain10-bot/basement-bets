@@ -2002,6 +2002,7 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
       WHERE rn = 1
     )
     SELECT e.id, e.league as sport, e.home_team, e.away_team, e.start_time, e.status,
+           e.day_et as day_et,
            -- SPREAD (HOME/AWAY)
            s_home.line_value as home_spread,
            s_home.price as spread_home_odds,
@@ -2148,7 +2149,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
               ) t
               WHERE rn = 1
             )
-            SELECT id, home_team, away_team, start_time
+            SELECT id, home_team, away_team, start_time, day_et
             FROM dedup_events
             ORDER BY start_time ASC
             LIMIT %(lim)s
@@ -2185,6 +2186,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
             'home_team': d.get('home_team'),
             'away_team': d.get('away_team'),
             'start_time': st,
+            'day_et': d.get('day_et'),
         }
 
     import json
