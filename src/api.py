@@ -2420,7 +2420,8 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
 
                 # Optional slow path: compute missing picks on-demand.
                 stats['computed_attempted'] += 1
-                res = model.analyze(eid, relax_gates=bool(relax_gates))
+                # In top-picks, do not persist predictions (serverless runtime + avoid DB churn).
+                res = model.analyze(eid, relax_gates=bool(relax_gates), persist=False)
                 top = (res.get('recommendations') or [None])[0]
                 if top:
                     stats['computed_with_pick'] += 1

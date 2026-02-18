@@ -365,7 +365,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         }
         return self.analyze(game_id, market_snapshot=snap, event_context=event)
 
-    def analyze(self, event_id: str, market_snapshot: Optional[Dict] = None, event_context: Optional[Dict] = None, relax_gates: bool = False) -> Dict:
+    def analyze(self, event_id: str, market_snapshot: Optional[Dict] = None, event_context: Optional[Dict] = None, relax_gates: bool = False, persist: bool = True) -> Dict:
         """
         On-demand analysis for one game.
         """
@@ -984,7 +984,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         except Exception:
             pass
 
-        if should_persist:
+        if persist and should_persist:
             insert_model_prediction(res)
 
         return res
