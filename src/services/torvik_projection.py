@@ -202,11 +202,20 @@ class TorvikProjectionService:
              
         tempo = stats.get('game_tempo') or 68.0
         
-        # Calculate scores
+        # Calculate scores (defensive None handling)
         # Home Score = (HomeAdjOE * AwayAdjDE) / LeagueAvg * (Tempo/100)
-        eff_factor = self.LEAGUE_AVG_EFF
-        h_score = (h['adj_off'] * a['adj_def'] / eff_factor) * (tempo / 100.0)
-        a_score = (a['adj_off'] * h['adj_def'] / eff_factor) * (tempo / 100.0)
+        eff_factor = float(self.LEAGUE_AVG_EFF)
+        h_off = float(h.get('adj_off') or 0.0)
+        h_def = float(h.get('adj_def') or 0.0)
+        a_off = float(a.get('adj_off') or 0.0)
+        a_def = float(a.get('adj_def') or 0.0)
+
+        # If core metrics are missing, we cannot compute a projection.
+        if (h_off <= 0.0) or (h_def <= 0.0) or (a_off <= 0.0) or (a_def <= 0.0):
+            return {"margin": 0, "total": 145, "lean": "No Data"}
+
+        h_score = (h_off * a_def / eff_factor) * (tempo / 100.0)
+        a_score = (a_off * h_def / eff_factor) * (tempo / 100.0)
         
         # HCA (Home Court Advantage). Torvik uses ~3 pts?
         # Let's assume stats include HCA? No, raw efficiency is neutral.
