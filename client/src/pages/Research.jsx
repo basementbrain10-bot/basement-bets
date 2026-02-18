@@ -607,11 +607,25 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 }
                                                 const bt = String(top.bet_type || '').toUpperCase();
                                                 const sel = String(top.selection || '').trim();
-                                                // Recommended view: show any concrete pick (bet_type + selection).
-                                                // We'll still sort by edge if present, but don't hide rows just because edge is 0/blank.
-                                                // (Stored model_predictions may not always include EV% in a consistent format.)
+                                                const evStr = String(top.edge ?? '').replace('%', '').trim();
+                                                const evPct = Number(evStr);
+                                                const wp = (top.win_prob !== null && top.win_prob !== undefined) ? Number(top.win_prob) : null;
+                                                const wpLb10 = (top.win_prob_lb10 !== null && top.win_prob_lb10 !== undefined) ? Number(top.win_prob_lb10) : null;
+                                                // Option A: only show bets the model believes will win + positive EV.
+                                                // Defaults (confirmed):
+                                                // - EV% >= +2.0%
+                                                // - win_prob_lb10 >= 0.50 (preferred); else win_prob >= 0.52
                                                 if (!bt || bt === 'AUTO') return false;
                                                 if (!sel || sel === '—') return false;
+
+                                                if (!Number.isFinite(evPct) || evPct < 2.0) return false;
+
+                                                const okWin = (
+                                                    (Number.isFinite(wpLb10) && wpLb10 >= 0.50) ||
+                                                    (!Number.isFinite(wpLb10) && Number.isFinite(wp) && wp >= 0.52)
+                                                );
+                                                if (!okWin) return false;
+
                                                 return true;
                                             })
                                             .sort((a, b) => {
@@ -656,13 +670,13 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         return pickText;
                                     };
 
-                                    const top6 = rows.slice(0, 6);
+                                    const top6 = rows.slice(0, 5);
 
                                     return (
                                         <>
                                             <div className="hidden sm:block mb-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-[11px] font-black text-emerald-200">Top 6 Plays</div>
+                                                    <div className="text-[11px] font-black text-emerald-200">Top 5 Plays</div>
                                                     <div className="text-[10px] text-slate-500">{selectedDate} • Sorted by EV% (1dp)</div>
                                                 </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
