@@ -655,20 +655,10 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 if (!sel || sel === '—') return false;
                                                 diag.passBasic += 1;
 
-                                                // Option A thresholds
-                                                const okEv = Number.isFinite(evPct) && evPct >= 2.0;
-                                                if (okEv) diag.passEv += 1;
-
-                                                const conf = String(top.confidence || '').trim();
-                                                const okWin = (
-                                                    (Number.isFinite(wpLb10) && wpLb10 >= 0.50) ||
-                                                    (!Number.isFinite(wpLb10) && Number.isFinite(wp) && wp >= 0.52) ||
-                                                    (!Number.isFinite(wpLb10) && !Number.isFinite(wp) && conf === 'High')
-                                                );
-                                                if (okWin) diag.passWin += 1;
-
-                                                const ok = okEv && okWin;
-                                                if (ok) diag.passBoth += 1;
+                                                // IMPORTANT: do not apply additional client-side gates here.
+                                                // The server/model already gates recommendations (EV, archetype stats, sanity blocks).
+                                                // Extra client gating can accidentally hide TOTAL (O/U) picks.
+                                                const ok = true;
                                                 return ok;
                                             })
                                             .sort((a, b) => {
