@@ -1,4 +1,4 @@
-from src.utils.normalize import normalize_market, normalize_side
+from src.utils.normalize import normalize_market, normalize_side, normalize_feed_provider
 
     # ... (existing imports)
 
@@ -119,6 +119,8 @@ class OddsAdapter:
         final_snapshots = []
         if captured_at is None:
             captured_at = datetime.now(timezone.utc)
+
+        provider = normalize_feed_provider(provider)
 
         for event in raw_data:
             if provider == "action_network":

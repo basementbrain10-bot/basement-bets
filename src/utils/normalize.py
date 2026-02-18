@@ -19,26 +19,54 @@ def normalize_market(market: str) -> str:
     return m
 
 def normalize_provider(provider: str) -> str:
+    """Normalize sportsbook/provider display names.
+
+    Note: this is intended for *sportsbooks* (DraftKings/FanDuel/etc), not feed sources.
     """
-    Consolidates provider naming.
-    Returns: 'DraftKings', 'FanDuel', 'ActionNetwork', 'OddsAPI', etc.
-    """
-    if not provider: return "Unknown"
-    p = provider.upper().strip()
-    
-    if p in ('DK', 'DRAFTKINGS', 'DRAFT KINGS'):
+    if not provider:
+        return "Unknown"
+    p = str(provider).strip()
+    u = p.upper()
+
+    if u in ('DK', 'DRAFTKINGS', 'DRAFT KINGS'):
         return 'DraftKings'
-        
-    if p in ('FD', 'FANDUEL', 'FAN DUEL'):
+
+    if u in ('FD', 'FANDUEL', 'FAN DUEL'):
         return 'FanDuel'
-        
-    if p in ('MGM', 'BETMGM'):
+
+    if u in ('MGM', 'BETMGM'):
         return 'BetMGM'
-        
-    if p in ('ACTION', 'ACTIONNETWORK', 'ACTION NETWORK'):
-        return 'ActionNetwork'
-        
-    return provider # Return original if not mapped (e.g. correct case usually handled by caller if not forced)
+
+    return p
+
+
+def normalize_feed_provider(provider: str) -> str:
+    """Normalize odds *feed* provider keys to a canonical lowercase identifier.
+
+    Examples:
+      - "ACTION_NETWORK" / "Action Network" -> "action_network"
+      - "odds_api" / "Odds API" -> "odds_api"
+
+    This prevents branching bugs (e.g. comparing to "action_network") when callers
+    pass inconsistent casing.
+    """
+    if not provider:
+        return "odds_api"
+
+    p = str(provider).strip().lower().replace(' ', '_').replace('-', '_')
+
+    aliases = {
+        'action': 'action_network',
+        'actionnetwork': 'action_network',
+        'action_network': 'action_network',
+        'action-network': 'action_network',
+        'oddsapi': 'odds_api',
+        'odds_api': 'odds_api',
+        'odds-api': 'odds_api',
+        'theoddsapi': 'odds_api',
+    }
+
+    return aliases.get(p, p)
 
 def normalize_side(side: str) -> str:
     """
