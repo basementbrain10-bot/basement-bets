@@ -885,6 +885,26 @@ class NCAAMMarketFirstModelV2(BaseModel):
         except Exception:
             pass
 
+        # Persist prediction-time context for calibration.
+        mc = market_snapshot.get('_market_consensus') if isinstance(market_snapshot, dict) else None
+        ctx = {
+            'mu_spread_power': float(mu_spread_final) if mu_spread_final is not None else None,
+            'mu_total_power': float(mu_total_final) if mu_total_final is not None else None,
+            'sigma_spread': float(sigma_spread) if sigma_spread is not None else None,
+            'sigma_total': float(sigma_total) if sigma_total is not None else None,
+            'line_at_prediction_spread_home': (float(market_snapshot.get('spread_home')) if market_snapshot.get('spread_home') is not None else None) if isinstance(market_snapshot, dict) else None,
+            'line_at_prediction_total': (float(market_snapshot.get('total')) if market_snapshot.get('total') is not None else None) if isinstance(market_snapshot, dict) else None,
+            'open_spread_home': _safe_float(mc.get('open_spread_home')) if mc else None,
+            'current_spread_home': _safe_float(mc.get('current_spread_home')) if mc else None,
+            'spread_move_home': _safe_float(mc.get('spread_move_home')) if mc else None,
+            'open_total': _safe_float(mc.get('open_total')) if mc else None,
+            'current_total': _safe_float(mc.get('current_total')) if mc else None,
+            'total_move': _safe_float(mc.get('total_move')) if mc else None,
+            'spread_disagreement': _safe_float(mc.get('spread_disagreement')) if mc else None,
+            'total_disagreement': _safe_float(mc.get('total_disagreement')) if mc else None,
+            'as_of': (mc.get('as_of') if mc else None),
+        }
+
         res = {
             "id": None, 
             "event_id": event_id,
@@ -909,6 +929,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "outputs_json": json.dumps({"mu_spread": mu_spread_final, "mu_total": mu_total_final, "recommendations": recs, "debug": debug_info}, default=str),
             "narrative": narrative, 
             "narrative_json": json.dumps(narrative, default=str),
+            "context_json": json.dumps(ctx, default=str),
             "recommendations": ui_recs,
             "torvik_view": torvik_view,
             "torvik_team_stats": torvik_team_stats,
