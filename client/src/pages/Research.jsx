@@ -620,7 +620,17 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 No recommendations available for this window.
                                                 {!showModelPerformanceTab && leagueFilter === 'NCAAM' && (
                                                     <div className="mt-2 text-[11px] text-slate-600">
-                                                        Board games: {edges.length} • Top-picks picks: {topPicksStats.games} • With pick: {topPicksStats.withPick}{topPicksStats.server ? ` • Scanned: ${topPicksStats.server.scanned}/${topPicksStats.server.events_total} • Stored: ${topPicksStats.server.stored} • Computed: ${topPicksStats.server.computed_with_pick}/${topPicksStats.server.computed_attempted} • Errors: ${topPicksStats.server.errors}` : ''}{topPicksError ? ` • Top-picks error: ${topPicksError}` : ''}
+                                                        {(() => {
+                                                            let matched = 0;
+                                                            try {
+                                                                matched = (edges || []).filter((e) => (rowTopPicks?.[e?.id]?.rec)).length;
+                                                            } catch (e) { }
+                                                            return (
+                                                                `Board games: ${edges.length} • Top-picks picks: ${topPicksStats.games} • With pick: ${topPicksStats.withPick} • Matched rows: ${matched}`
+                                                                + (topPicksStats.server ? ` • Scanned: ${topPicksStats.server.scanned}/${topPicksStats.server.events_total} • Stored: ${topPicksStats.server.stored} • Computed: ${topPicksStats.server.computed_with_pick}/${topPicksStats.server.computed_attempted} • Errors: ${topPicksStats.server.errors}` : '')
+                                                                + (topPicksError ? ` • Top-picks error: ${topPicksError}` : '')
+                                                            );
+                                                        })()}
                                                     </div>
                                                 )}
                                             </div>
