@@ -1983,6 +1983,14 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
     WITH base_events AS (
       SELECT e.*,
         DATE(e.start_time AT TIME ZONE 'America/New_York') AS day_et,
+        LOWER(regexp_replace(
+          replace(replace(replace(replace(COALESCE(e.home_team,''), 'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
+          '[^a-z0-9]+', '', 'g'
+        )) AS home_key,
+        LOWER(regexp_replace(
+          replace(replace(replace(replace(COALESCE(e.away_team,''), 'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
+          '[^a-z0-9]+', '', 'g'
+        )) AS away_key,
         CASE
           WHEN e.id LIKE 'action:ncaam:%%' THEN 0
           WHEN e.id LIKE 'espn:ncaam:%%' THEN 1
@@ -1996,7 +2004,7 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
       SELECT *
       FROM (
         SELECT *,
-          ROW_NUMBER() OVER (PARTITION BY league, day_et, home_team, away_team ORDER BY src_rank ASC, start_time ASC) AS rn
+          ROW_NUMBER() OVER (PARTITION BY league, day_et, home_key, away_key ORDER BY src_rank ASC, start_time ASC) AS rn
         FROM base_events
       ) t
       WHERE rn = 1
@@ -2131,6 +2139,14 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
             WITH base_events AS (
               SELECT e.*,
                 DATE(e.start_time AT TIME ZONE 'America/New_York') AS day_et,
+                LOWER(regexp_replace(
+                  replace(replace(replace(replace(COALESCE(e.home_team,''), 'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
+                  '[^a-z0-9]+', '', 'g'
+                )) AS home_key,
+                LOWER(regexp_replace(
+                  replace(replace(replace(replace(COALESCE(e.away_team,''), 'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
+                  '[^a-z0-9]+', '', 'g'
+                )) AS away_key,
                 CASE
                   WHEN e.id LIKE 'action:ncaam:%%' THEN 0
                   WHEN e.id LIKE 'espn:ncaam:%%' THEN 1
@@ -2144,7 +2160,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
               SELECT *
               FROM (
                 SELECT *,
-                  ROW_NUMBER() OVER (PARTITION BY league, day_et, home_team, away_team ORDER BY src_rank ASC, start_time ASC) AS rn
+                  ROW_NUMBER() OVER (PARTITION BY league, day_et, home_key, away_key ORDER BY src_rank ASC, start_time ASC) AS rn
                 FROM base_events
               ) t
               WHERE rn = 1
