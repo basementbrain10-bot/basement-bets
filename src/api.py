@@ -1982,7 +1982,7 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
     query = """
     WITH base_events AS (
       SELECT e.*,
-        DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') AS day_et,
+        DATE(e.start_time AT TIME ZONE 'America/New_York') AS day_et,
         CASE
           WHEN e.id LIKE 'action:ncaam:%%' THEN 0
           WHEN e.id LIKE 'espn:ncaam:%%' THEN 1
@@ -1990,7 +1990,7 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
         END AS src_rank
       FROM events e
       WHERE e.league = %(league)s
-        AND DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN %(start_date)s AND %(end_date)s
+        AND DATE(e.start_time AT TIME ZONE 'America/New_York') BETWEEN %(start_date)s AND %(end_date)s
     ),
     dedup_events AS (
       SELECT *
@@ -2130,7 +2130,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
             """
             WITH base_events AS (
               SELECT e.*,
-                DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') AS day_et,
+                DATE(e.start_time AT TIME ZONE 'America/New_York') AS day_et,
                 CASE
                   WHEN e.id LIKE 'action:ncaam:%%' THEN 0
                   WHEN e.id LIKE 'espn:ncaam:%%' THEN 1
@@ -2138,7 +2138,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                 END AS src_rank
               FROM events e
               WHERE e.league = 'NCAAM'
-                AND DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN %(start)s AND %(end)s
+                AND DATE(e.start_time AT TIME ZONE 'America/New_York') BETWEEN %(start)s AND %(end)s
             ),
             dedup_events AS (
               SELECT *
@@ -3357,7 +3357,7 @@ async def debug_ncaam_results_coverage(date: Optional[str] = None, days: int = 1
           LEFT JOIN game_results gr ON gr.event_id=e.id
           LEFT JOIN model_predictions m ON m.event_id=e.id
           WHERE e.league='NCAAM'
-            AND DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN %(start)s AND %(end)s
+            AND DATE(e.start_time AT TIME ZONE 'America/New_York') BETWEEN %(start)s AND %(end)s
           GROUP BY e.id, e.start_time, gr.final, gr.home_score, gr.away_score
         """, {"start": str(start_date), "end": str(end_date)}).fetchall()
 
