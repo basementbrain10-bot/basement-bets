@@ -626,9 +626,11 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 const okEv = Number.isFinite(evPct) && evPct >= 2.0;
                                                 if (okEv) diag.passEv += 1;
 
+                                                const conf = String(top.confidence || '').trim();
                                                 const okWin = (
                                                     (Number.isFinite(wpLb10) && wpLb10 >= 0.50) ||
-                                                    (!Number.isFinite(wpLb10) && Number.isFinite(wp) && wp >= 0.52)
+                                                    (!Number.isFinite(wpLb10) && Number.isFinite(wp) && wp >= 0.52) ||
+                                                    (!Number.isFinite(wpLb10) && !Number.isFinite(wp) && conf === 'High')
                                                 );
                                                 if (okWin) diag.passWin += 1;
 
