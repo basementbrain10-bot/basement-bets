@@ -52,7 +52,7 @@ def main():
           FROM daily_top_picks d
           JOIN events e ON e.id=d.event_id
           WHERE d.date_et=%s AND d.is_actionable=TRUE AND d.rec_json IS NOT NULL
-          ORDER BY (regexp_replace(COALESCE(d.rec_json->>'edge','0%'),'[^0-9\\.\\-]+','','g'))::float DESC
+          ORDER BY (regexp_replace(COALESCE(d.rec_json->>'edge','0'),'[^0-9\\.\\-]+','','g'))::float DESC
           LIMIT %s
         """, (date_et, int(args.limit))).fetchall()
 
