@@ -565,6 +565,16 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         sigma_spread = (base_sigma_spread * tempo_factor) + 0.1 * abs(diff_torvik)
         sigma_total = (base_sigma_total * tempo_factor) + 0.1 * abs(mu_torvik_total - mu_market_total)
+
+        # Guardrails: prevent unrealistically tight sigmas (leads to extreme win_probs/EV).
+        try:
+            sigma_spread = max(float(os.getenv('MIN_SIGMA_SPREAD', '7.5')), float(sigma_spread))
+        except Exception:
+            sigma_spread = max(7.5, float(sigma_spread))
+        try:
+            sigma_total = max(float(os.getenv('MIN_SIGMA_TOTAL', '11.0')), float(sigma_total))
+        except Exception:
+            sigma_total = max(11.0, float(sigma_total))
         
         # --- Feature: Advanced Home Court (Geo) ---
         # Travel Fatigue & Altitude
@@ -1351,6 +1361,15 @@ class NCAAMMarketFirstModelV2(BaseModel):
             ev_home = self._calculate_ev(prob_home_cal, price_home)
             kelly_home = self._calculate_kelly(prob_home_cal, price_home)
 
+            # Guardrail: cap extreme EVs (almost always indicates bad odds or bad probability math)
+            try:
+                ev_cap = float(os.getenv('EV_CAP_PER_UNIT', '0.20'))  # 20% ROI per bet cap
+            except Exception:
+                ev_cap = 0.20
+            if abs(ev_home) > ev_cap:
+                ev_home = 0.0
+                kelly_home = 0.0
+
             # Away cover prob = 1 - P(home covers) - push (approx already baked into helper via -push/2)
             # For symmetry we compute raw home cover without calibration then derive away.
             prob_home_raw = 1.0 - self._normal_cdf(-float(line_s), -float(mu_s), float(sig_s))
@@ -1360,6 +1379,9 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
             ev_away = self._calculate_ev(prob_away_cal, price_away)
             kelly_away = self._calculate_kelly(prob_away_cal, price_away)
+            if abs(ev_away) > ev_cap:
+                ev_away = 0.0
+                kelly_away = 0.0
 
             # Use consensus for model math, but use a bettable line for the displayed recommendation.
             # Some consensus aggregations can produce quarter-points (e.g. -10.25) which are not real lines.
@@ -1461,6 +1483,17 @@ class NCAAMMarketFirstModelV2(BaseModel):
             kelly_over = self._calculate_kelly(prob_over_cal, price_over)
             ev_under = self._calculate_ev(prob_under_cal, price_under)
             kelly_under = self._calculate_kelly(prob_under_cal, price_under)
+
+            try:
+                ev_cap = float(os.getenv('EV_CAP_PER_UNIT', '0.20'))
+            except Exception:
+                ev_cap = 0.20
+            if abs(ev_over) > ev_cap:
+                ev_over = 0.0
+                kelly_over = 0.0
+            if abs(ev_under) > ev_cap:
+                ev_under = 0.0
+                kelly_under = 0.0
 
             market_line_t = float(line_t)
             fair_line_t = float(mu_t)
