@@ -47,6 +47,7 @@ def ensure_objects():
     ),
     total_latest AS (
       SELECT event_id,
+             MAX(captured_at) AS as_of,
              MAX(line_value) FILTER (WHERE market_type='TOTAL' AND side='OVER' AND book='consensus') AS current_total,
              MAX(price) FILTER (WHERE market_type='TOTAL' AND side='OVER' AND book='consensus') AS current_total_over_price,
              MAX(price) FILTER (WHERE market_type='TOTAL' AND side='UNDER' AND book='consensus') AS current_total_under_price,
