@@ -154,7 +154,8 @@ def main():
     err = 0
     for eid in event_ids:
         try:
-            res = model.analyze(eid, relax_gates=True, persist=False)
+            # Use strict gates for cached picks so we don't surface negative/no-edge plays.
+            res = model.analyze(eid, relax_gates=False, persist=False)
             upsert_pick(date_et, eid, res if isinstance(res, dict) else {})
             ok += 1
         except Exception as e:
