@@ -12,6 +12,16 @@ from src.services.news_service import NewsService
 from src.services.geo_service import GeoService
 from src.database import get_db_connection, _exec, insert_model_prediction
 
+
+def _safe_float(x):
+    try:
+        if x is None or x == '':
+            return None
+        return float(x)
+    except Exception:
+        return None
+
+
 from src.models.base_model import BaseModel
 from src.utils.naming import standardize_team_name
 
@@ -383,6 +393,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             best_total_under = self.odds_selector.get_best_price_for_side(raw_snaps, 'TOTAL', 'UNDER')
             
             # Composite Snapshot for Analysis (uses CONSENSUS for model math)
+            mc = self._get_market_consensus(event_id)
             market_snapshot = {
                 # Consensus for model input
                 'spread_home': consensus_spread['line_value'] if consensus_spread else None,
@@ -391,6 +402,14 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 'total_over_price': consensus_total['price'] if consensus_total else -110,
                 'book_spread': 'Consensus',
                 'book_total': 'Consensus',
+                # Movement / derived
+                '_market_consensus': mc,
+                'open_spread_home': (mc.get('open_spread_home') if mc else None),
+                'current_spread_home': (mc.get('current_spread_home') if mc else None),
+                'open_total': (mc.get('open_total') if mc else None),
+                'current_total': (mc.get('current_total') if mc else None),
+                'spread_move_home': (mc.get('spread_move_home') if mc else None),
+                'total_move': (mc.get('total_move') if mc else None),
                 # Best prices for betting (after edge identified)
                 '_best_spread_home': best_spread_home,
                 '_best_spread_away': best_spread_away,
@@ -1380,7 +1399,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
             # Choose the higher-EV side, then gate it.
             best = cand_home if cand_home["ev"] >= cand_away["ev"] else cand_away
             if relax_gates or self._passes_publish_gates(best, market_line_home=market_line_s, torvik_ok=torvik_ok):
-                recs.append(best)
+                reason = self._steam_block_reason('SPREAD', str(best.get('side') or ''), market_snapshot.get('_market_consensus'), market_snapshot)
+                if reason:
+                    best = {**best, 'steam_blocked': True, 'steam_reason': reason}
+                else:
+                    best = {**best, 'steam_blocked': False}
+                    recs.append(best)
 
         # --- Total ---
         line_t = snap.get("total")
@@ -1458,7 +1482,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
             best = cand_over if cand_over["ev"] >= cand_under["ev"] else cand_under
             if relax_gates or self._passes_publish_gates(best, market_line_home=None, torvik_ok=torvik_ok):
-                recs.append(best)
+                reason = self._steam_block_reason('TOTAL', str(best.get('side') or ''), market_snapshot.get('_market_consensus'), market_snapshot)
+                if reason:
+                    best = {**best, 'steam_blocked': True, 'steam_reason': reason}
+                else:
+                    best = {**best, 'steam_blocked': False}
+                    recs.append(best)
 
         return recs
 
@@ -1667,7 +1696,69 @@ class NCAAMMarketFirstModelV2(BaseModel):
             if row: return dict(row)
         return None
 
+    def _get_market_consensus(self, event_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch derived open/current movement metrics for an event (fast path)."""
+        try:
+            with get_db_connection() as conn:
+                row = _exec(conn, "SELECT * FROM market_consensus WHERE event_id=%s", (event_id,)).fetchone()
+                if not row:
+                    return None
+                return dict(row)
+        except Exception:
+            return None
+
+    def _steam_block_reason(self, market: str, side: str, mc: Optional[Dict[str, Any]], snap: Dict[str, Any]) -> Optional[str]:
+        """Return a reason string if market movement suggests steam / line got worse."""
+        if not mc:
+            return None
+
+        try:
+            max_move_spread = float(os.getenv('STEAM_MAX_MOVE_SPREAD', '1.0'))
+        except Exception:
+            max_move_spread = 1.0
+        try:
+            max_move_total = float(os.getenv('STEAM_MAX_MOVE_TOTAL', '2.0'))
+        except Exception:
+            max_move_total = 2.0
+
+        m = str(market or '').upper()
+        s = str(side or '').lower().strip()
+
+        if m == 'SPREAD':
+            open_home = _safe_float(mc.get('open_spread_home'))
+            cur_home = _safe_float(mc.get('current_spread_home'))
+            if open_home is None or cur_home is None:
+                return None
+
+            # Convert to the side we're betting.
+            # Home side line = home spread; Away side line = -home spread.
+            open_line = open_home if s == 'home' else -open_home
+            cur_line = cur_home if s == 'home' else -cur_home
+
+            # Worse means: line moved against us (more negative for favorite, smaller for dog).
+            # For bettor, higher is better (more points). So worse if (cur_line - open_line) < -threshold.
+            delta = (cur_line - open_line)
+            if delta < -abs(max_move_spread):
+                return f"Steam move {delta:+.1f}pts (open {open_line:+.1f} → cur {cur_line:+.1f})"
+
+        if m == 'TOTAL':
+            open_total = _safe_float(mc.get('open_total'))
+            cur_total = _safe_float(mc.get('current_total'))
+            if open_total is None or cur_total is None:
+                return None
+
+            # For totals, direction depends on side.
+            # Over: higher total is worse. Under: lower total is worse.
+            delta = (cur_total - open_total)
+            if s == 'over' and delta > abs(max_move_total):
+                return f"Steam move +{delta:.1f} (open {open_total:.1f} → cur {cur_total:.1f})"
+            if s == 'under' and delta < -abs(max_move_total):
+                return f"Steam move {delta:.1f} (open {open_total:.1f} → cur {cur_total:.1f})"
+
+        return None
+
     def _get_all_recent_odds(self, event_id: str) -> List[Dict]:
+
         query = """
         SELECT market_type, side, line_value, price, book, captured_at
         FROM odds_snapshots 
