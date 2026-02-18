@@ -1430,7 +1430,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             # Choose the higher-EV side, then gate it.
             best = cand_home if cand_home["ev"] >= cand_away["ev"] else cand_away
             if relax_gates or self._passes_publish_gates(best, market_line_home=market_line_s, torvik_ok=torvik_ok):
-                reason = self._steam_block_reason('SPREAD', str(best.get('side') or ''), market_snapshot.get('_market_consensus'), market_snapshot)
+                reason = self._steam_block_reason('SPREAD', str(best.get('side') or ''), snap.get('_market_consensus') if isinstance(snap, dict) else None, snap)
                 if reason:
                     # Don't recommend, but record why for UI.
                     if isinstance(snap, dict):
@@ -1514,7 +1514,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
             best = cand_over if cand_over["ev"] >= cand_under["ev"] else cand_under
             if relax_gates or self._passes_publish_gates(best, market_line_home=None, torvik_ok=torvik_ok):
-                reason = self._steam_block_reason('TOTAL', str(best.get('side') or ''), market_snapshot.get('_market_consensus'), market_snapshot)
+                reason = self._steam_block_reason('TOTAL', str(best.get('side') or ''), snap.get('_market_consensus') if isinstance(snap, dict) else None, snap)
                 if reason:
                     if isinstance(snap, dict):
                         snap['_no_bet_reason_total'] = reason
