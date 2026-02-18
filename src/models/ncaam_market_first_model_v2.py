@@ -1073,11 +1073,64 @@ class NCAAMMarketFirstModelV2(BaseModel):
         short_key = ':'.join(parts[:4]) if len(parts) >= 4 else key
 
         row = bins.get(short_key) or {}
-        return {
-            "n": int(row.get('n') or 0),
-            "mean": float(row.get('mean') or 0.0),
-            "sd": float(row.get('sd') or 0.0),
-        }
+
+        n = int(row.get('n') or 0)
+        mean = float(row.get('mean') or 0.0)
+        sd = float(row.get('sd') or 0.0)
+
+        # Fallback (especially for TOTAL): if the specific edge bucket has thin history,
+        # aggregate across all edge buckets for the same (market, side, spread_bucket).
+        # This increases coverage without weakening the EV requirement itself.
+        try:
+            parts = short_key.split(':')
+            market = (parts[0] if len(parts) > 0 else '')
+            side = (parts[1] if len(parts) > 1 else '')
+            spread_bucket = (parts[3] if len(parts) > 3 else 'na')
+
+            if (market == 'TOTAL') and n < 40:
+                prefix = f"TOTAL:{side}:"
+                # keys look like TOTAL:over:<edge_bucket>:na
+                candidates = [(k, v) for k, v in bins.items() if isinstance(k, str) and k.startswith(prefix) and k.endswith(f":{spread_bucket}")]
+
+                # Weighted mean + pooled sd (best-effort)
+                N = 0
+                sum_mu = 0.0
+                sum_m2 = 0.0
+                for _, v in candidates:
+                    try:
+                        nn = int(v.get('n') or 0)
+                        mu = float(v.get('mean') or 0.0)
+                        s = float(v.get('sd') or 0.0)
+                        if nn <= 0:
+                            continue
+                        # within-bin M2
+                        m2 = (s ** 2) * max(0, nn - 1)
+                        # combine
+                        if N == 0:
+                            N = nn
+                            sum_mu = mu * nn
+                            sum_m2 = m2
+                        else:
+                            # merge two groups
+                            muA = sum_mu / N
+                            muB = mu
+                            NA = N
+                            NB = nn
+                            delta = muB - muA
+                            sum_m2 = sum_m2 + m2 + (delta ** 2) * (NA * NB) / (NA + NB)
+                            N = NA + NB
+                            sum_mu = muA * NA + muB * NB
+                    except Exception:
+                        continue
+
+                if N >= 40:
+                    mean = sum_mu / N
+                    sd = ((sum_m2 / (N - 1)) ** 0.5) if N > 1 else 0.0
+                    n = N
+        except Exception:
+            pass
+
+        return {"n": n, "mean": mean, "sd": sd}
 
     def _passes_publish_gates(self, rec: Dict[str, Any], market_line_home: Optional[float], torvik_ok: bool) -> bool:
         """Research publish gates.

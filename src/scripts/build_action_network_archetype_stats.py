@@ -117,7 +117,10 @@ def main() -> None:
 
     torvik._get_latest_metrics = _cached_get_latest  # type: ignore
 
-    q = """
+    window_days = int(os.getenv('ACTION_ARCH_WINDOW_DAYS', '1095'))  # 3 years
+    limit_rows = int(os.getenv('ACTION_ARCH_LIMIT', '20000'))
+
+    q = f"""
     WITH latest AS (
       SELECT game_id, MAX(date_scraped) AS max_scraped
       FROM historical_games_action_network
@@ -132,16 +135,19 @@ def main() -> None:
     JOIN latest l
       ON l.game_id=h.game_id AND l.max_scraped=h.date_scraped
     WHERE h.sport='ncaab'
-      AND h.start_time > NOW() - INTERVAL '365 days'
+      AND h.start_time > NOW() - INTERVAL '{window_days} days'
     ORDER BY h.start_time DESC
-    LIMIT 2000
+    LIMIT {limit_rows}
     """
 
     aggs: Dict[str, Welford] = {}
     proj_cache: Dict[str, Dict[str, Any]] = {}
 
+    print(f"[arch] window_days={window_days} limit={limit_rows}", flush=True)
     with get_db_connection() as conn:
         rows = _exec(conn, q).fetchall()
+
+    print(f"[arch] fetched {len(rows)} rows", flush=True)
 
     for i, r in enumerate(rows, start=1):
         if i % 250 == 0:
@@ -213,7 +219,8 @@ def main() -> None:
 
     out: Dict[str, Any] = {
         "generated_at": __import__("datetime").datetime.utcnow().isoformat() + "Z",
-        "window_days": 365,
+        "window_days": window_days,
+        "limit_rows": limit_rows,
         "bins": {k: {"n": v.n, "mean": v.mean, "sd": v.sd} for k, v in aggs.items()},
     }
 
