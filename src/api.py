@@ -2127,10 +2127,29 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         rows = _exec(
             conn,
             """
+            WITH base_events AS (
+              SELECT e.*,
+                DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') AS day_et,
+                CASE
+                  WHEN e.id LIKE 'action:ncaam:%%' THEN 0
+                  WHEN e.id LIKE 'espn:ncaam:%%' THEN 1
+                  ELSE 2
+                END AS src_rank
+              FROM events e
+              WHERE e.league = 'NCAAM'
+                AND DATE(e.start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN %(start)s AND %(end)s
+            ),
+            dedup_events AS (
+              SELECT *
+              FROM (
+                SELECT *,
+                  ROW_NUMBER() OVER (PARTITION BY league, day_et, home_team, away_team ORDER BY src_rank ASC, start_time ASC) AS rn
+                FROM base_events
+              ) t
+              WHERE rn = 1
+            )
             SELECT id, home_team, away_team, start_time
-            FROM events
-            WHERE league='NCAAM'
-              AND DATE(start_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York') BETWEEN %(start)s AND %(end)s
+            FROM dedup_events
             ORDER BY start_time ASC
             LIMIT %(lim)s
             """,
