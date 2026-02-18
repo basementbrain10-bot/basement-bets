@@ -1351,16 +1351,26 @@ class NCAAMMarketFirstModelV2(BaseModel):
             sigma_mult = 1.0
             min_ev_bump = 0.0
 
-            # Odds/prob mismatch
+            # Odds/prob mismatch + best-vs-consensus odds outlier check
             try:
-                # We only have consensus prices in this function; treat as best-effort.
-                ip = implied_prob_american(snap.get('spread_price_home') if market == 'SPREAD' and side == 'home' else (
-                    (snap.get('_best_spread_away') or {}).get('price') if market == 'SPREAD' and side == 'away' else (
-                        (snap.get('_best_total_over') or {}).get('price') if market == 'TOTAL' and side == 'over' else (
-                            (snap.get('_best_total_under') or {}).get('price') if market == 'TOTAL' and side == 'under' else None
-                        )
-                    )
-                ))
+                # Pull best and consensus prices for this candidate.
+                if market == 'SPREAD' and side == 'home':
+                    best_price = (snap.get('_best_spread_home') or {}).get('price')
+                    cons_price = snap.get('spread_price_home')
+                elif market == 'SPREAD' and side == 'away':
+                    best_price = (snap.get('_best_spread_away') or {}).get('price')
+                    cons_price = None  # we don't currently store consensus away price
+                elif market == 'TOTAL' and side == 'over':
+                    best_price = (snap.get('_best_total_over') or {}).get('price')
+                    cons_price = snap.get('total_over_price')
+                elif market == 'TOTAL' and side == 'under':
+                    best_price = (snap.get('_best_total_under') or {}).get('price')
+                    cons_price = None
+                else:
+                    best_price = None
+                    cons_price = None
+
+                ip = implied_prob_american(best_price)
                 if ip is not None:
                     dp = float(win_prob) - float(ip)
                     if abs(dp) >= float(os.getenv('SANITY_MAX_PROB_GAP', '0.18')):
@@ -1368,6 +1378,17 @@ class NCAAMMarketFirstModelV2(BaseModel):
                         reasons.append(f"prob_gap={dp:+.2f}")
                         sigma_mult *= 1.35
                         min_ev_bump += 0.01
+
+                # If best price is a wild outlier vs consensus, it's often bad ingest.
+                if cons_price is not None and best_price is not None:
+                    ip_best = implied_prob_american(best_price)
+                    ip_cons = implied_prob_american(cons_price)
+                    if ip_best is not None and ip_cons is not None:
+                        gap = abs(float(ip_best) - float(ip_cons))
+                        if gap >= float(os.getenv('SANITY_BEST_VS_CONS_IMP_GAP', '0.10')):
+                            score += 2
+                            reasons.append(f"odds_outlier_gap={gap:.2f}")
+                            sigma_mult *= 1.25
             except Exception:
                 pass
 
@@ -1415,9 +1436,15 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 pass
 
             # Extreme EV itself is a signal, but we don't cap; we demand better data.
+            # If EV is *very* extreme, treat it as highly suspicious unless corroborated.
             try:
-                if abs(float(ev)) >= float(os.getenv('SANITY_EV_EXTREME', '0.20')):
+                ev_abs = abs(float(ev))
+                ev_warn = float(os.getenv('SANITY_EV_EXTREME', '0.20'))
+                ev_very = float(os.getenv('SANITY_EV_VERY_EXTREME', '0.35'))
+                if ev_abs >= ev_warn:
                     score += 1
+                    if ev_abs >= ev_very:
+                        score += 1
                     reasons.append(f"ev_extreme={float(ev):+.2f}")
                     sigma_mult *= 1.15
                     min_ev_bump += 0.01
