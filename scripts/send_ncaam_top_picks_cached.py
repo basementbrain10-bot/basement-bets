@@ -9,8 +9,13 @@ Outputs a ready-to-send text block.
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import sys
 from typing import Optional
+
+# Allow running from repo root
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.database import get_db_connection, _exec
 
