@@ -64,7 +64,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                     return { data: [] };
                 }),
                 (leagueFilter === 'NCAAM'
-                    ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 250, compute_missing: true } })
+                    ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 250, compute_missing: true, relax_gates: true } })
                         .then((r) => ({ ...r, _error: null }))
                         .catch((e) => ({ data: null, _error: e }))
                     : Promise.resolve({ data: null, _error: null })

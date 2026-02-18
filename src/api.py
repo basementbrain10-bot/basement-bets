@@ -2078,7 +2078,7 @@ async def get_ncaam_board(date: Optional[str] = None, days: int = 1):
 
 
 @app.get("/api/ncaam/top-picks")
-async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_games: int = 25, compute_missing: bool = False):
+async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_games: int = 25, compute_missing: bool = False, relax_gates: bool = False):
     """Return top model pick per game for the NCAAM board window.
 
     Goal: allow UI to render a 'Top pick' badge without firing /analyze for every row.
@@ -2381,7 +2381,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
 
                 # Optional slow path: compute missing picks on-demand.
                 stats['computed_attempted'] += 1
-                res = model.analyze(eid)
+                res = model.analyze(eid, relax_gates=bool(relax_gates))
                 top = (res.get('recommendations') or [None])[0]
                 if top:
                     stats['computed_with_pick'] += 1

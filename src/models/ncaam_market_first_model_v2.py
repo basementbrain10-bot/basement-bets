@@ -355,7 +355,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         }
         return self.analyze(game_id, market_snapshot=snap, event_context=event)
 
-    def analyze(self, event_id: str, market_snapshot: Optional[Dict] = None, event_context: Optional[Dict] = None) -> Dict:
+    def analyze(self, event_id: str, market_snapshot: Optional[Dict] = None, event_context: Optional[Dict] = None, relax_gates: bool = False) -> Dict:
         """
         On-demand analysis for one game.
         """
@@ -618,7 +618,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         bell_curve_total = self._generate_bell_curve(mu_total_final, sigma_total, mu_market_total)
             
         # 7. Recommendations & EV
-        recs = self._generate_recommendations(mu_spread_final, sigma_spread, mu_total_final, sigma_total, market_snapshot, event, torvik_view=torvik_view)
+        recs = self._generate_recommendations(mu_spread_final, sigma_spread, mu_total_final, sigma_total, market_snapshot, event, torvik_view=torvik_view, relax_gates=relax_gates)
 
         # Only fetch news context if something passed the gates.
         if recs:
@@ -1248,7 +1248,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             return 'Medium'
         return 'Low'
 
-    def _generate_recommendations(self, mu_s, sig_s, mu_t, sig_t, snap, event, torvik_view: Optional[Dict[str, Any]] = None) -> List[Dict]:
+    def _generate_recommendations(self, mu_s, sig_s, mu_t, sig_t, snap, event, torvik_view: Optional[Dict[str, Any]] = None, relax_gates: bool = False) -> List[Dict]:
         recs: List[Dict[str, Any]] = []
         if not snap:
             return recs
@@ -1379,7 +1379,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
             # Choose the higher-EV side, then gate it.
             best = cand_home if cand_home["ev"] >= cand_away["ev"] else cand_away
-            if self._passes_publish_gates(best, market_line_home=market_line_s, torvik_ok=torvik_ok):
+            if relax_gates or self._passes_publish_gates(best, market_line_home=market_line_s, torvik_ok=torvik_ok):
                 recs.append(best)
 
         # --- Total ---
@@ -1457,7 +1457,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             }
 
             best = cand_over if cand_over["ev"] >= cand_under["ev"] else cand_under
-            if self._passes_publish_gates(best, market_line_home=None, torvik_ok=torvik_ok):
+            if relax_gates or self._passes_publish_gates(best, market_line_home=None, torvik_ok=torvik_ok):
                 recs.append(best)
 
         return recs
