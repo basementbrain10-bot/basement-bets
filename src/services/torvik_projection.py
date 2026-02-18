@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from typing import Dict, Optional
 from src.database import get_db_connection, _exec
@@ -27,11 +28,16 @@ class TorvikProjectionService:
             date = datetime.now().strftime("%Y%m%d")
             
         # 1. Official Projection Fetch (prefer cached DB ingest)
-        official_projs = self._fetch_official_from_db(date) or self.bt_client.fetch_daily_projections(date)
+        official_projs = self._fetch_official_from_db(date)
+
+        # In backtests, avoid network calls; fall back to computed projections when DB cache missing.
+        no_net = str(os.getenv('BACKTEST_NO_NETWORK', '')).strip() not in ('', '0', 'false', 'False')
+        if (not official_projs) and (not no_net):
+            official_projs = self.bt_client.fetch_daily_projections(date)
+
         # Match by name (Torvik uses specific naming)
         h_proj = self._find_projection(home_team, official_projs)
-        # a_proj ...
-        
+
         if h_proj:
             return {
                 "source": "official",

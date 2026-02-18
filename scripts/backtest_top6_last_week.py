@@ -76,6 +76,7 @@ def rec_id(event_id: str, rec: dict) -> str:
 
 def run(days: int, sanity: bool) -> dict:
     os.environ['SANITY_ENABLE'] = '1' if sanity else '0'
+    os.environ['BACKTEST_NO_NETWORK'] = '1'
     model = NCAAMMarketFirstModelV2()
 
     q = """
