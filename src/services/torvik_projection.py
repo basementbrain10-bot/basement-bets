@@ -241,15 +241,27 @@ class TorvikProjectionService:
             date_clause = "AND date <= :date"
             params["date"] = date
             
-        query = f"""
+        # NOTE: schema can vary across environments; some deployments only have
+        # adj_off/adj_def/adj_tempo/luck. Query defensively.
+        query_full = f"""
         SELECT adj_off, adj_def, adj_tempo, luck, continuity, torvik_rank, record
-        FROM bt_team_metrics_daily 
+        FROM bt_team_metrics_daily
+        WHERE team_text = :t {date_clause}
+        ORDER BY date DESC LIMIT 1
+        """
+
+        query_min = f"""
+        SELECT adj_off, adj_def, adj_tempo, luck
+        FROM bt_team_metrics_daily
         WHERE team_text = :t {date_clause}
         ORDER BY date DESC LIMIT 1
         """
         
         with get_db_connection() as conn:
-            row = _exec(conn, query, params).fetchone()
+            try:
+                row = _exec(conn, query_full, params).fetchone()
+            except Exception:
+                row = _exec(conn, query_min, params).fetchone()
             if row:
                 return dict(row)
             return None
