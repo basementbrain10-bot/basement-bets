@@ -693,6 +693,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                                 `Board games: ${edges.length} • Top-picks picks: ${topPicksStats.games} • With pick: ${topPicksStats.withPick} • Actionable: ${topPicksStats.actionable} • NoBet: ${topPicksStats.noBet} • Matched rows: ${matched}`
                                                                 + ` • Pass basic: ${diag.passBasic}/${diag.withPick} • Pass EV>=2: ${diag.passEv} • Pass win: ${diag.passWin} • Pass both: ${diag.passBoth}`
                                                                 + (topPicksStats.server ? ` • Scanned: ${topPicksStats.server.scanned}/${topPicksStats.server.events_total} • Stored: ${topPicksStats.server.stored} • Computed: ${topPicksStats.server.computed_with_pick}/${topPicksStats.server.computed_attempted} • Errors: ${topPicksStats.server.errors}` : '')
+                                                                + (topPicksStats?.errors?.length ? ` • Err sample: ${(topPicksStats.errors[0]?.error || '').slice(0, 120)}` : '')
                                                                 + (topPicksError ? ` • Top-picks error: ${topPicksError}` : '')
                                                             );
                                                         })()}
