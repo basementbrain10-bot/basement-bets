@@ -32,7 +32,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
     // Quick-pick state (board row badges)
     const [rowTopPicks, setRowTopPicks] = useState({}); // event_id -> { rec, analyzedAt }
     const [topPicksError, setTopPicksError] = useState(null);
-    const [topPicksStats, setTopPicksStats] = useState({ games: 0, withPick: 0, server: null, errors: [] });
+    const [dataHealth, setDataHealth] = useState([]);
+    const [topPicksStats, setTopPicksStats] = useState({ games: 0, withPick: 0, server: null, errors: [], actionable: 0, noBet: 0 });
     // Edge-engine recs removed: Today should use the core model (stored top picks) to avoid mismatches.
     // const [edgeRecs, setEdgeRecs] = useState(null);
     // const [edgeRecsError, setEdgeRecsError] = useState(null);
@@ -57,7 +58,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
             setLoading(true);
             setError(null);
             // Fetch board + history
-            const [boardRes, historyRes, topPicksRes] = await Promise.all([
+            const [boardRes, historyRes, topPicksRes, healthRes] = await Promise.all([
                 api.get('/api/board', { params: { league: leagueFilter, date: selectedDate, days: BOARD_DAYS_DEFAULT } }),
                 api.get('/api/ncaam/history', { params: { limit: 500 } }).catch((e) => {
                     console.warn("History fetch failed:", e);
@@ -68,8 +69,11 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                         .then((r) => ({ ...r, _error: null }))
                         .catch((e) => ({ data: null, _error: e }))
                     : Promise.resolve({ data: null, _error: null })
-                )
+                ),
+                api.get('/api/data-health').catch(() => ({ data: { items: [] } }))
             ]);
+
+            setDataHealth(healthRes?.data?.items || []);
 
 
 
@@ -99,11 +103,16 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                     });
                     setRowTopPicks(mapped);
                     const nGames = Object.keys(tp).length;
-                    const nWith = Object.values(tp).filter((x) => x && x.rec).length;
+                    const vals = Object.values(tp);
+                    const nWith = vals.filter((x) => x && x.rec).length;
+                    const nAction = vals.filter((x) => x && x.isActionable).length;
+                    const nNoBet = vals.filter((x) => x && x.isActionable === false).length;
                     const serverStats = topPicksRes?.data?.stats;
                     setTopPicksStats({
                         games: nGames,
                         withPick: nWith,
+                        actionable: nAction,
+                        noBet: nNoBet,
                         server: serverStats || null,
                         errors: topPicksRes?.data?.errors || [],
                     });
@@ -527,6 +536,21 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                     <Info size={12} className="mr-1" />
                                     Times shown in ET • lines shown as (team/side, line, odds)
                                 </div>
+                                {leagueFilter === 'NCAAM' && (dataHealth?.length > 0) && (
+                                    <div className="mt-1 text-[11px] text-slate-500">
+                                        {(() => {
+                                            const by = {};
+                                            (dataHealth || []).forEach((x) => { if (x?.source) by[x.source] = x; });
+                                            const fmt = (t) => {
+                                                if (!t) return '—';
+                                                try { return new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York' }); } catch (e) { return String(t); }
+                                            };
+                                            const odds = by['odds'];
+                                            const torvik = by['torvik'];
+                                            return `Data health — odds: ${odds?.status || '—'} (${fmt(odds?.last_success_at)}) • torvik: ${torvik?.status || '—'} (${fmt(torvik?.last_success_at)})`;
+                                        })()}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-950/30 border border-slate-700/40">
@@ -666,7 +690,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                                 matched = (edges || []).filter((e) => (rowTopPicks?.[e?.id]?.rec)).length;
                                                             } catch (e) { }
                                                             return (
-                                                                `Board games: ${edges.length} • Top-picks picks: ${topPicksStats.games} • With pick: ${topPicksStats.withPick} • Matched rows: ${matched}`
+                                                                `Board games: ${edges.length} • Top-picks picks: ${topPicksStats.games} • With pick: ${topPicksStats.withPick} • Actionable: ${topPicksStats.actionable} • NoBet: ${topPicksStats.noBet} • Matched rows: ${matched}`
                                                                 + ` • Pass basic: ${diag.passBasic}/${diag.withPick} • Pass EV>=2: ${diag.passEv} • Pass win: ${diag.passWin} • Pass both: ${diag.passBoth}`
                                                                 + (topPicksStats.server ? ` • Scanned: ${topPicksStats.server.scanned}/${topPicksStats.server.events_total} • Stored: ${topPicksStats.server.stored} • Computed: ${topPicksStats.server.computed_with_pick}/${topPicksStats.server.computed_attempted} • Errors: ${topPicksStats.server.errors}` : '')
                                                                 + (topPicksError ? ` • Top-picks error: ${topPicksError}` : '')
@@ -1082,7 +1106,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                         )}
                                                         <td className="py-3 px-4 text-center">
                                                             {(() => {
-                                                                const top = rowTopPicks?.[edge.id]?.rec || null;
+                                                                const meta = rowTopPicks?.[edge.id] || null;
+                                                                const top = meta?.rec || null;
                                                                 if (top) {
                                                                     return (
                                                                         <div className="flex flex-col items-center gap-2">
@@ -1115,6 +1140,30 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                                                     Details
                                                                                 </button>
                                                                             </div>
+                                                                        </div>
+                                                                    );
+                                                                }
+
+                                                                // If server computed a No-Bet state, show it.
+                                                                if (meta && meta.isActionable === false) {
+                                                                    return (
+                                                                        <div className="flex flex-col items-center gap-2">
+                                                                            <div className="px-2 py-0.5 rounded bg-slate-800/60 text-slate-300 text-[10px] font-black uppercase tracking-widest border border-slate-700/60">
+                                                                                No Bet
+                                                                            </div>
+                                                                            <div className="text-[11px] text-slate-400 max-w-[220px] truncate" title={meta.reason || ''}>
+                                                                                {meta.reason || 'Blocked'}
+                                                                            </div>
+                                                                            <button
+                                                                                onClick={() => analyzeGame(edge)}
+                                                                                disabled={leagueFilter !== 'NCAAM' || (isAnalyzing && selectedGame?.id === edge.id)}
+                                                                                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg ring-1 ring-white/10 flex items-center justify-center mx-auto ${(isAnalyzing && selectedGame?.id === edge.id)
+                                                                                    ? 'bg-slate-700 text-slate-400'
+                                                                                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                                                                                    }`}
+                                                                            >
+                                                                                {isAnalyzing && selectedGame?.id === edge.id ? <RefreshCw className="animate-spin" size={14} /> : 'Details'}
+                                                                            </button>
                                                                         </div>
                                                                     );
                                                                 }
