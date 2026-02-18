@@ -26,8 +26,15 @@ async def check_access_key(request: Request, call_next):
          return await call_next(request)
          
     if request.url.path.startswith("/api"):
-        # Allow public diagnostic endpoints
-        if request.url.path in ["/api/version", "/api/health"]:
+        # Allow public diagnostic endpoints + read-only UI endpoints
+        public_paths = {
+            "/api/version",
+            "/api/health",
+            "/api/board",
+            "/api/ncaam/top-picks",
+            "/api/data-health",
+        }
+        if request.url.path in public_paths:
             return await call_next(request)
 
         # 1. Check Authorization Header (Cron OR Supabase JWT)
