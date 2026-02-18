@@ -47,6 +47,11 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python3 src/scripts/update_data_health.py
+
+      - name: Build Daily Top Picks
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python3 src/scripts/build_daily_top_picks.py
           
       - name: Run Settlement
         env:

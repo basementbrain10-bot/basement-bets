@@ -2139,8 +2139,9 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
     # Still capped to keep this endpoint from becoming too expensive.
     limit_games = max(1, min(limit_games, 250))
 
-    # Cache must distinguish between fast-path (stored only) and compute_missing mode.
-    cache_key = f"{date}:{days}:{limit_games}:{'compute' if compute_missing else 'stored'}"
+    # New behavior: serve precomputed daily picks when available (built by background job).
+    # compute_missing can still be used for ad-hoc computation, but UI should prefer cached.
+    cache_key = f"{date}:{days}:{limit_games}:{'compute' if compute_missing else 'cached'}"
     now = datetime.now()
     cached = _top_picks_cache.get(cache_key)
     # When compute_missing=True, bypass cache so UI always gets freshly-computed recs.
@@ -2372,6 +2373,55 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
             }
 
         return {'rec': _normalize_rec(rec), 'analyzed_at': r.get('analyzed_at')}
+
+    # Try cached daily picks first.
+    try:
+        with get_db_connection() as conn:
+            cached = _exec(
+                conn,
+                """
+                SELECT event_id, computed_at, is_actionable, reason, rec_json
+                FROM daily_top_picks
+                WHERE date_et = %s AND league='NCAAM'
+                """,
+                (date,),
+            ).fetchall()
+        if cached:
+            picks = {}
+            for r in cached:
+                d = dict(r)
+                eid = d.get('event_id')
+                picks[eid] = {
+                    'rec': d.get('rec_json'),
+                    'analyzed_at': d.get('computed_at'),
+                    'event': event_meta.get(eid),
+                    'locked': False,
+                    'source': 'cached',
+                    'is_actionable': bool(d.get('is_actionable')),
+                    'reason': d.get('reason'),
+                }
+            data = {
+                'generated_at': datetime.utcnow().isoformat() + 'Z',
+                'date': date,
+                'days': days,
+                'limit_games': limit_games,
+                'stats': {
+                    'events_total': len(event_ids),
+                    'scanned': len(event_ids),
+                    'stored': 0,
+                    'computed_attempted': 0,
+                    'computed_with_pick': len([v for v in picks.values() if v.get('rec')]),
+                    'computed_no_pick': 0,
+                    'no_pick_reasons': {},
+                    'errors': 0,
+                },
+                'errors': [],
+                'no_pick_samples': [],
+                'picks': picks,
+            }
+            return data
+    except Exception:
+        pass
 
     model = NCAAMMarketFirstModelV2()
     picks = {}

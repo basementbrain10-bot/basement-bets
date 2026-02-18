@@ -123,6 +123,7 @@ def init_db():
     print("[DB] Initializing Database (Postgres Only)...")
     init_events_db()
     init_snapshots_db()
+    init_daily_top_picks_db()
     init_model_history_db()
     init_settlement_db()
     init_users_db()
@@ -353,6 +354,49 @@ def init_snapshots_db():
                     except Exception as e: print(f"[DB] Migration warn: {e}")
         conn.commit()
     print("Snapshots DB initialized.")
+
+def init_daily_top_picks_db():
+    """Derived cache of Top Pick per event per ET day (built by background job)."""
+    drops = ["DROP TABLE IF EXISTS daily_top_picks CASCADE;"] if _force_reset() else []
+    schema = """
+    CREATE TABLE IF NOT EXISTS daily_top_picks (
+      date_et DATE NOT NULL,
+      event_id TEXT NOT NULL,
+      league TEXT NOT NULL DEFAULT 'NCAAM',
+      computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      model_version TEXT,
+      is_actionable BOOLEAN NOT NULL DEFAULT FALSE,
+      reason TEXT,
+      rec_json JSONB,
+      context_json JSONB,
+      PRIMARY KEY(date_et, event_id)
+    );
+    CREATE INDEX IF NOT EXISTS ix_daily_top_picks_date_league ON daily_top_picks(date_et, league);
+    """
+    migrations = [
+      "ALTER TABLE daily_top_picks ADD COLUMN IF NOT EXISTS league TEXT DEFAULT 'NCAAM';",
+      "ALTER TABLE daily_top_picks ADD COLUMN IF NOT EXISTS computed_at TIMESTAMPTZ DEFAULT NOW();",
+      "ALTER TABLE daily_top_picks ADD COLUMN IF NOT EXISTS model_version TEXT;",
+      "ALTER TABLE daily_top_picks ADD COLUMN IF NOT EXISTS is_actionable BOOLEAN DEFAULT FALSE;",
+      "ALTER TABLE daily_top_picks ADD COLUMN IF NOT EXISTS reason TEXT;",
+      "ALTER TABLE daily_top_picks ADD COLUMN IF NOT EXISTS rec_json JSONB;",
+      "ALTER TABLE daily_top_picks ADD COLUMN IF NOT EXISTS context_json JSONB;",
+      "CREATE INDEX IF NOT EXISTS ix_daily_top_picks_date_league ON daily_top_picks(date_et, league);",
+    ]
+
+    with get_admin_db_connection() as conn:
+        with conn.cursor() as cur:
+            for d in drops:
+                cur.execute(d)
+            cur.execute(schema)
+            if not drops:
+                for m in migrations:
+                    try:
+                        cur.execute(m)
+                    except Exception as e:
+                        print(f"[DB] daily_top_picks migration warn: {e}")
+        conn.commit()
+
 
 def init_model_history_db():
     drops = ["DROP TABLE IF EXISTS model_predictions CASCADE;"] if _force_reset() else []
