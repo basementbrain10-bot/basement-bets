@@ -3,13 +3,18 @@ name: NCAAM Frequent Jobs
 
 on:
   schedule:
-    # Run every 60 minutes
-    - cron: '*/60 * * * *'
+    # Clean hourly schedule
+    - cron: '0 * * * *'
   workflow_dispatch:
+
+concurrency:
+  group: ncaam-frequent-jobs
+  cancel-in-progress: true
 
 jobs:
   run-jobs:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v3
       
@@ -32,6 +37,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python3 src/scripts/ingest_odds.py
+
+      - name: Build Market Consensus
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python3 src/scripts/build_market_consensus.py
+
+      - name: Update Data Health
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python3 src/scripts/update_data_health.py
           
       - name: Run Settlement
         env:

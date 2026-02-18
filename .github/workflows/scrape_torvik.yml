@@ -6,10 +6,15 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch:  # Allow manual trigger
 
+concurrency:
+  group: torvik-scrape
+  cancel-in-progress: true
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 20
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -28,6 +33,11 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           python scripts/github_scrape_torvik.py
+
+      - name: Update Data Health
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python3 src/scripts/update_data_health.py
 
       - name: Summary
         run: |
