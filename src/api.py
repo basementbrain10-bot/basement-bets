@@ -2271,23 +2271,23 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         }
         return out
 
-    def _load_locked_pick(conn, eid: str):
-        """Load the most recent stored pick for an event (used once game starts)."""
+    def _load_latest_stored_pick(conn, eid: str):
+        """Load the most recent stored pick for an event.
+
+        This is the same source that powers the text/cron picks (model_predictions).
+        We keep it permissive so UI can populate even if the strict filters would exclude it.
+        """
         row = _exec(
             conn,
             """
             SELECT analyzed_at, outputs_json, selection, price, ev_per_unit, confidence_0_100, market_type, bet_line, bet_price, pick
             FROM model_predictions
             WHERE event_id=%s
-              AND COALESCE(ev_per_unit,0) >= 0.02
-              AND market_type IS NOT NULL AND UPPER(market_type) <> 'AUTO'
-              AND pick IS NOT NULL AND UPPER(pick) <> 'NONE'
-              AND selection IS NOT NULL AND TRIM(selection) <> '' AND selection <> '—'
-              AND analyzed_at <= (SELECT start_time FROM events WHERE id=%s) - INTERVAL '10 minutes'
+              AND outputs_json IS NOT NULL AND TRIM(outputs_json) <> ''
             ORDER BY analyzed_at DESC
             LIMIT 1
             """,
-            (eid, eid),
+            (eid,),
         ).fetchone()
         if not row:
             return None
@@ -2345,12 +2345,12 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                 if st and st.tzinfo is None:
                     st = st.replace(tzinfo=timezone.utc)
 
-                locked = _load_locked_pick(conn, eid)
-                if locked and locked.get('rec'):
+                stored = _load_latest_stored_pick(conn, eid)
+                if stored and stored.get('rec'):
                     stats['stored'] += 1
                     picks[eid] = {
-                        'rec': locked['rec'],
-                        'analyzed_at': locked.get('analyzed_at'),
+                        'rec': stored['rec'],
+                        'analyzed_at': stored.get('analyzed_at'),
                         'event': event_meta.get(eid),
                         'locked': bool(st and st <= now_dt),
                         'source': 'stored',
