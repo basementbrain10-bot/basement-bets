@@ -89,7 +89,13 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                 if (tp && typeof tp === 'object') {
                     const mapped = {};
                     Object.keys(tp).forEach((eid) => {
-                        mapped[eid] = { rec: tp[eid]?.rec, analyzedAt: tp[eid]?.analyzed_at };
+                        mapped[eid] = {
+                            rec: tp[eid]?.rec,
+                            analyzedAt: tp[eid]?.analyzed_at,
+                            isActionable: tp[eid]?.is_actionable,
+                            reason: tp[eid]?.reason,
+                            source: tp[eid]?.source,
+                        };
                     });
                     setRowTopPicks(mapped);
                     const nGames = Object.keys(tp).length;
@@ -107,7 +113,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                     }
                 } else {
                     setRowTopPicks({});
-                    setTopPicksStats({ games: 0, withPick: 0 });
+                    setTopPicksStats({ games: 0, withPick: 0, server: null, errors: [] });
                 }
             } catch (e) { }
 
@@ -597,9 +603,12 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                     const rows = (() => {
                                         // Stored top-picks (core model)
                                         return getProcessedEdges()
-                                            .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null }))
-                                            .filter(({ edge, top }) => {
-                                                if (!top) return false;
+                                            .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null, meta: rowTopPicks?.[e.id] || null }))
+                                            .filter(({ edge, top, meta }) => {
+                                                if (!top) {
+                                                    // Allow explicit No-Bet rows to render via a separate list later.
+                                                    return false;
+                                                }
                                                 diag.withPick += 1;
 
                                                 // Recommended view should reflect the selected ET date.

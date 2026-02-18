@@ -672,6 +672,14 @@ class NCAAMMarketFirstModelV2(BaseModel):
         ui_recs = []
         best_rec = None
 
+        # If we produced no actionable recommendations, capture why (for UI).
+        block_reason = None
+        try:
+            if not recs and isinstance(market_snapshot, dict):
+                block_reason = market_snapshot.get('_no_bet_reason_spread') or market_snapshot.get('_no_bet_reason_total')
+        except Exception:
+            block_reason = None
+
         # Basic game script (team-efficiency driven; Torvik)
         game_script = []
         try:
@@ -930,6 +938,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "narrative": narrative, 
             "narrative_json": json.dumps(narrative, default=str),
             "context_json": json.dumps(ctx, default=str),
+            "is_actionable": bool(ui_recs),
+            "block_reason": block_reason,
             "recommendations": ui_recs,
             "torvik_view": torvik_view,
             "torvik_team_stats": torvik_team_stats,
@@ -1422,10 +1432,11 @@ class NCAAMMarketFirstModelV2(BaseModel):
             if relax_gates or self._passes_publish_gates(best, market_line_home=market_line_s, torvik_ok=torvik_ok):
                 reason = self._steam_block_reason('SPREAD', str(best.get('side') or ''), market_snapshot.get('_market_consensus'), market_snapshot)
                 if reason:
-                    best = {**best, 'steam_blocked': True, 'steam_reason': reason}
+                    # Don't recommend, but record why for UI.
+                    if isinstance(snap, dict):
+                        snap['_no_bet_reason_spread'] = reason
                 else:
-                    best = {**best, 'steam_blocked': False}
-                    recs.append(best)
+                    recs.append({**best, 'steam_blocked': False})
 
         # --- Total ---
         line_t = snap.get("total")
@@ -1505,10 +1516,10 @@ class NCAAMMarketFirstModelV2(BaseModel):
             if relax_gates or self._passes_publish_gates(best, market_line_home=None, torvik_ok=torvik_ok):
                 reason = self._steam_block_reason('TOTAL', str(best.get('side') or ''), market_snapshot.get('_market_consensus'), market_snapshot)
                 if reason:
-                    best = {**best, 'steam_blocked': True, 'steam_reason': reason}
+                    if isinstance(snap, dict):
+                        snap['_no_bet_reason_total'] = reason
                 else:
-                    best = {**best, 'steam_blocked': False}
-                    recs.append(best)
+                    recs.append({**best, 'steam_blocked': False})
 
         return recs
 

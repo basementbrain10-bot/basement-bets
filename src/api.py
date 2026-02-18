@@ -1844,6 +1844,18 @@ async def reconcile_settlements(league: Optional[str] = None, limit: int = 500, 
          print(f"[API] Settlement Failed: {e}")
          raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/data-health")
+async def get_data_health():
+    """Return latest data pipeline health status."""
+    try:
+        from src.database import get_db_connection, _exec
+        with get_db_connection() as conn:
+            rows = _exec(conn, "SELECT source, last_success_at, last_row_count, status, notes, updated_at FROM data_health ORDER BY source ASC").fetchall()
+            return {"status": "success", "items": [dict(r) for r in rows]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/model/health")
 async def get_model_health(date: Optional[str] = None, league: Optional[str] = None, market: Optional[str] = None, user: dict = Depends(get_current_user)):
     """
@@ -2391,6 +2403,8 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                         'event': event_meta.get(eid),
                         'locked': bool(st and st <= now_dt),
                         'source': 'stored',
+                        'is_actionable': True,
+                        'reason': None,
                     }
                     continue
 
@@ -2409,13 +2423,27 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                         "event": event_meta.get(eid),
                         'locked': False,
                         'source': 'computed',
+                        'is_actionable': True,
+                        'reason': None,
                     }
                 else:
                     stats['computed_no_pick'] += 1
                     reason = None
                     if isinstance(res, dict):
-                        reason = res.get('headline') or res.get('recommendation') or res.get('error')
-                    reason = str(reason or 'No recommendations')
+                        reason = res.get('block_reason') or res.get('headline') or res.get('recommendation') or res.get('error')
+                    reason = str(reason or 'No bet')
+
+                    # Preserve no-bet reasons per event so UI can show "No Bet" states.
+                    picks[eid] = {
+                        "rec": None,
+                        "analyzed_at": res.get('analyzed_at') if isinstance(res, dict) else None,
+                        "event": event_meta.get(eid),
+                        'locked': False,
+                        'source': 'computed',
+                        'is_actionable': False,
+                        'reason': reason,
+                    }
+
                     stats['no_pick_reasons'][reason] = int(stats['no_pick_reasons'].get(reason, 0)) + 1
                     if len(no_pick_samples) < 20:
                         no_pick_samples.append({'event_id': eid, 'reason': reason})
