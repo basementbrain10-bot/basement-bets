@@ -934,10 +934,30 @@ def insert_model_prediction(doc: dict) -> bool:
         market_type = EXCLUDED.market_type,
         pick = EXCLUDED.pick
     """
-    with get_db_connection() as conn:
-        _exec(conn, query, doc)
-        conn.commit()
-        return True
+    try:
+        with get_db_connection() as conn:
+            _exec(conn, query, doc)
+            conn.commit()
+            return True
+    except Exception as e:
+        # Self-heal schema drift in production: context_json column may not exist yet.
+        msg = str(e)
+        if 'context_json' in msg and ('does not exist' in msg or 'UndefinedColumn' in msg):
+            try:
+                with get_admin_db_connection() as conn2:
+                    with conn2.cursor() as cur2:
+                        cur2.execute("ALTER TABLE model_predictions ADD COLUMN IF NOT EXISTS context_json JSONB;")
+                    conn2.commit()
+                # Retry once
+                with get_db_connection() as conn3:
+                    _exec(conn3, query, doc)
+                    conn3.commit()
+                    return True
+            except Exception as e2:
+                print(f"[DB] insert_model_prediction migration+retry failed: {e2}")
+                return False
+        print(f"[DB] insert_model_prediction error: {e}")
+        return False
 
 def update_model_prediction_result(pid: str, outcome: str):
     query = "UPDATE model_predictions SET outcome = :outcome WHERE id = :id"
