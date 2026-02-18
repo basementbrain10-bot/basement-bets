@@ -262,15 +262,17 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
     };
 
     const shiftDate = (days) => {
-        // selectedDate is YYYY-MM-DD. Do NOT use new Date('YYYY-MM-DD') (parsed as UTC).
-        // Create a local Date at noon to avoid DST/offset edge cases, then format back to ET.
+        // selectedDate is YYYY-MM-DD (ET day). Avoid JS timezone pitfalls by doing pure UTC date math
+        // and returning a YYYY-MM-DD string.
         try {
             const [yy, mm, dd] = String(selectedDate || '').split('-').map(x => parseInt(x, 10));
             if (!yy || !mm || !dd) return;
-            const current = new Date(yy, mm - 1, dd, 12, 0, 0);
-            current.setDate(current.getDate() + days);
-            const nextDate = current.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-            setSelectedDate(nextDate);
+            const base = Date.UTC(yy, mm - 1, dd, 12, 0, 0);
+            const next = new Date(base + (Number(days) * 86400000));
+            const y = next.getUTCFullYear();
+            const m = String(next.getUTCMonth() + 1).padStart(2, '0');
+            const d = String(next.getUTCDate()).padStart(2, '0');
+            setSelectedDate(`${y}-${m}-${d}`);
         } catch (e) {
             // fallback: no-op
         }
@@ -504,7 +506,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                 <button onClick={() => shiftDate(1)} className="p-1 px-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors">
                                     →
                                 </button>
-                                <button onClick={() => setSelectedDate(new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }))} className="ml-2 px-2 py-0.5 text-xs bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded">
+                                <button onClick={() => setSelectedDate(getTodayStr())} className="ml-2 px-2 py-0.5 text-xs bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded">
                                     Today
                                 </button>
                             </div>
