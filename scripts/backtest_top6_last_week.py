@@ -101,14 +101,17 @@ def run(days: int, sanity: bool) -> dict:
     all_top_ids = []
 
     for day in sorted(by_day.keys()):
+        games_today = by_day[day]
+        print(f"[{('SANE' if sanity else 'BASE')}] {day}: analyzing {len(games_today)} games...")
         cands = []
-        for g in by_day[day]:
+        for i, g in enumerate(games_today, start=1):
+            if (i % 10) == 0:
+                print(f"  ...{i}/{len(games_today)}")
             try:
                 res = model.analyze(g['id'], relax_gates=False, persist=False)
                 out = json.loads(res.get('outputs_json') or '{}')
                 recs = out.get('recommendations') or []
                 for rec in recs:
-                    # require EV and win_prob present
                     ev = float(rec.get('ev') or 0.0)
                     cands.append({
                         **rec,
