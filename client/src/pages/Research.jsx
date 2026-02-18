@@ -592,12 +592,16 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         }
                                     };
 
+                                    const diag = { withPick: 0, passBasic: 0, passEv: 0, passWin: 0, passBoth: 0 };
+
                                     const rows = (() => {
                                         // Stored top-picks (core model)
                                         return getProcessedEdges()
                                             .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null }))
                                             .filter(({ edge, top }) => {
                                                 if (!top) return false;
+                                                diag.withPick += 1;
+
                                                 // Recommended view should reflect the selected ET date.
                                                 // Prefer server-provided day_et (more reliable than client-side timezone parsing).
                                                 if (edge?.day_et) {
@@ -605,28 +609,32 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 } else {
                                                     if (!isSameEtDay(edge?.start_time, selectedDate)) return false;
                                                 }
+
                                                 const bt = String(top.bet_type || '').toUpperCase();
                                                 const sel = String(top.selection || '').trim();
                                                 const evStr = String(top.edge ?? '').replace('%', '').trim();
                                                 const evPct = Number(evStr);
                                                 const wp = (top.win_prob !== null && top.win_prob !== undefined) ? Number(top.win_prob) : null;
                                                 const wpLb10 = (top.win_prob_lb10 !== null && top.win_prob_lb10 !== undefined) ? Number(top.win_prob_lb10) : null;
-                                                // Option A: only show bets the model believes will win + positive EV.
-                                                // Defaults (confirmed):
-                                                // - EV% >= +2.0%
-                                                // - win_prob_lb10 >= 0.50 (preferred); else win_prob >= 0.52
+
+                                                // Basic schema gate
                                                 if (!bt || bt === 'AUTO') return false;
                                                 if (!sel || sel === '—') return false;
+                                                diag.passBasic += 1;
 
-                                                if (!Number.isFinite(evPct) || evPct < 2.0) return false;
+                                                // Option A thresholds
+                                                const okEv = Number.isFinite(evPct) && evPct >= 2.0;
+                                                if (okEv) diag.passEv += 1;
 
                                                 const okWin = (
                                                     (Number.isFinite(wpLb10) && wpLb10 >= 0.50) ||
                                                     (!Number.isFinite(wpLb10) && Number.isFinite(wp) && wp >= 0.52)
                                                 );
-                                                if (!okWin) return false;
+                                                if (okWin) diag.passWin += 1;
 
-                                                return true;
+                                                const ok = okEv && okWin;
+                                                if (ok) diag.passBoth += 1;
+                                                return ok;
                                             })
                                             .sort((a, b) => {
                                                 const aEv = Number(String(a.top?.edge ?? '').replace('%', '').trim()) || 0;
@@ -648,6 +656,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                             } catch (e) { }
                                                             return (
                                                                 `Board games: ${edges.length} • Top-picks picks: ${topPicksStats.games} • With pick: ${topPicksStats.withPick} • Matched rows: ${matched}`
+                                                                + ` • Pass basic: ${diag.passBasic}/${diag.withPick} • Pass EV>=2: ${diag.passEv} • Pass win: ${diag.passWin} • Pass both: ${diag.passBoth}`
                                                                 + (topPicksStats.server ? ` • Scanned: ${topPicksStats.server.scanned}/${topPicksStats.server.events_total} • Stored: ${topPicksStats.server.stored} • Computed: ${topPicksStats.server.computed_with_pick}/${topPicksStats.server.computed_attempted} • Errors: ${topPicksStats.server.errors}` : '')
                                                                 + (topPicksError ? ` • Top-picks error: ${topPicksError}` : '')
                                                             );
