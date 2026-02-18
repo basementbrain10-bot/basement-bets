@@ -1522,13 +1522,24 @@ class NCAAMMarketFirstModelV2(BaseModel):
             # Choose the higher-EV side, then gate it.
             best = cand_home if cand_home["ev"] >= cand_away["ev"] else cand_away
             if relax_gates or self._passes_publish_gates(best, market_line_home=market_line_s, torvik_ok=torvik_ok):
+                # 1) Steam guard
                 reason = self._steam_block_reason('SPREAD', str(best.get('side') or ''), snap.get('_market_consensus') if isinstance(snap, dict) else None, snap)
                 if reason:
-                    # Don't recommend, but record why for UI.
                     if isinstance(snap, dict):
                         snap['_no_bet_reason_spread'] = reason
                 else:
-                    recs.append({**best, 'steam_blocked': False})
+                    # 2) Sanity / bad-data scoring (Mode A: hide suspect picks)
+                    sanity_on = str(os.getenv('SANITY_ENABLE', '1')).strip() not in ('0', 'false', 'False', '')
+                    if sanity_on and isinstance(snap, dict):
+                        mc = snap.get('_market_consensus')
+                        score, reasons, sigma_mult, min_ev_bump = _sanity_adjust('SPREAD', str(best.get('side') or ''), float(best.get('win_prob') or 0.5), float(best.get('ev') or 0.0), mc)
+                        block_score = int(float(os.getenv('SANITY_BLOCK_SCORE', '2')))
+                        if score >= block_score:
+                            snap['_no_bet_reason_spread'] = "Sanity block (suspect data): " + ", ".join(reasons or [f"score={score}"])
+                        else:
+                            recs.append({**best, 'steam_blocked': False, 'sanity_score': score, 'sanity_reasons': reasons})
+                    else:
+                        recs.append({**best, 'steam_blocked': False})
 
         # --- Total ---
         line_t = snap.get("total")
@@ -1612,7 +1623,17 @@ class NCAAMMarketFirstModelV2(BaseModel):
                     if isinstance(snap, dict):
                         snap['_no_bet_reason_total'] = reason
                 else:
-                    recs.append({**best, 'steam_blocked': False})
+                    sanity_on = str(os.getenv('SANITY_ENABLE', '1')).strip() not in ('0', 'false', 'False', '')
+                    if sanity_on and isinstance(snap, dict):
+                        mc = snap.get('_market_consensus')
+                        score, reasons, sigma_mult, min_ev_bump = _sanity_adjust('TOTAL', str(best.get('side') or ''), float(best.get('win_prob') or 0.5), float(best.get('ev') or 0.0), mc)
+                        block_score = int(float(os.getenv('SANITY_BLOCK_SCORE', '2')))
+                        if score >= block_score:
+                            snap['_no_bet_reason_total'] = "Sanity block (suspect data): " + ", ".join(reasons or [f"score={score}"])
+                        else:
+                            recs.append({**best, 'steam_blocked': False, 'sanity_score': score, 'sanity_reasons': reasons})
+                    else:
+                        recs.append({**best, 'steam_blocked': False})
 
         return recs
 
