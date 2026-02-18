@@ -32,7 +32,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
     // Quick-pick state (board row badges)
     const [rowTopPicks, setRowTopPicks] = useState({}); // event_id -> { rec, analyzedAt }
     const [topPicksError, setTopPicksError] = useState(null);
-    const [topPicksStats, setTopPicksStats] = useState({ games: 0, withPick: 0 });
+    const [topPicksStats, setTopPicksStats] = useState({ games: 0, withPick: 0, server: null, errors: [] });
     // Edge-engine recs removed: Today should use the core model (stored top picks) to avoid mismatches.
     // const [edgeRecs, setEdgeRecs] = useState(null);
     // const [edgeRecsError, setEdgeRecsError] = useState(null);
@@ -94,7 +94,13 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                     setRowTopPicks(mapped);
                     const nGames = Object.keys(tp).length;
                     const nWith = Object.values(tp).filter((x) => x && x.rec).length;
-                    setTopPicksStats({ games: nGames, withPick: nWith });
+                    const serverStats = topPicksRes?.data?.stats;
+                    setTopPicksStats({
+                        games: nGames,
+                        withPick: nWith,
+                        server: serverStats || null,
+                        errors: topPicksRes?.data?.errors || [],
+                    });
                     // Default board sub-tab to "Recommended" if we have at least one pick.
                     if (Object.keys(mapped).length > 0) {
                         setBoardTab('recommended');
@@ -618,7 +624,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 No recommendations available for this window.
                                                 {!showModelPerformanceTab && leagueFilter === 'NCAAM' && (
                                                     <div className="mt-2 text-[11px] text-slate-600">
-                                                        Board games: {edges.length} • Top-picks games: {topPicksStats.games} • With pick: {topPicksStats.withPick}{topPicksError ? ` • Top-picks error: ${topPicksError}` : ''}
+                                                        Board games: {edges.length} • Top-picks picks: {topPicksStats.games} • With pick: {topPicksStats.withPick}{topPicksStats.server ? ` • Scanned: ${topPicksStats.server.scanned}/${topPicksStats.server.events_total} • Stored: ${topPicksStats.server.stored} • Computed: ${topPicksStats.server.computed_with_pick}/${topPicksStats.server.computed_attempted} • Errors: ${topPicksStats.server.errors}` : ''}{topPicksError ? ` • Top-picks error: ${topPicksError}` : ''}
                                                     </div>
                                                 )}
                                             </div>

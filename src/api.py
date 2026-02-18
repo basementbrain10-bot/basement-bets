@@ -2320,12 +2320,23 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
     model = NCAAMMarketFirstModelV2()
     picks = {}
 
+    stats = {
+        'events_total': len(event_ids),
+        'scanned': 0,
+        'stored': 0,
+        'computed_attempted': 0,
+        'computed_with_pick': 0,
+        'errors': 0,
+    }
+    errors = []
+
     with get_db_connection() as conn:
         now_dt = datetime.now(timezone.utc)
 
         # Fast path (default): use stored recommended picks only.
         # This avoids expensive server-side analysis which can time out on Vercel.
         for eid in event_ids:
+            stats['scanned'] += 1
             try:
                 st = _dt((event_meta.get(eid) or {}).get('start_time'))
                 if st and st.tzinfo is None:
@@ -2333,6 +2344,7 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
 
                 locked = _load_locked_pick(conn, eid)
                 if locked and locked.get('rec'):
+                    stats['stored'] += 1
                     picks[eid] = {
                         'rec': locked['rec'],
                         'analyzed_at': locked.get('analyzed_at'),
@@ -2346,9 +2358,11 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                     continue
 
                 # Optional slow path: compute missing picks on-demand.
+                stats['computed_attempted'] += 1
                 res = model.analyze(eid)
                 top = (res.get('recommendations') or [None])[0]
                 if top:
+                    stats['computed_with_pick'] += 1
                     picks[eid] = {
                         "rec": _normalize_rec(top),
                         "analyzed_at": res.get('analyzed_at'),
@@ -2357,6 +2371,11 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
                         'source': 'computed',
                     }
             except Exception as e:
+                stats['errors'] += 1
+                msg = str(e)
+                # Include a few errors in the response so we can debug without needing Vercel log access.
+                if len(errors) < 20:
+                    errors.append({'event_id': eid, 'error': msg})
                 print(f"[top-picks] analyze failed for {eid}: {e}")
 
     data = {
@@ -2364,6 +2383,8 @@ async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_g
         "date": date,
         "days": days,
         "limit_games": limit_games,
+        "stats": stats,
+        "errors": errors,
         "picks": picks,
     }
 
