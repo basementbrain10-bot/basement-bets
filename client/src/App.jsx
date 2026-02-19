@@ -443,7 +443,7 @@ function App() {
                                     <span className="sm:hidden">Model</span>
                                 </button>
                                 <button
-                                    onClick={() => setPage('actuals')}
+                                    onClick={() => { setPage('actuals'); setActualsTab('transactions'); }}
                                     className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${page === 'actuals' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                                 >
                                     <LayoutDashboard size={18} />
