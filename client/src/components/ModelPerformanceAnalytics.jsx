@@ -1006,6 +1006,15 @@ const ModelPerformanceAnalytics = ({ history }) => {
                     </div>
                 </div>
 
+                {/* Top 6 Recommended Win Rate (moved up) */}
+                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700 lg:col-span-2">
+                    <h4 className="text-sm font-bold text-slate-400 uppercase mb-2">Top 6 Recommended Win Rate</h4>
+                    <div className="text-[10px] text-slate-500 mb-2">Last 14 days • Win% of the 6 highest EV graded bets each day (includes rolling average line).</div>
+                    <div className="rounded-lg border border-slate-800 bg-slate-950/20 p-2">
+                        {renderTop6Chart()}
+                    </div>
+                </div>
+
                 {/* Daily win% by confidence */}
                 <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700 lg:col-span-2">
                     <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Daily Win% by Confidence</h4>
@@ -1017,14 +1026,6 @@ const ModelPerformanceAnalytics = ({ history }) => {
                         <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#34d399' }}></span>High</div>
                         <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#60a5fa' }}></span>Medium</div>
                         <div className="flex items-center gap-2"><span className="inline-block w-3 h-0.5" style={{ background: '#f59e0b' }}></span>Low</div>
-                    </div>
-
-                    <div className="mt-8">
-                        <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">Top 6 Recommended Win Rate</h4>
-                        <div className="text-[10px] text-slate-500 mb-2">Last 14 days • Win% of the 6 highest EV graded bets each day.</div>
-                        <div className="rounded-lg border border-slate-800 bg-slate-950/20 p-2">
-                            {renderTop6Chart()}
-                        </div>
                     </div>
                 </div>
 
