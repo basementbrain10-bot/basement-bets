@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
 import { RefreshCw, BarChart3 } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine, ComposedChart, Line, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine, ComposedChart, Line, Cell, LabelList } from 'recharts';
 import ModelPerformanceAnalytics from '../components/ModelPerformanceAnalytics';
 
 const etDay = (dt) => {
@@ -191,9 +191,10 @@ export default function Picks() {
       const winRate = decided ? (w / decided) * 100 : null;
       return {
         rank: `#${rank}`,
+        wins: w,
+        losses: l,
         winRate: winRate === null ? null : Number(winRate.toFixed(1)),
         n: decided,
-        _fill: (winRate !== null && winRate >= 50) ? '#34d399' : '#fb7185',
       };
     });
 
@@ -522,29 +523,28 @@ export default function Picks() {
         <div className="h-[180px] overflow-x-auto">
           <div className="min-w-[360px] h-full">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={top6RankPerformance.rows} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+              <BarChart data={top6RankPerformance.rows} margin={{ top: 10, right: 16, left: 0, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                 <XAxis dataKey="rank" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} domain={[0, 100]} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
                   labelStyle={{ color: '#e2e8f0' }}
                   formatter={(v, name, props) => {
-                    if (name === 'winRate') return [`${Number(v).toFixed(1)}%`, 'Win%'];
-                    if (name === 'n') return [v, 'N (decided)'];
+                    const p = props?.payload || {};
+                    if (name === 'Wins') return [v, `Wins (Win% ${p.winRate ?? '—'}%)`];
+                    if (name === 'Losses') return [v, 'Losses'];
                     return [v, name];
                   }}
                 />
-                {/* Legend removed (single series) to prevent overlap on small screens */}
-                <ReferenceLine y={50} stroke="#94a3b8" strokeDasharray="4 4" />
-                {/* Avg shown in header to avoid extra chart line */}
 
-                <Bar dataKey="winRate" name="Win%" radius={[6, 6, 0, 0]}>
-                  {(top6RankPerformance.rows || []).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry._fill} />
-                  ))}
+                <Bar dataKey="wins" stackId="a" name="Wins" fill="#34d399" radius={[6, 6, 0, 0]}>
+                  <LabelList dataKey="winRate" position="center" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} fill="#0b1220" fontSize={11} />
                 </Bar>
-              </ComposedChart>
+                <Bar dataKey="losses" stackId="a" name="Losses" fill="#fb7185" radius={[0, 0, 6, 6]}>
+                  <LabelList dataKey="n" position="right" formatter={(v) => (v ? `N=${v}` : '')} fill="#94a3b8" fontSize={10} />
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
