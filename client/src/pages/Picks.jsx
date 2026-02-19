@@ -395,6 +395,7 @@ export default function Picks() {
         </div>
       )}
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Yesterday graded results */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-2">
@@ -550,6 +551,8 @@ export default function Picks() {
       </div>
 
 
+
+      </div>
 
       {/* Existing analytics (kept) */}
       <ModelPerformanceAnalytics history={history || []} />
