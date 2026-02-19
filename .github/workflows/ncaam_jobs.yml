@@ -52,6 +52,36 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python3 src/scripts/build_daily_top_picks.py
+
+      - name: Verify Daily Top Picks (today ET)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python3 - <<'PY'
+          from datetime import datetime
+          import psycopg2
+          import psycopg2.extras
+          import os
+
+          dsn = os.environ.get('DATABASE_URL')
+          assert dsn, 'DATABASE_URL missing'
+
+          conn = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.DictCursor)
+          cur = conn.cursor()
+          cur.execute("SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text")
+          today = cur.fetchone()[0]
+
+          cur.execute("SELECT COUNT(*) AS n, SUM(CASE WHEN is_actionable THEN 1 ELSE 0 END) AS n_action FROM daily_top_picks WHERE date_et=%s AND league='NCAAM'", (today,))
+          row = cur.fetchone()
+          n = int(row['n'] or 0)
+          n_action = int(row['n_action'] or 0)
+
+          print(f"daily_top_picks for {today}: total={n} actionable={n_action}")
+
+          # fail hard if we wrote nothing at all (usually means wrong DB or script didn't run)
+          if n == 0:
+            raise SystemExit(2)
+          PY
           
       - name: Run Settlement
         env:
