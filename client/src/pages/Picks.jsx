@@ -492,11 +492,11 @@ export default function Picks() {
                 return (
                   <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/20">
                     <div className="min-w-0">
-                      <div className="text-xs font-black text-slate-100 truncate">
+                      <div className="text-xs font-black text-slate-100 whitespace-normal break-words leading-snug">
                         <span className="text-slate-400 mr-2">#{idx + 1}</span>
                         {h.sport || '—'} • {(h.away_team && h.home_team) ? `${h.away_team} @ ${h.home_team}` : (h.matchup || '—')}
                       </div>
-                      <div className="text-xs text-slate-400 truncate">{h.market_type || h.bet_type || '—'} • {h.selection || '—'}</div>
+                      <div className="text-xs text-slate-400 whitespace-normal break-words leading-snug">{h.market_type || h.bet_type || '—'} • {h.selection || '—'}</div>
                     </div>
                     <div className={`text-xs font-mono font-black ${cls}`}>{out}</div>
                   </div>
@@ -511,15 +511,16 @@ export default function Picks() {
       {/* Top 6 recommended: win% by rank */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
         <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Top 6 recommended (2026 YTD) — win% by rank</div>
-        <div className="text-[11px] text-slate-500 mb-3">Each day, picks are ranked by EV/u and the Top 6 are tracked by rank.</div>
+        <div className="text-[11px] text-slate-500 mb-1">Each day, picks are ranked by EV/u and the Top 6 are tracked by rank.</div>
+        <div className="text-[11px] text-slate-500 mb-3">Guide: grey dashed = 50% • blue dashed = overall avg (when available).</div>
 
         <div className="h-[260px] overflow-x-auto">
           <div className="min-w-[360px] h-full">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={top6RankPerformance.rows} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis dataKey="rank" tick={{ fill: '#94a3b8', fontSize: 12 }} label={{ value: 'Rank (Top 6)', position: 'insideBottom', offset: -5, fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} domain={[0, 100]} label={{ value: 'Win %', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 11 }} />
+                <XAxis dataKey="rank" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} domain={[0, 100]} />
                 <Tooltip
                   contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
                   labelStyle={{ color: '#e2e8f0' }}
@@ -529,10 +530,10 @@ export default function Picks() {
                     return [v, name];
                   }}
                 />
-                <Legend />
-                <ReferenceLine y={50} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: '50%', fill: '#94a3b8', fontSize: 11 }} />
+                {/* Legend removed (single series) to prevent overlap on small screens */}
+                <ReferenceLine y={50} stroke="#94a3b8" strokeDasharray="4 4" />
                 {top6RankPerformance?.avg !== null && top6RankPerformance?.avg !== undefined ? (
-                  <ReferenceLine y={top6RankPerformance.avg} stroke="#60a5fa" strokeDasharray="4 4" label={{ value: `Avg ${top6RankPerformance.avg}%`, fill: '#60a5fa', fontSize: 11 }} />
+                  <ReferenceLine y={top6RankPerformance.avg} stroke="#60a5fa" strokeDasharray="4 4" />
                 ) : null}
 
                 <Bar dataKey="winRate" name="Win%" radius={[6, 6, 0, 0]}>
