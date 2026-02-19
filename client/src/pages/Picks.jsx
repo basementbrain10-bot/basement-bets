@@ -517,8 +517,8 @@ export default function Picks() {
         </div>
         <div className="text-[11px] text-slate-500 mb-3">Ranked by EV/u.</div>
 
-        <div className="h-[160px] overflow-x-auto">
-          <div className="min-w-[320px] h-full">
+        <div className="h-[150px] overflow-x-auto">
+          <div className="min-w-[300px] h-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 8, right: 16, left: 6, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
