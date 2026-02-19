@@ -13,6 +13,44 @@ app = FastAPI()
 
 # Trigger Reload - 1.2.1-v6
 
+# -----------------------------------------------------------------------------
+# Lightweight in-process response cache (TTL) + ETag support.
+# Note: this is best-effort for Vercel/serverless (per-instance). Still reduces
+# repeated DB work and network transfer within a warm instance.
+# -----------------------------------------------------------------------------
+import json
+import hashlib
+import time
+from typing import Any, Callable, Dict, Tuple
+
+_HTTP_CACHE: Dict[str, Tuple[float, Any, str]] = {}  # key -> (expires_ts, payload, etag)
+
+
+def _make_etag(payload: Any) -> str:
+    try:
+        b = json.dumps(payload, sort_keys=True, default=str).encode('utf-8')
+    except Exception:
+        b = str(payload).encode('utf-8')
+    return 'W/"' + hashlib.sha1(b).hexdigest() + '"'
+
+
+def _cached_json(request: Request, key: str, ttl_s: int, build_fn: Callable[[], Any]) -> JSONResponse:
+    now = time.time()
+    hit = _HTTP_CACHE.get(key)
+    if hit and hit[0] > now:
+        payload, etag = hit[1], hit[2]
+    else:
+        payload = build_fn()
+        etag = _make_etag(payload)
+        _HTTP_CACHE[key] = (now + ttl_s, payload, etag)
+
+    inm = request.headers.get('if-none-match')
+    if inm and inm.strip() == etag:
+        return JSONResponse(status_code=304, content=None, headers={'ETag': etag})
+
+    return JSONResponse(content=payload, headers={'ETag': etag, 'Cache-Control': f'public, max-age={ttl_s}'})
+
+
 # --- Security Configuration ---
 API_KEY_NAME = "X-BASEMENT-KEY"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
@@ -1963,7 +2001,7 @@ async def trigger_torvik_ingestion(request: Request, authorized: bool = Depends(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/board")
-async def get_board(league: str, date: Optional[str] = None, days: int = 1):
+async def get_board(request: Request, league: str, date: Optional[str] = None, days: int = 1):
     """
     Generic lightweight board backed by DB odds snapshots.
 
@@ -2094,9 +2132,15 @@ async def get_board(league: str, date: Optional[str] = None, days: int = 1):
     ORDER BY e.start_time ASC
     """
 
-    with get_db_connection() as conn:
-        rows = _exec(conn, query, {"league": league, "start_date": str(start_date), "end_date": str(end_date)}).fetchall()
-        return _ensure_utc([dict(r) for r in rows])
+    cache_key = f"board:{league}:{start_date}:{end_date}"
+
+    def _build():
+        with get_db_connection() as conn:
+            rows = _exec(conn, query, {"league": league, "start_date": str(start_date), "end_date": str(end_date)}).fetchall()
+            return _ensure_utc([dict(r) for r in rows])
+
+    # Keep TTL short to avoid stale lines.
+    return _cached_json(request, cache_key, ttl_s=int(os.getenv('BOARD_TTL_SECONDS', '30')), build_fn=_build)
 
 
 @app.get("/api/ncaam/board")
@@ -2106,7 +2150,7 @@ async def get_ncaam_board(date: Optional[str] = None, days: int = 1):
 
 
 @app.get("/api/ncaam/top-picks")
-async def get_ncaam_top_picks(date: Optional[str] = None, days: int = 1, limit_games: int = 25, compute_missing: bool = False, relax_gates: bool = False, max_compute: int = 20):
+async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days: int = 1, limit_games: int = 25, compute_missing: bool = False, relax_gates: bool = False, max_compute: int = 20):
     """Return top model pick per game for the NCAAM board window.
 
     Goal: allow UI to render a 'Top pick' badge without firing /analyze for every row.
