@@ -1560,7 +1560,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                         </td>
                                                     </tr>
                                                 );
-                                            })()}
+                                            });
+                                        })()}
                                         </tbody>
                                     </table>
                                 </div>
