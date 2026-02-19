@@ -32,7 +32,22 @@ def main():
             league_code = "NCAAM" if league == 'ncaab' else league.upper()
 
             count = adapter.normalize_and_store(raw_data, league=league_code, provider="action_network")
-            print(f"SUCCESS: Stored {count} snapshots for {league} ({len(raw_data)} games processed)")
+            stats = getattr(adapter, 'last_ingest_stats', None) or {}
+            dropped = stats.get('dropped')
+            print(f"SUCCESS: Stored {count} snapshots for {league} ({len(raw_data)} games processed)" + (f" | dropped={dropped}" if dropped is not None else ""))
+
+            # Persist a small sanity/quality summary into data_health for the UI.
+            try:
+                from src.scripts.update_data_health import upsert
+                if stats:
+                    upsert(
+                        f"odds_sanity:{league_code}",
+                        status='ok' if count > 0 else 'stale',
+                        row_count=int(count) if count is not None else None,
+                        notes=str(stats)
+                    )
+            except Exception as e:
+                print(f"[ingest_odds] odds sanity health upsert failed: {e}")
 
         except Exception as e:
             print(f"ERROR processing {league}: {e}")

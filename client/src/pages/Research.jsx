@@ -591,7 +591,20 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                             };
                                             const odds = by['odds'];
                                             const torvik = by['torvik'];
-                                            return `Data health — odds: ${odds?.status || '—'} (${fmt(odds?.last_success_at)}) • torvik: ${torvik?.status || '—'} (${fmt(torvik?.last_success_at)})`;
+                                            const board = by['board:NCAAM'];
+
+                                            const boardMini = (() => {
+                                                if (!board?.notes) return '';
+                                                try {
+                                                    const n = JSON.parse(board.notes);
+                                                    const pct = (x) => `${Math.round((x || 0) * 100)}%`;
+                                                    return ` • board: ${board?.status || '—'} (totals ${pct(n?.pct_with_total)}, spreads ${pct(n?.pct_with_spread)})`;
+                                                } catch (e) {
+                                                    return ` • board: ${board?.status || '—'}`;
+                                                }
+                                            })();
+
+                                            return `Data health — odds: ${odds?.status || '—'} (${fmt(odds?.last_success_at)}) • torvik: ${torvik?.status || '—'} (${fmt(torvik?.last_success_at)})${boardMini}`;
                                         })()}
                                     </div>
                                 )}

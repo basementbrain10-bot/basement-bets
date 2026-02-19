@@ -333,11 +333,15 @@ def init_snapshots_db():
         side TEXT,
         line_value REAL,
         price INTEGER,
+        -- as_of: when the odds were captured from the feed
         captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        -- created_at: when the row was inserted (useful for debugging/backfills)
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         snapshot_key TEXT UNIQUE
     );
     CREATE INDEX IF NOT EXISTS idx_snap_event ON odds_snapshots(event_id);
     CREATE INDEX IF NOT EXISTS idx_snap_captured ON odds_snapshots(captured_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_snap_created ON odds_snapshots(created_at DESC);
     """
     drops = ["DROP TABLE IF EXISTS odds_snapshots CASCADE;"] if _force_reset() else []
 
@@ -345,10 +349,15 @@ def init_snapshots_db():
     migrations = [
         "ALTER TABLE odds_snapshots ADD COLUMN IF NOT EXISTS snapshot_key TEXT;",
         "CREATE UNIQUE INDEX IF NOT EXISTS ux_odds_snapshots_snapshot_key ON odds_snapshots(snapshot_key);",
+        # Standard timestamps
+        "ALTER TABLE odds_snapshots ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();",
+        "ALTER TABLE odds_snapshots ALTER COLUMN created_at SET NOT NULL;",
         # Migrate captured_at to TIMESTAMPTZ NOT NULL
         "ALTER TABLE odds_snapshots ALTER COLUMN captured_at TYPE TIMESTAMPTZ USING captured_at AT TIME ZONE 'UTC';",
         "ALTER TABLE odds_snapshots ALTER COLUMN captured_at SET NOT NULL;",
         "ALTER TABLE odds_snapshots ALTER COLUMN captured_at SET DEFAULT NOW();",
+        # Indexes
+        "CREATE INDEX IF NOT EXISTS idx_snap_created ON odds_snapshots(created_at DESC);",
     ]
 
     with get_admin_db_connection() as conn:

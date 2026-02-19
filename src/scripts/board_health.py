@@ -1,0 +1,123 @@
+"""Board/ingestion health metrics.
+
+Used by update_data_health.py and optionally by API endpoints.
+
+Goals:
+- Actionable per-league board coverage stats
+- Low-cost queries (use latest_odds_snapshots view when available)
+
+"""
+
+from __future__ import annotations
+
+import os
+import json
+from datetime import datetime, timedelta
+
+from src.database import get_admin_db_connection, _exec
+
+
+def compute_board_health(league: str, days: int = 3) -> dict:
+    league = (league or '').upper().strip()
+    days = max(1, min(int(days or 3), 14))
+
+    with get_admin_db_connection() as conn:
+        # Use ET day window to match /api/board logic.
+        start_et = _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date").fetchone()[0]
+        end_et = _exec(conn, "SELECT ((NOW() AT TIME ZONE 'America/New_York')::date + (%s || ' days')::interval)::date", (days - 1,)).fetchone()[0]
+
+        rows = _exec(
+            conn,
+            """
+            WITH ev AS (
+              SELECT id
+              FROM events
+              WHERE league = %s
+                AND DATE(start_time AT TIME ZONE 'America/New_York') BETWEEN %s AND %s
+            ),
+            per_event AS (
+              SELECT e.id AS event_id,
+                MAX(CASE WHEN o.market_type='SPREAD' THEN 1 ELSE 0 END) AS has_spread,
+                MAX(CASE WHEN o.market_type='TOTAL' THEN 1 ELSE 0 END) AS has_total,
+                MAX(CASE WHEN o.market_type='MONEYLINE' THEN 1 ELSE 0 END) AS has_ml
+              FROM ev e
+              LEFT JOIN (
+                SELECT DISTINCT ON (event_id, market_type)
+                  event_id, market_type
+                FROM odds_snapshots
+                WHERE captured_at >= NOW() - INTERVAL '7 days'
+                ORDER BY event_id, market_type, captured_at DESC
+              ) o ON o.event_id = e.id
+              GROUP BY e.id
+            )
+            SELECT
+              COUNT(*)::int AS events_total,
+              SUM(has_spread)::int AS with_spread,
+              SUM(has_total)::int AS with_total,
+              SUM(has_ml)::int AS with_moneyline
+            FROM per_event;
+            """,
+            (league, start_et, end_et),
+        ).fetchone()
+
+        # Snapshot volume (recent)
+        snap_rows = _exec(
+            conn,
+            """
+            SELECT market_type, COUNT(*)::int AS n
+            FROM odds_snapshots
+            WHERE captured_at >= NOW() - INTERVAL '6 hours'
+              AND event_id IN (
+                SELECT id FROM events
+                WHERE league=%s
+                  AND start_time >= NOW() - INTERVAL '3 days'
+                  AND start_time <= NOW() + INTERVAL '7 days'
+              )
+            GROUP BY market_type
+            ORDER BY market_type;
+            """,
+            (league,),
+        ).fetchall()
+
+    events_total = int(rows[0] or 0) if rows else 0
+    with_spread = int(rows[1] or 0) if rows else 0
+    with_total = int(rows[2] or 0) if rows else 0
+    with_ml = int(rows[3] or 0) if rows else 0
+
+    pct = lambda a, b: (float(a) / float(b)) if b else 0.0
+
+    markets_6h = {r[0]: int(r[1] or 0) for r in (snap_rows or [])}
+
+    return {
+        'league': league,
+        'window_days': days,
+        'events_total': events_total,
+        'with_spread': with_spread,
+        'with_total': with_total,
+        'with_moneyline': with_ml,
+        'pct_with_spread': round(pct(with_spread, events_total), 4),
+        'pct_with_total': round(pct(with_total, events_total), 4),
+        'pct_with_moneyline': round(pct(with_ml, events_total), 4),
+        'missing_spread_pct': round(1.0 - pct(with_spread, events_total), 4) if events_total else 0.0,
+        'missing_total_pct': round(1.0 - pct(with_total, events_total), 4) if events_total else 0.0,
+        'missing_moneyline_pct': round(1.0 - pct(with_ml, events_total), 4) if events_total else 0.0,
+        'snapshots_last_6h_by_market': markets_6h,
+        'generated_at': datetime.utcnow().isoformat() + 'Z',
+    }
+
+
+def status_from_health(h: dict) -> str:
+    # Alert if totals coverage is too low.
+    thresh = float(os.getenv('TOTALS_MISSING_ALERT_PCT', '0.40'))
+    if not h or not h.get('events_total'):
+        return 'stale'
+    if float(h.get('missing_total_pct') or 0.0) > thresh:
+        return 'alert'
+    return 'ok'
+
+
+def notes_from_health(h: dict) -> str:
+    try:
+        return json.dumps(h, sort_keys=True)
+    except Exception:
+        return str(h)

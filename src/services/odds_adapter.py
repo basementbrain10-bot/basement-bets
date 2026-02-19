@@ -122,18 +122,80 @@ class OddsAdapter:
 
         provider = normalize_feed_provider(provider)
 
+        dropped = {
+            'missing_price': 0,
+            'bad_price': 0,
+            'bad_line': 0,
+            'other': 0,
+        }
+
+        def _good_price(p):
+            # American odds should almost always have magnitude >= 100.
+            # Reject common ingestion bugs like -9, +12, etc.
+            if p is None:
+                return False
+            try:
+                p = int(p)
+            except Exception:
+                return False
+            if p == 0:
+                return False
+            if abs(p) < 100:
+                return False
+            # reject absurd values
+            if abs(p) > 5000:
+                return False
+            return True
+
+        def _good_line(market_type, line_value):
+            if market_type not in ('SPREAD', 'TOTAL'):
+                return True
+            if line_value is None:
+                return False
+            try:
+                x = float(line_value)
+            except Exception:
+                return False
+            # Very wide, league-agnostic sanity bounds
+            if market_type == 'SPREAD':
+                return abs(x) <= 80
+            if market_type == 'TOTAL':
+                return 0 <= x <= 400
+            return True
+
         for event in raw_data:
             if provider == "action_network":
-                snaps = self._from_action_network(event, league, captured_at)
-                if snaps: final_snapshots.extend(snaps)
+                snaps = self._from_action_network(event, league, captured_at) or []
             else:
-                # Default Odds API
-                snaps = self._from_odds_api(event, league, captured_at)
-                final_snapshots.extend(snaps)
-        
+                snaps = self._from_odds_api(event, league, captured_at) or []
+
+            for s in snaps:
+                try:
+                    if s.get('price') is None:
+                        dropped['missing_price'] += 1
+                        continue
+                    if not _good_price(s.get('price')):
+                        dropped['bad_price'] += 1
+                        continue
+                    if not _good_line((s.get('market_type') or '').upper(), s.get('line_value')):
+                        dropped['bad_line'] += 1
+                        continue
+                    final_snapshots.append(s)
+                except Exception:
+                    dropped['other'] += 1
+
+        # Expose latest ingest stats to callers (cron can persist to data_health)
+        self.last_ingest_stats = {
+            'kept': len(final_snapshots),
+            'dropped': int(sum(dropped.values())),
+            'dropped_by_reason': dropped,
+            'provider': provider,
+            'league': league,
+        }
+
         if not final_snapshots:
             return 0
-            
+
         return store_odds_snapshots(final_snapshots)
 
     def _from_odds_api(self, event: Dict, league: str, captured_at: datetime) -> List[Dict]:

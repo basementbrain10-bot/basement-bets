@@ -53,6 +53,16 @@ def main():
     status = 'ok' if n and n > 0 else 'stale'
     upsert('odds', status=status, row_count=n, notes='rows in last 6h')
 
+    # Board coverage health (actionable, per league)
+    try:
+        from src.scripts.board_health import compute_board_health, status_from_health, notes_from_health
+        for lg in ['NCAAM', 'NFL', 'EPL']:
+            h = compute_board_health(lg, days=3)
+            st = status_from_health(h)
+            upsert(f'board:{lg}', status=st, row_count=h.get('events_total'), notes=notes_from_health(h))
+    except Exception as e:
+        upsert('board:ERROR', status='error', row_count=None, notes=str(e))
+
     # Torvik health
     with get_admin_db_connection() as conn:
         with conn.cursor() as cur:
