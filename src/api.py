@@ -2480,6 +2480,23 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
     except Exception:
         pass
 
+    # If we don't have precomputed daily_top_picks and there are no stored picks,
+    # allow a small on-demand compute to keep the UI from showing an empty slate.
+    # This is bounded and only triggers for today's ET date with days=1.
+    if not compute_missing:
+        try:
+            with get_db_connection() as conn:
+                today_et = _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text").fetchone()[0]
+            if str(date) == str(today_et) and int(days) == 1:
+                compute_missing = True
+                # keep it conservative by default
+                try:
+                    max_compute = int(os.getenv('AUTO_TOP_PICKS_MAX_COMPUTE', '20'))
+                except Exception:
+                    max_compute = 20
+        except Exception:
+            pass
+
     model = NCAAMMarketFirstModelV2()
     picks = {}
 
@@ -3360,6 +3377,91 @@ async def trigger_settlement_reconcile(request: Request, league: Optional[str] =
 
 @app.api_route("/api/jobs/grade_predictions", methods=["GET", "POST"])
 async def trigger_prediction_grading(request: Request, fast: bool = True, backfill_days: int = 3, max_clv_rows: int = 250, max_grade_rows: int = 500, skip_clv: bool = False, authorized: bool = Depends(verify_cron_secret)):
+    """Cron/manual: grade model_predictions using local game_results.
+
+    Default mode is **fast/bounded** to avoid Vercel function timeouts.
+
+    Params:
+    - fast: if true, uses bounded defaults
+    - backfill_days: results/CLV lookback window
+    - max_clv_rows: max CLV updates per run
+    - max_grade_rows: max outcome grades per run
+    - skip_clv: skip CLV step (outcome-only)
+    """
+    try:
+        from src.services.grading_service import GradingService
+        svc = GradingService()
+        if fast:
+            res = svc.grade_predictions(backfill_days=backfill_days, max_clv_rows=max_clv_rows, max_grade_rows=max_grade_rows, skip_clv=skip_clv)
+        else:
+            # Unbounded legacy behavior (use carefully)
+            res = svc.grade_predictions(backfill_days=10, max_clv_rows=2000, max_grade_rows=5000, skip_clv=skip_clv)
+        return {
+            "status": "success",
+            "message": "Prediction grading completed",
+            "results": res
+        }
+    except Exception as e:
+        print(f"[JOB ERROR] Grading failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.api_route("/api/jobs/build_daily_top_picks", methods=["GET", "POST"])
+async def trigger_build_daily_top_picks(request: Request, date: Optional[str] = None, limit_games: int = 250, authorized: bool = Depends(verify_cron_secret)):
+    """Cron/manual: compute and upsert daily_top_picks for NCAAM.
+
+    This powers /api/ncaam/top-picks fast-path (cached) and keeps the UI from
+    needing to run expensive on-demand analysis.
+    """
+    from src.services.job_service import JobContext, JobLockedException
+
+    # Resolve date_et in DB time so it matches backend.
+    try:
+        from src.database import get_db_connection, _exec
+        if not date:
+            with get_db_connection() as conn:
+                date = _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text").fetchone()[0]
+    except Exception:
+        pass
+
+    job_key = f"build_daily_top_picks:{date or 'today'}"
+
+    try:
+        with JobContext(job_key) as ctx:
+            from src.scripts.build_daily_top_picks import ensure_table, fetch_event_ids_for_date, upsert_pick
+            from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
+
+            ensure_table()
+            try:
+                limit_games = int(limit_games)
+            except Exception:
+                limit_games = 250
+            limit_games = max(1, min(limit_games, 500))
+
+            eids = fetch_event_ids_for_date(date, limit_games=limit_games)
+            model = NCAAMMarketFirstModelV2()
+
+            ok = 0
+            err = 0
+            for eid in eids:
+                try:
+                    res = model.analyze(eid, relax_gates=False, persist=False)
+                    upsert_pick(date, eid, res if isinstance(res, dict) else {})
+                    ok += 1
+                except Exception as e:
+                    err += 1
+                    try:
+                        upsert_pick(date, eid, {"recommendations": [], "error": str(e), "model_version": getattr(model, 'VERSION', None), "block_reason": str(e)})
+                    except Exception:
+                        pass
+
+            return {"status": "success", "date": date, "events": len(eids), "ok": ok, "err": err}
+
+    except JobLockedException:
+        return {"status": "skipped", "reason": "Locked/DB unavailable"}
+    except Exception as e:
+        print(f"[JOB ERROR] build_daily_top_picks failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     """Cron/manual: grade model_predictions using local game_results.
 
     Default mode is **fast/bounded** to avoid Vercel function timeouts.
