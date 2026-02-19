@@ -517,13 +517,13 @@ export default function Picks() {
         </div>
         <div className="text-[11px] text-slate-500 mb-3">Ranked by EV/u.</div>
 
-        <div className="h-[180px] overflow-x-auto">
-          <div className="min-w-[360px] h-full">
+        <div className="h-[160px] overflow-x-auto">
+          <div className="min-w-[320px] h-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 8, right: 16, left: 6, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                 <XAxis type="number" domain={[0, 100]} ticks={[0,25,50,75,100]} interval={0} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis type="category" dataKey="rank" tick={{ fill: '#e2e8f0', fontSize: 12, fontWeight: 800 }} width={34} />
+                <YAxis type="category" dataKey="rank" interval={0} tick={{ fill: '#e2e8f0', fontSize: 12, fontWeight: 800 }} width={34} />
                 <Tooltip
                   contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
                   labelStyle={{ color: '#e2e8f0' }}
