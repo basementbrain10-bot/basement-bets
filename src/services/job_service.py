@@ -20,7 +20,12 @@ class JobContext:
         3. Create 'running' entry in job_runs
         4. Load state
         """
-        self.conn = get_db_connection().__enter__() # Manually enter context
+        try:
+            self.conn = get_db_connection().__enter__()  # Manually enter context
+        except Exception as e:
+            # Important: when DB is down, we want cron jobs to *skip* instead of 500ing
+            # (which can trigger retries and burn transfer budget).
+            raise JobLockedException(f"DB unavailable: {e}")
         
         # 1. Lock
         if not try_advisory_lock(self.conn, f"job_lock:{self.job_name}"):

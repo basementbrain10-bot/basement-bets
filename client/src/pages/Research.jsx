@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
+import { loadCache } from '../utils/httpCache';
 import { ArrowUpDown, ChevronUp, ChevronDown, Filter, RefreshCw, CheckCircle, AlertCircle, Info, Shield, ShieldAlert, ShieldCheck, PlusCircle } from 'lucide-react';
 import ModelPerformanceAnalytics from '../components/ModelPerformanceAnalytics';
 import OpenBetsPanel from '../components/OpenBetsPanel';
@@ -34,6 +35,10 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
     const [topPicksError, setTopPicksError] = useState(null);
     const [dataHealth, setDataHealth] = useState([]);
     const [topPicksStats, setTopPicksStats] = useState({ games: 0, withPick: 0, server: null, errors: [], actionable: 0, noBet: 0 });
+
+    // Degraded mode: show cached content if DB/API is down.
+    const [degradedMode, setDegradedMode] = useState(false);
+    const [degradedAsOf, setDegradedAsOf] = useState(null);
     // Edge-engine recs removed: Today should use the core model (stored top picks) to avoid mismatches.
     // const [edgeRecs, setEdgeRecs] = useState(null);
     // const [edgeRecsError, setEdgeRecsError] = useState(null);
@@ -54,18 +59,25 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
     }, [selectedDate, leagueFilter]); // Refetch when date/league changes
 
     const fetchSchedule = async () => {
+        setLoading(true);
+        setError(null);
+        setDegradedMode(false);
+        setDegradedAsOf(null);
+
+        const boardParams = { league: leagueFilter, date: selectedDate, days: BOARD_DAYS_DEFAULT };
+        const topPicksParams = { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 250 };
+        const historyParams = { limit: 500 };
+
         try {
-            setLoading(true);
-            setError(null);
             // Fetch board + history
             const [boardRes, historyRes, topPicksRes, healthRes] = await Promise.all([
-                api.get('/api/board', { params: { league: leagueFilter, date: selectedDate, days: BOARD_DAYS_DEFAULT } }),
-                api.get('/api/ncaam/history', { params: { limit: 500 } }).catch((e) => {
+                api.get('/api/board', { params: boardParams }),
+                api.get('/api/ncaam/history', { params: historyParams }).catch((e) => {
                     console.warn("History fetch failed:", e);
                     return { data: [] };
                 }),
                 (leagueFilter === 'NCAAM'
-                    ? api.get('/api/ncaam/top-picks', { params: { date: selectedDate, days: BOARD_DAYS_DEFAULT, limit_games: 250 } })
+                    ? api.get('/api/ncaam/top-picks', { params: topPicksParams })
                         .then((r) => ({ ...r, _error: null }))
                         .catch((e) => ({ data: null, _error: e }))
                     : Promise.resolve({ data: null, _error: null })
@@ -74,8 +86,6 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
             ]);
 
             setDataHealth(healthRes?.data?.items || []);
-
-
 
             setEdges(boardRes.data || []);
             setHistory(historyRes.data || []);
@@ -135,7 +145,41 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                     window.location.reload();
                 }
             }
-            setError('Failed to load schedule.');
+
+            // Degraded mode fallback: show last cached board/top-picks instead of a blank screen.
+            try {
+                const cachedBoard = loadCache('/api/board', boardParams);
+                const cachedTop = (leagueFilter === 'NCAAM') ? loadCache('/api/ncaam/top-picks', topPicksParams) : null;
+
+                if (cachedBoard?.payload) {
+                    setEdges(cachedBoard.payload || []);
+                    setDegradedMode(true);
+                    setDegradedAsOf(cachedBoard?.at || null);
+                }
+
+                if (cachedTop?.payload?.picks) {
+                    const tp = cachedTop.payload.picks;
+                    const mapped = {};
+                    Object.keys(tp).forEach((eid) => {
+                        mapped[eid] = {
+                            rec: tp[eid]?.rec,
+                            analyzedAt: tp[eid]?.analyzed_at,
+                            isActionable: tp[eid]?.is_actionable,
+                            reason: tp[eid]?.reason,
+                            source: tp[eid]?.source,
+                        };
+                    });
+                    setRowTopPicks(mapped);
+                }
+
+                if (cachedBoard?.payload || cachedTop?.payload) {
+                    setError(null);
+                } else {
+                    setError('Failed to load schedule.');
+                }
+            } catch {
+                setError('Failed to load schedule.');
+            }
         } finally {
             setLoading(false);
         }
@@ -589,6 +633,17 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                             </div>
                         )}
 
+                        {degradedMode && (
+                            <div className="m-6 p-4 bg-amber-900/20 border border-amber-500/40 rounded-lg text-amber-100 flex items-start">
+                                <ShieldAlert className="mr-3 mt-0.5 text-amber-300" size={20} />
+                                <div>
+                                    <div className="font-semibold">DB degraded — showing last cached results.</div>
+                                    {degradedAsOf && (
+                                        <div className="text-xs text-amber-200/80 mt-1">As-of: {new Date(degradedAsOf).toLocaleString()}</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {!loading && !error && edges.length === 0 && (
                             <div className="text-center py-20 text-slate-500 flex flex-col items-center">

@@ -2190,7 +2190,13 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
     cached = _top_picks_cache.get(cache_key)
     # When compute_missing=True, bypass cache so UI always gets freshly-computed recs.
     if (not compute_missing) and cached and (now - cached["at"]) < TOP_PICKS_TTL:
-        return cached["data"]
+        payload = cached["data"]
+        # Attach ETag so browser/clients can revalidate cheaply.
+        etag = _make_etag(payload)
+        inm = request.headers.get('if-none-match')
+        if inm and inm.strip() == etag:
+            return JSONResponse(status_code=304, content=None, headers={'ETag': etag})
+        return JSONResponse(content=payload, headers={'ETag': etag, 'Cache-Control': f"public, max-age={int(os.getenv('TOP_PICKS_TTL_SECONDS', '90'))}"})
 
     # Pull the same board window as /api/board, but NCAAM only.
     start_date = datetime.strptime(date, "%Y-%m-%d").date()
@@ -2463,7 +2469,11 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
                 'no_pick_samples': [],
                 'picks': picks,
             }
-            return data
+            etag = _make_etag(data)
+            inm = request.headers.get('if-none-match')
+            if inm and inm.strip() == etag:
+                return JSONResponse(status_code=304, content=None, headers={'ETag': etag})
+            return JSONResponse(content=data, headers={'ETag': etag, 'Cache-Control': f"public, max-age={int(os.getenv('TOP_PICKS_TTL_SECONDS', '90'))}"})
     except Exception:
         pass
 
@@ -2578,7 +2588,13 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
     }
 
     _top_picks_cache[cache_key] = {"at": now, "data": data}
-    return data
+
+    etag = _make_etag(data)
+    inm = request.headers.get('if-none-match')
+    if inm and inm.strip() == etag:
+        return JSONResponse(status_code=304, content=None, headers={'ETag': etag})
+
+    return JSONResponse(content=data, headers={'ETag': etag, 'Cache-Control': f"public, max-age={int(os.getenv('TOP_PICKS_TTL_SECONDS', '90'))}"})
 
 def _ensure_utc(data: list) -> list:
     """
@@ -2719,17 +2735,31 @@ async def get_net_team(team: str, asof_date: str | None = None):
 
 
 @app.get("/api/ncaam/history")
-async def get_ncaam_history(limit: int = 100, user: dict = Depends(get_current_user)):
+async def get_ncaam_history(request: Request, limit: int = 100, user: dict = Depends(get_current_user)):
     """Returns past model predictions/analysis (recommended picks).
 
     Note: legacy single-user rows may have NULL/mismatched user_id; we fall back to unscoped.
     """
     from src.database import fetch_model_history
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 100
+    limit = max(1, min(limit, 5000))
+
     uid = (user or {}).get('sub')
-    data = fetch_model_history(limit=limit, league='NCAAM', user_id=uid, recommended_only=True)
-    if not data:
-        data = fetch_model_history(limit=limit, league='NCAAM', user_id=None, recommended_only=True)
-    return _ensure_utc(data)
+
+    cache_key = f"ncaam:history:{uid or 'anon'}:{limit}"
+
+    def _build():
+        data = fetch_model_history(limit=limit, league='NCAAM', user_id=uid, recommended_only=True)
+        if not data:
+            data = fetch_model_history(limit=limit, league='NCAAM', user_id=None, recommended_only=True)
+        return _ensure_utc(data)
+
+    # Short TTL: avoids re-downloading large payloads + reduces DB reads.
+    return _cached_json(request, cache_key, ttl_s=int(os.getenv('NCAAM_HISTORY_TTL_SECONDS', '60')), build_fn=_build)
 
 @app.get("/api/ncaam/performance-report")
 async def ncaam_performance_report(days: int = 30):
