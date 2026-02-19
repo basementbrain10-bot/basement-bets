@@ -61,8 +61,13 @@ def get_admin_db_connection():
             conn.close()
 
 def _exec(conn, sql, params=None):
-    """
-    Unified execute helper (Postgres Only).
+    """Unified execute helper (Postgres Only).
+
+    Supports:
+    - positional params: tuple/list
+    - named params: dict (psycopg2 pyformat %(name)s)
+
+    Also converts common placeholder styles.
     """
     if params is None:
         params = ()
@@ -71,7 +76,7 @@ def _exec(conn, sql, params=None):
     if '?' in sql:
         sql = sql.replace('?', '%s')
 
-    # 2. Convert :key to %(key)s
+    # 2. Convert :key to %(key)s (but avoid postgres casts ::)
     if ':' in sql and not '%(' in sql:
         sql = re.sub(r'(?<!:):([a-zA-Z_]\w*)', r'%(\1)s', sql)
 
@@ -82,6 +87,8 @@ def _exec(conn, sql, params=None):
             sql += " ON CONFLICT DO NOTHING"
 
     cursor = conn.cursor()
+
+    # If params is dict, psycopg2 expects a mapping; if it's a list/tuple, sequence.
     cursor.execute(sql, params)
     return cursor
 

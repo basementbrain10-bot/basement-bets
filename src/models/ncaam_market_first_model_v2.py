@@ -191,22 +191,16 @@ class NCAAMMarketFirstModelV2(BaseModel):
             # 2. LOOKAHEAD SPOT: Check if NEXT game is against a Top 25/rival
             with get_db_connection() as conn:
                 query = """
-                SELECT e.home_team, e.away_team, 
-                       COALESCE(m1.adj_o, 0) + COALESCE(m1.adj_d, 0) as home_rank,
-                       COALESCE(m2.adj_o, 0) + COALESCE(m2.adj_d, 0) as away_rank
+                SELECT e.home_team, e.away_team, e.start_time
                 FROM events e
-                LEFT JOIN bt_team_metrics_daily m1 ON LOWER(m1.team_text) LIKE LOWER(CONCAT('%', e.home_team, '%'))
-                LEFT JOIN bt_team_metrics_daily m2 ON LOWER(m2.team_text) LIKE LOWER(CONCAT('%', e.away_team, '%'))
                 WHERE (LOWER(e.home_team) LIKE LOWER(:t) OR LOWER(e.away_team) LIKE LOWER(:t))
                   AND e.start_time > :now
-                ORDER BY e.start_time ASC LIMIT 1
+                ORDER BY e.start_time ASC
+                LIMIT 1
                 """
-                # Use named parameters to avoid %s conflicts and improve safety
-                result = _exec(conn, query, {"t": f"%{team_name}%", "now": current_date}).fetchone()
-                
-                # This is complex - for MVP, just apply a small lookahead penalty
-                # if next opponent is highly ranked. Full implementation needs rivalry DB.
-                # Skipping for now, will log when data available.
+                # Use named parameters
+                _ = _exec(conn, query, {"t": f"%{team_name}%", "now": current_date}).fetchone()
+                # MVP: we are not applying a lookahead penalty yet (needs ranked-opponent + rivalry logic).
                 
         except Exception as e:
             print(f"[MODEL] Situational spot error for {team_name}: {e}")
