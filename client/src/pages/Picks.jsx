@@ -510,11 +510,15 @@ export default function Picks() {
 
       {/* Top 6 recommended: win% by rank */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <div className="text-sm font-black text-slate-100 uppercase tracking-wider mb-2">Top 6 recommended (2026 YTD) — win% by rank</div>
-        <div className="text-[11px] text-slate-500 mb-1">Each day, picks are ranked by EV/u and the Top 6 are tracked by rank.</div>
-        <div className="text-[11px] text-slate-500 mb-3">Guide: grey dashed = 50% • blue dashed = overall avg (when available).</div>
+        <div className="flex items-end justify-between gap-3 mb-2">
+          <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Top 6 recommended (2026 YTD) — win% by rank</div>
+          <div className="text-[11px] text-slate-500">
+            Avg: {top6RankPerformance?.avg !== null && top6RankPerformance?.avg !== undefined ? `${top6RankPerformance.avg.toFixed(1)}%` : '—'}
+          </div>
+        </div>
+        <div className="text-[11px] text-slate-500 mb-3">Ranked by EV/u. Dashed line = 50% baseline.</div>
 
-        <div className="h-[260px] overflow-x-auto">
+        <div className="h-[180px] overflow-x-auto">
           <div className="min-w-[360px] h-full">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={top6RankPerformance.rows} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
@@ -532,9 +536,7 @@ export default function Picks() {
                 />
                 {/* Legend removed (single series) to prevent overlap on small screens */}
                 <ReferenceLine y={50} stroke="#94a3b8" strokeDasharray="4 4" />
-                {top6RankPerformance?.avg !== null && top6RankPerformance?.avg !== undefined ? (
-                  <ReferenceLine y={top6RankPerformance.avg} stroke="#60a5fa" strokeDasharray="4 4" />
-                ) : null}
+                {/* Avg shown in header to avoid extra chart line */}
 
                 <Bar dataKey="winRate" name="Win%" radius={[6, 6, 0, 0]}>
                   {(top6RankPerformance.rows || []).map((entry, index) => (
