@@ -191,10 +191,9 @@ export default function Picks() {
       const winRate = decided ? (w / decided) * 100 : null;
       return {
         rank: `#${rank}`,
-        wins: w,
-        losses: l,
         winRate: winRate === null ? null : Number(winRate.toFixed(1)),
         n: decided,
+        _fill: (winRate !== null && winRate >= 50) ? '#34d399' : '#60a5fa',
       };
     });
 
@@ -523,26 +522,28 @@ export default function Picks() {
         <div className="h-[180px] overflow-x-auto">
           <div className="min-w-[360px] h-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={top6RankPerformance.rows} margin={{ top: 10, right: 16, left: 0, bottom: 10 }}>
+              <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 8, right: 16, left: 6, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis dataKey="rank" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
+                <XAxis type="number" domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <YAxis type="category" dataKey="rank" tick={{ fill: '#e2e8f0', fontSize: 12, fontWeight: 800 }} width={34} />
                 <Tooltip
                   contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
                   labelStyle={{ color: '#e2e8f0' }}
                   formatter={(v, name, props) => {
                     const p = props?.payload || {};
-                    if (name === 'Wins') return [v, `Wins (Win% ${p.winRate ?? '—'}%)`];
-                    if (name === 'Losses') return [v, 'Losses'];
+                    if (name === 'Win%') return [`${Number(v).toFixed(1)}%`, 'Win%'];
                     return [v, name];
                   }}
                 />
 
-                <Bar dataKey="wins" stackId="a" name="Wins" fill="#34d399" radius={[6, 6, 0, 0]}>
-                  <LabelList dataKey="winRate" position="center" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} fill="#0b1220" fontSize={11} />
-                </Bar>
-                <Bar dataKey="losses" stackId="a" name="Losses" fill="#fb7185" radius={[0, 0, 6, 6]}>
-                  <LabelList dataKey="n" position="right" formatter={(v) => (v ? `N=${v}` : '')} fill="#94a3b8" fontSize={10} />
+                <ReferenceLine x={50} stroke="#94a3b8" strokeDasharray="4 4" />
+
+                <Bar dataKey="winRate" name="Win%" radius={[6, 6, 6, 6]}>
+                  {(top6RankPerformance.rows || []).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry._fill || '#60a5fa'} />
+                  ))}
+                  <LabelList dataKey="winRate" position="right" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} fill="#94a3b8" fontSize={11} />
+                  <LabelList dataKey="n" position="insideRight" formatter={(v) => (v ? `N=${v}` : '')} fill="#0b1220" fontSize={10} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
