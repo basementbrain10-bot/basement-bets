@@ -1363,6 +1363,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 <th className="py-2 px-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('created_at')}>
                                                     <div className="flex items-center">Date <SortIcon column="created_at" /></div>
                                                 </th>
+                                                <th className="py-2 px-4 text-xs font-bold uppercase tracking-wider">Rec#</th>
                                                 <th className="py-2 px-4 text-xs font-bold uppercase tracking-wider cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('sport')}>
                                                     <div className="flex items-center">Sport <SortIcon column="sport" /></div>
                                                 </th>
@@ -1383,7 +1384,42 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {getRecommendedHistory().map((item, idx) => {
+                                            {(() => {
+                                                const histAll = getRecommendedHistory();
+                                                const etDay = (ts) => {
+                                                    try {
+                                                        return new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+                                                    } catch (e) {
+                                                        return null;
+                                                    }
+                                                };
+                                                const keyFor = (x) => {
+                                                    return String(x?.id || '')
+                                                        || `${x?.event_id || 'evt'}|${x?.market_type || x?.market || ''}|${x?.selection || ''}|${x?.bet_price || ''}|${x?.analyzed_at || x?.created_at || ''}`;
+                                                };
+
+                                                // Rank = order recommended (per ET day), approximated as EV-sorted (same as Top picks texts).
+                                                const rankByKey = {};
+                                                const groups = {};
+                                                histAll.forEach((h) => {
+                                                    const d = etDay(h?.analyzed_at || h?.created_at);
+                                                    if (!d) return;
+                                                    groups[d] = groups[d] || [];
+                                                    groups[d].push(h);
+                                                });
+                                                Object.keys(groups).forEach((d) => {
+                                                    const arr = groups[d];
+                                                    arr.sort((a, b) => {
+                                                        const ae = Number(a?.ev_per_unit ?? a?.ev ?? 0);
+                                                        const be = Number(b?.ev_per_unit ?? b?.ev ?? 0);
+                                                        return be - ae;
+                                                    });
+                                                    arr.forEach((h, i) => {
+                                                        rankByKey[keyFor(h)] = i + 1;
+                                                    });
+                                                });
+
+                                                return histAll.map((item, idx) => {
                                                 // Robust Recommendation Parsing
                                                 let recs = [];
                                                 try {
@@ -1402,6 +1438,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                     console.warn('Failed to parse history recs', e);
                                                 }
 
+                                                const recRank = rankByKey[keyFor(item)] || null;
+
                                                 const mainRec = recs[0] || {};
 
                                                 // Result Logic
@@ -1416,6 +1454,9 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                             <div className="opacity-70">
                                                                 {new Date(item.analyzed_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                                                             </div>
+                                                        </td>
+                                                        <td className="py-2 px-4 text-xs text-slate-300 font-mono">
+                                                            {recRank ? `#${recRank}` : '—'}
                                                         </td>
                                                         <td className="py-2 px-4">
                                                             <span className={`text-[10px] font-black px-2 py-0.5 rounded tracking-tighter uppercase
