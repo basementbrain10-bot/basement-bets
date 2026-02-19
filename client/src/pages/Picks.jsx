@@ -542,45 +542,6 @@ export default function Picks() {
           </div>
         </div>
       </div>
-        <div className="flex items-end justify-between gap-3 mb-2">
-          <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Top 6 recommended (2026 YTD) — win% by rank</div>
-          <div className="text-[11px] text-slate-500">
-            Avg: {top6RankPerformance?.avg !== null && top6RankPerformance?.avg !== undefined ? `${top6RankPerformance.avg.toFixed(1)}%` : '—'}
-          </div>
-        </div>
-        <div className="text-[11px] text-slate-500 mb-3">Ranked by EV/u. Dashed line = 50% baseline.</div>
-
-        <div className="h-[180px] overflow-x-auto">
-          <div className="min-w-[360px] h-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 8, right: 16, left: 6, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis type="number" domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis type="category" dataKey="rank" tick={{ fill: '#e2e8f0', fontSize: 12, fontWeight: 800 }} width={34} />
-                <Tooltip
-                  contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
-                  labelStyle={{ color: '#e2e8f0' }}
-                  formatter={(v, name, props) => {
-                    const p = props?.payload || {};
-                    if (name === 'Win%') return [`${Number(v).toFixed(1)}%`, 'Win%'];
-                    return [v, name];
-                  }}
-                />
-
-                <ReferenceLine x={50} stroke="#94a3b8" strokeDasharray="4 4" />
-
-                <Bar dataKey="winRate" name="Win%" radius={[6, 6, 6, 6]}>
-                  {(top6RankPerformance.rows || []).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry._fill || '#60a5fa'} />
-                  ))}
-                  <LabelList dataKey="winRate" position="right" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} fill="#94a3b8" fontSize={11} />
-                  <LabelList dataKey="n" position="insideRight" formatter={(v) => (v ? `N=${v}` : '')} fill="#0b1220" fontSize={10} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
       </div>
 
       {/* Existing analytics (kept) */}
