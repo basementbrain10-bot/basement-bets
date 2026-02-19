@@ -395,7 +395,7 @@ export default function Picks() {
         </div>
       )}
 
-      {/* (layout) stacked sections */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Yesterday graded results */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-2">
@@ -415,56 +415,18 @@ export default function Picks() {
             )}
           </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-          {/* Yesterday summary (left) */}
-          <div className="flex flex-wrap gap-6 text-sm">
-            <div>
-              <div className="text-slate-400 text-xs">Record</div>
-              <div className="text-white font-black">{yRecord.w}-{yRecord.l}-{yRecord.p}</div>
-            </div>
-            <div>
-              <div className="text-slate-400 text-xs">Win rate</div>
-              <div className="text-white font-black">{yRecord.decided ? `${yRecord.winRate.toFixed(1)}%` : '—'}</div>
-            </div>
-            <div>
-              <div className="text-slate-400 text-xs">Graded picks</div>
-              <div className="text-white font-black">{gradedYesterday.length}</div>
-            </div>
+        <div className="flex flex-wrap gap-6 text-sm">
+          <div>
+            <div className="text-slate-400 text-xs">Record</div>
+            <div className="text-white font-black">{yRecord.w}-{yRecord.l}-{yRecord.p}</div>
           </div>
-
-          {/* Top 6 recommended win% by rank (right) */}
-          <div className="bg-slate-950/20 border border-slate-800 rounded-xl p-4">
-            <div className="flex items-end justify-between gap-3 mb-2">
-              <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Top 6 (2026 YTD) — Win% by rank</div>
-              <div className="text-[11px] text-slate-500">Avg: {top6RankPerformance?.avg !== null && top6RankPerformance?.avg !== undefined ? `${top6RankPerformance.avg.toFixed(1)}%` : '—'}</div>
-            </div>
-            <div className="h-[160px] overflow-x-auto">
-              <div className="min-w-[320px] h-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 4, right: 16, left: 6, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                    <XAxis type="number" domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                    <YAxis type="category" dataKey="rank" tick={{ fill: '#e2e8f0', fontSize: 11, fontWeight: 800 }} width={34} />
-                    <Tooltip
-                      contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
-                      labelStyle={{ color: '#e2e8f0' }}
-                      formatter={(v, name, props) => {
-                        if (name === 'Win%') return [`${Number(v).toFixed(1)}%`, 'Win%'];
-                        return [v, name];
-                      }}
-                    />
-                    <ReferenceLine x={50} stroke="#94a3b8" strokeDasharray="4 4" />
-                    <Bar dataKey="winRate" name="Win%" radius={[6, 6, 6, 6]}>
-                      {(top6RankPerformance.rows || []).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry._fill || '#60a5fa'} />
-                      ))}
-                      <LabelList dataKey="winRate" position="right" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} fill="#94a3b8" fontSize={10} />
-                      <LabelList dataKey="n" position="insideRight" formatter={(v) => (v ? `N=${v}` : '')} fill="#0b1220" fontSize={9} />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+          <div>
+            <div className="text-slate-400 text-xs">Win rate</div>
+            <div className="text-white font-black">{yRecord.decided ? `${yRecord.winRate.toFixed(1)}%` : '—'}</div>
+          </div>
+          <div>
+            <div className="text-slate-400 text-xs">Graded picks</div>
+            <div className="text-white font-black">{gradedYesterday.length}</div>
           </div>
         </div>
 
@@ -547,9 +509,39 @@ export default function Picks() {
         )}
       </div>
 
-      {/* Top 6 recommended: win% by rank (moved into Yesterday card) */}
-      {false && (
+      {/* Top 6 recommended: win% by rank */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="flex items-end justify-between gap-3 mb-2">
+          <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Top 6 recommended (2026 YTD) — win% by rank</div>
+          <div className="text-[11px] text-slate-500">Avg: {top6RankPerformance?.avg !== null && top6RankPerformance?.avg !== undefined ? `${top6RankPerformance.avg.toFixed(1)}%` : '—'}</div>
+        </div>
+        <div className="text-[11px] text-slate-500 mb-3">Ranked by EV/u.</div>
+
+        <div className="h-[180px] overflow-x-auto">
+          <div className="min-w-[360px] h-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 8, right: 16, left: 6, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                <XAxis type="number" domain={[0, 100]} ticks={[0,25,50,75,100]} interval={0} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <YAxis type="category" dataKey="rank" tick={{ fill: '#e2e8f0', fontSize: 12, fontWeight: 800 }} width={34} />
+                <Tooltip
+                  contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                  formatter={(v, name) => (name === 'Win%' ? [`${Number(v).toFixed(1)}%`, 'Win%'] : [v, name])}
+                />
+                <ReferenceLine x={50} stroke="#94a3b8" strokeDasharray="4 4" />
+                <Bar dataKey="winRate" name="Win%" radius={[6, 6, 6, 6]}>
+                  {(top6RankPerformance.rows || []).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry._fill || '#60a5fa'} />
+                  ))}
+                  <LabelList dataKey="winRate" position="right" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} fill="#94a3b8" fontSize={11} />
+                  <LabelList dataKey="n" position="insideRight" formatter={(v) => (v ? `N=${v}` : '')} fill="#0b1220" fontSize={10} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
         <div className="flex items-end justify-between gap-3 mb-2">
           <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Top 6 recommended (2026 YTD) — win% by rank</div>
           <div className="text-[11px] text-slate-500">
@@ -589,7 +581,7 @@ export default function Picks() {
           </div>
         </div>
       </div>
-      )}
+      </div>
 
       {/* Existing analytics (kept) */}
       <ModelPerformanceAnalytics history={history || []} />
