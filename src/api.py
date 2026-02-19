@@ -1,6 +1,7 @@
 from src.auth import get_current_user
 from fastapi import FastAPI, HTTPException, Request, Security, Depends
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 import os
@@ -40,7 +41,8 @@ def _cached_json(request: Request, key: str, ttl_s: int, build_fn: Callable[[], 
     if hit and hit[0] > now:
         payload, etag = hit[1], hit[2]
     else:
-        payload = build_fn()
+        # Ensure payload is JSON serializable (handles datetime/date/Decimal, etc.)
+        payload = jsonable_encoder(build_fn())
         etag = _make_etag(payload)
         _HTTP_CACHE[key] = (now + ttl_s, payload, etag)
 
@@ -2196,6 +2198,7 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
         inm = request.headers.get('if-none-match')
         if inm and inm.strip() == etag:
             return JSONResponse(status_code=304, content=None, headers={'ETag': etag})
+        payload = jsonable_encoder(payload)
         return JSONResponse(content=payload, headers={'ETag': etag, 'Cache-Control': f"public, max-age={int(os.getenv('TOP_PICKS_TTL_SECONDS', '90'))}"})
 
     # Pull the same board window as /api/board, but NCAAM only.
@@ -2594,6 +2597,7 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
     if inm and inm.strip() == etag:
         return JSONResponse(status_code=304, content=None, headers={'ETag': etag})
 
+    data = jsonable_encoder(data)
     return JSONResponse(content=data, headers={'ETag': etag, 'Cache-Control': f"public, max-age={int(os.getenv('TOP_PICKS_TTL_SECONDS', '90'))}"})
 
 def _ensure_utc(data: list) -> list:
