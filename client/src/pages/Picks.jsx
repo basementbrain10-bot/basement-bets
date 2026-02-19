@@ -479,19 +479,30 @@ export default function Picks() {
         {/* Quick list (yesterday slate) */}
         {(yesterdaySlate || []).length > 0 && (
           <div className="mt-4 space-y-2">
-            {(yesterdaySlate || []).slice(0, 6).map((h, idx) => {
-              const out = String(h.graded_result || h.outcome || h.result || 'PENDING').toUpperCase();
-              const cls = out === 'WON' || out === 'WIN' ? 'text-green-300' : out === 'LOST' || out === 'LOSS' ? 'text-red-300' : out === 'PUSH' ? 'text-slate-300' : 'text-slate-500';
-              return (
-                <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/20">
-                  <div className="min-w-0">
-                    <div className="text-xs font-black text-slate-100 truncate">{h.sport || '—'} • {(h.away_team && h.home_team) ? `${h.away_team} @ ${h.home_team}` : (h.matchup || '—')}</div>
-                    <div className="text-xs text-slate-400 truncate">{h.market_type || h.bet_type || '—'} • {h.selection || '—'}</div>
+            {(() => {
+              // Show the recommendation order as rank (Top-6 by EV/u, same ordering as texts).
+              const getEv = (h) => {
+                const ev = Number(h?.ev_per_unit ?? h?.ev);
+                return Number.isFinite(ev) ? ev : 0;
+              };
+              const rows = (yesterdaySlate || []).slice().sort((a, b) => getEv(b) - getEv(a));
+              return rows.slice(0, 6).map((h, idx) => {
+                const out = String(h.graded_result || h.outcome || h.result || 'PENDING').toUpperCase();
+                const cls = out === 'WON' || out === 'WIN' ? 'text-green-300' : out === 'LOST' || out === 'LOSS' ? 'text-red-300' : out === 'PUSH' ? 'text-slate-300' : 'text-slate-500';
+                return (
+                  <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/20">
+                    <div className="min-w-0">
+                      <div className="text-xs font-black text-slate-100 truncate">
+                        <span className="text-slate-400 mr-2">#{idx + 1}</span>
+                        {h.sport || '—'} • {(h.away_team && h.home_team) ? `${h.away_team} @ ${h.home_team}` : (h.matchup || '—')}
+                      </div>
+                      <div className="text-xs text-slate-400 truncate">{h.market_type || h.bet_type || '—'} • {h.selection || '—'}</div>
+                    </div>
+                    <div className={`text-xs font-mono font-black ${cls}`}>{out}</div>
                   </div>
-                  <div className={`text-xs font-mono font-black ${cls}`}>{out}</div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
             {(yesterdaySlate || []).length > 6 && <div className="text-[11px] text-slate-500">Showing first 6 picks.</div>}
           </div>
         )}
