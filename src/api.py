@@ -2782,6 +2782,89 @@ async def get_ncaam_history(request: Request, limit: int = 100, user: dict = Dep
     # Short TTL: avoids re-downloading large payloads + reduces DB reads.
     return _cached_json(request, cache_key, ttl_s=int(os.getenv('NCAAM_HISTORY_TTL_SECONDS', '60')), build_fn=_build)
 
+@app.get("/api/ncaam/top6/rank-performance")
+async def ncaam_top6_rank_performance(days: int = 365):
+    """Performance of the daily Top-6 recommended bets, by rank.
+
+    Definition:
+    - For each ET day, rank all *actionable* model_predictions by ev_per_unit desc.
+    - Take ranks 1..6.
+
+    Returns win% by rank (and by market_type + confidence tier).
+    """
+    from src.database import get_db_connection, _exec
+
+    try:
+        days = int(days)
+    except Exception:
+        days = 365
+    days = max(7, min(days, 3650))
+
+    with get_db_connection() as conn:
+        rows = _exec(
+            conn,
+            """
+            WITH base AS (
+              SELECT
+                p.*,
+                e.league,
+                DATE(e.start_time AT TIME ZONE 'America/New_York') AS day_et
+              FROM model_predictions p
+              JOIN events e ON e.id = p.event_id
+              WHERE e.league = 'NCAAM'
+                AND p.analyzed_at >= NOW() - (%s || ' days')::interval
+                AND p.outcome IN ('WON','LOST','PUSH')
+                AND COALESCE(p.ev_per_unit, 0) >= 0.0001
+            ),
+            ranked AS (
+              SELECT
+                day_et,
+                market_type,
+                outcome,
+                COALESCE(confidence_0_100, 0) AS conf,
+                ROW_NUMBER() OVER (PARTITION BY day_et ORDER BY ev_per_unit DESC NULLS LAST) AS rk
+              FROM base
+            ),
+            top6 AS (
+              SELECT *
+              FROM ranked
+              WHERE rk BETWEEN 1 AND 6
+            ),
+            bucketed AS (
+              SELECT
+                rk,
+                market_type,
+                CASE
+                  WHEN conf >= 70 THEN 'high'
+                  WHEN conf >= 50 THEN 'medium'
+                  ELSE 'low'
+                END AS conf_tier,
+                outcome
+              FROM top6
+            )
+            SELECT
+              rk AS rank,
+              market_type,
+              conf_tier,
+              COUNT(*)::int AS n,
+              SUM(CASE WHEN outcome='WON' THEN 1 ELSE 0 END)::int AS won,
+              SUM(CASE WHEN outcome='LOST' THEN 1 ELSE 0 END)::int AS lost,
+              SUM(CASE WHEN outcome='PUSH' THEN 1 ELSE 0 END)::int AS push
+            FROM bucketed
+            GROUP BY rk, market_type, conf_tier
+            ORDER BY rk ASC, market_type ASC, conf_tier ASC;
+            """,
+            (days,),
+        ).fetchall()
+
+    return {
+        'generated_at': datetime.utcnow().isoformat() + 'Z',
+        'league': 'NCAAM',
+        'window_days': int(days),
+        'rows': [dict(r) for r in rows],
+    }
+
+
 @app.get("/api/ncaam/performance-report")
 async def ncaam_performance_report(days: int = 30):
     """NCAAM model performance report.

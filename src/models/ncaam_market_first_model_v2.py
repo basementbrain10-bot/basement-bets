@@ -756,14 +756,20 @@ class NCAAMMarketFirstModelV2(BaseModel):
             else:
                 sel = str(r.get('side') or '')
 
+            lb10 = (round(float(r.get('win_prob_lb10')), 3) if r.get('win_prob_lb10') is not None else None)
+            ub90 = (round(float(r.get('win_prob_ub90')), 3) if r.get('win_prob_ub90') is not None else None)
+            bounds_available = (lb10 is not None) and (ub90 is not None)
+
             ui_recs.append({
                 "bet_type": r['market'],
                 "selection": sel,
                 # Keep legacy key name for UI, but this is EV% not points.
                 "edge": f"{(r['ev']*100):.1f}%",
                 "win_prob": round(float(win_prob), 3) if win_prob is not None else None,
-                "win_prob_lb10": (round(float(r.get('win_prob_lb10')), 3) if r.get('win_prob_lb10') is not None else None),
-                "win_prob_ub90": (round(float(r.get('win_prob_ub90')), 3) if r.get('win_prob_ub90') is not None else None),
+                "win_prob_lb10": lb10,
+                "win_prob_ub90": ub90,
+                "bounds_available": bool(bounds_available),
+                "bounds_note": (None if bounds_available else 'bounds unavailable'),
                 "market_line": (round(float(market_line_side), 1) if market_line_side is not None else None),
                 "fair_line": (round(float(fair_line_side), 1) if fair_line_side is not None else None),
                 "edge_points": edge_points_side,
@@ -771,7 +777,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "kelly": float(r.get('kelly')) if r.get('kelly') is not None else None,
                 # Confidence = model confidence that the bet wins (based on calibrated win_prob lower bound)
                 "confidence": self._confidence_label_from_winprob(r.get('win_prob_lb10') if isinstance(r, dict) else None, fallback_win_prob=win_prob),
-                "book": r['book']
+                "book": r['book'],
+                # Movement/uncertainty instrumentation
+                "sigma_mult": r.get('sigma_mult'),
+                "ev_raw": r.get('ev_raw'),
+                "ev_penalty": r.get('ev_penalty'),
+                "movement_tags": r.get('movement_tags'),
             })
             if not best_rec or r['ev'] > best_rec['ev']:
                 best_rec = r
@@ -1387,16 +1398,19 @@ class NCAAMMarketFirstModelV2(BaseModel):
             return prob_over_raw - (push_prob / 2)
 
         def _sanity_adjust(market: str, side: str, win_prob: float, ev: float, mc: Optional[Dict[str, Any]]):
-            """Soft guardrails for bad-data extreme EV.
+            """Soft guardrails + market-movement uncertainty.
 
-            Returns: (score:int, reasons:list[str], sigma_mult:float, min_ev_bump:float)
+            Returns: (score:int, reasons:list[str], sigma_mult:float, ev_penalty:float)
+
+            - sigma_mult inflates model uncertainty when movement/disagreement suggests fragility
+            - ev_penalty degrades EV rather than hard-blocking (configurable)
             """
             from src.utils.ev import implied_prob_american
 
             score = 0
             reasons = []
             sigma_mult = 1.0
-            min_ev_bump = 0.0
+            ev_penalty = 0.0
 
             # Odds/prob mismatch + best-vs-consensus odds outlier check
             try:
@@ -1453,9 +1467,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
                                 score += 1
                                 reasons.append(f"steam_against={mv:+.1f}")
                                 sigma_mult *= 1.20
+                                ev_penalty += float(os.getenv('STEAM_EV_PENALTY_WARN', '0.01'))
                             if against and abs(mv) >= float(os.getenv('SANITY_STEAM_BLOCK', '2.5')):
                                 score += 2
                                 reasons.append(f"steam_block={mv:+.1f}")
+                                sigma_mult *= 1.35
+                                ev_penalty += float(os.getenv('STEAM_EV_PENALTY_BLOCK', '0.03'))
                     if m == 'TOTAL':
                         mv = mc.get('total_move')
                         if mv is not None:
@@ -1465,9 +1482,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
                                 score += 1
                                 reasons.append(f"steam_against={mv:+.1f}")
                                 sigma_mult *= 1.15
+                                ev_penalty += float(os.getenv('STEAM_EV_PENALTY_WARN_TOTAL', '0.01'))
                             if against and abs(mv) >= float(os.getenv('SANITY_STEAM_BLOCK_TOTAL', '3.0')):
                                 score += 2
                                 reasons.append(f"steam_block={mv:+.1f}")
+                                sigma_mult *= 1.30
+                                ev_penalty += float(os.getenv('STEAM_EV_PENALTY_BLOCK_TOTAL', '0.03'))
             except Exception:
                 pass
 
@@ -1479,6 +1499,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
                         score += 1
                         reasons.append(f"disagree={float(dis):.1f}")
                         sigma_mult *= 1.10
+                        ev_penalty += float(os.getenv('DISAGREE_EV_PENALTY', '0.005'))
             except Exception:
                 pass
 
@@ -1494,11 +1515,11 @@ class NCAAMMarketFirstModelV2(BaseModel):
                         score += 1
                     reasons.append(f"ev_extreme={float(ev):+.2f}")
                     sigma_mult *= 1.15
-                    min_ev_bump += 0.01
+                    ev_penalty += float(os.getenv('EXTREME_EV_PENALTY', '0.005'))
             except Exception:
                 pass
 
-            return score, reasons, sigma_mult, min_ev_bump
+            return score, reasons, sigma_mult, ev_penalty
 
 
         # --- Spread ---
@@ -1596,22 +1617,65 @@ class NCAAMMarketFirstModelV2(BaseModel):
             # Choose the higher-EV side, then gate it.
             best = cand_home if cand_home["ev"] >= cand_away["ev"] else cand_away
             if relax_gates or self._passes_publish_gates(best, market_line_home=market_line_s, torvik_ok=torvik_ok):
-                # 1) Steam guard
+                # 1) Steam / movement handling
                 reason = self._steam_block_reason('SPREAD', str(best.get('side') or ''), snap.get('_market_consensus') if isinstance(snap, dict) else None, snap)
-                if reason:
+                steam_hard_block = str(os.getenv('STEAM_HARD_BLOCK', '0')).strip() not in ('0', 'false', 'False', '')
+                if reason and steam_hard_block:
                     if isinstance(snap, dict):
                         snap['_no_bet_reason_spread'] = reason
                 else:
-                    # 2) Sanity / bad-data scoring (Mode A: hide suspect picks)
+                    # 2) Sanity + movement-based uncertainty (soft by default)
                     sanity_on = str(os.getenv('SANITY_ENABLE', '1')).strip() not in ('0', 'false', 'False', '')
                     if sanity_on and isinstance(snap, dict):
                         mc = snap.get('_market_consensus')
-                        score, reasons, sigma_mult, min_ev_bump = _sanity_adjust('SPREAD', str(best.get('side') or ''), float(best.get('win_prob') or 0.5), float(best.get('ev') or 0.0), mc)
+                        score, reasons, sigma_mult, ev_penalty = _sanity_adjust('SPREAD', str(best.get('side') or ''), float(best.get('win_prob') or 0.5), float(best.get('ev') or 0.0), mc)
+                        if reason:
+                            try:
+                                reasons = list(reasons or [])
+                                reasons.insert(0, f"steam_reason={reason}")
+                            except Exception:
+                                pass
+                            # small extra penalty when a steam_reason is present
+                            try:
+                                ev_penalty = float(ev_penalty or 0.0) + float(os.getenv('STEAM_REASON_EV_PENALTY', '0.01'))
+                            except Exception:
+                                pass
+
+                        # Hard-block is optional; default keeps legacy behavior.
+                        hard_block = str(os.getenv('SANITY_HARD_BLOCK', '1')).strip() not in ('0', 'false', 'False', '')
                         block_score = int(float(os.getenv('SANITY_BLOCK_SCORE', '2')))
-                        if score >= block_score:
+                        if hard_block and score >= block_score:
                             snap['_no_bet_reason_spread'] = "Sanity block (suspect data): " + ", ".join(reasons or [f"score={score}"])
                         else:
-                            recs.append({**best, 'steam_blocked': False, 'sanity_score': score, 'sanity_reasons': reasons})
+                            # Soft-adjust: inflate uncertainty + degrade EV
+                            ev_raw = float(best.get('ev') or 0.0)
+                            ev_adj = ev_raw - float(ev_penalty or 0.0)
+                            out = {**best,
+                                   'steam_blocked': False,
+                                   'sanity_score': score,
+                                   'sanity_reasons': reasons,
+                                   'sigma_mult': float(sigma_mult or 1.0),
+                                   'ev_raw': float(round(ev_raw, 4)),
+                                   'ev_penalty': float(round(ev_penalty or 0.0, 4)),
+                                   'movement_tags': reasons}
+
+                            # Recompute bounds with inflated sigma (movement/disagreement => more uncertainty)
+                            try:
+                                b2 = self._confidence_bounds_from_mu_uncertainty(
+                                    market='SPREAD',
+                                    mu=float(mu_s),
+                                    sigma=float(sig_s) * float(out.get('sigma_mult') or 1.0),
+                                    line=float(line_s),
+                                    side=str(out.get('side') or ''),
+                                )
+                                if b2:
+                                    out['win_prob_lb10'] = (round(float(b2.get('lb10')), 3) if b2.get('lb10') is not None else out.get('win_prob_lb10'))
+                                    out['win_prob_ub90'] = (round(float(b2.get('ub90')), 3) if b2.get('ub90') is not None else out.get('win_prob_ub90'))
+                            except Exception:
+                                pass
+
+                            out['ev'] = float(round(ev_adj, 4))
+                            recs.append(out)
                     else:
                         recs.append({**best, 'steam_blocked': False})
 
@@ -1693,19 +1757,58 @@ class NCAAMMarketFirstModelV2(BaseModel):
             best = cand_over if cand_over["ev"] >= cand_under["ev"] else cand_under
             if relax_gates or self._passes_publish_gates(best, market_line_home=None, torvik_ok=torvik_ok):
                 reason = self._steam_block_reason('TOTAL', str(best.get('side') or ''), snap.get('_market_consensus') if isinstance(snap, dict) else None, snap)
-                if reason:
+                steam_hard_block = str(os.getenv('STEAM_HARD_BLOCK', '0')).strip() not in ('0', 'false', 'False', '')
+                if reason and steam_hard_block:
                     if isinstance(snap, dict):
                         snap['_no_bet_reason_total'] = reason
                 else:
                     sanity_on = str(os.getenv('SANITY_ENABLE', '1')).strip() not in ('0', 'false', 'False', '')
                     if sanity_on and isinstance(snap, dict):
                         mc = snap.get('_market_consensus')
-                        score, reasons, sigma_mult, min_ev_bump = _sanity_adjust('TOTAL', str(best.get('side') or ''), float(best.get('win_prob') or 0.5), float(best.get('ev') or 0.0), mc)
+                        score, reasons, sigma_mult, ev_penalty = _sanity_adjust('TOTAL', str(best.get('side') or ''), float(best.get('win_prob') or 0.5), float(best.get('ev') or 0.0), mc)
+                        if reason:
+                            try:
+                                reasons = list(reasons or [])
+                                reasons.insert(0, f"steam_reason={reason}")
+                            except Exception:
+                                pass
+                            try:
+                                ev_penalty = float(ev_penalty or 0.0) + float(os.getenv('STEAM_REASON_EV_PENALTY', '0.01'))
+                            except Exception:
+                                pass
+
+                        hard_block = str(os.getenv('SANITY_HARD_BLOCK', '1')).strip() not in ('0', 'false', 'False', '')
                         block_score = int(float(os.getenv('SANITY_BLOCK_SCORE', '2')))
-                        if score >= block_score:
+                        if hard_block and score >= block_score:
                             snap['_no_bet_reason_total'] = "Sanity block (suspect data): " + ", ".join(reasons or [f"score={score}"])
                         else:
-                            recs.append({**best, 'steam_blocked': False, 'sanity_score': score, 'sanity_reasons': reasons})
+                            ev_raw = float(best.get('ev') or 0.0)
+                            ev_adj = ev_raw - float(ev_penalty or 0.0)
+                            out = {**best,
+                                   'steam_blocked': False,
+                                   'sanity_score': score,
+                                   'sanity_reasons': reasons,
+                                   'sigma_mult': float(sigma_mult or 1.0),
+                                   'ev_raw': float(round(ev_raw, 4)),
+                                   'ev_penalty': float(round(ev_penalty or 0.0, 4)),
+                                   'movement_tags': reasons}
+
+                            try:
+                                b2 = self._confidence_bounds_from_mu_uncertainty(
+                                    market='TOTAL',
+                                    mu=float(mu_t),
+                                    sigma=float(sig_t) * float(out.get('sigma_mult') or 1.0),
+                                    line=float(line_t),
+                                    side=str(out.get('side') or ''),
+                                )
+                                if b2:
+                                    out['win_prob_lb10'] = (round(float(b2.get('lb10')), 3) if b2.get('lb10') is not None else out.get('win_prob_lb10'))
+                                    out['win_prob_ub90'] = (round(float(b2.get('ub90')), 3) if b2.get('ub90') is not None else out.get('win_prob_ub90'))
+                            except Exception:
+                                pass
+
+                            out['ev'] = float(round(ev_adj, 4))
+                            recs.append(out)
                     else:
                         recs.append({**best, 'steam_blocked': False})
 
