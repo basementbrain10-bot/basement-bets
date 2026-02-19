@@ -576,13 +576,11 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                         <div className="px-6 py-4 border-b border-slate-700/40 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
                             <div>
                                 <h2 className="text-base font-semibold text-slate-200">Board</h2>
-                                <div className="text-[11px] text-slate-400 flex items-center mt-1 leading-snug">
-                                    <Info size={12} className="mr-1" />
-                                    Times shown in ET • lines shown as (team/side, line, odds)
-                                </div>
-                                {leagueFilter === 'NCAAM' && (dataHealth?.length > 0) && (
-                                    <div className="mt-1 text-[11px] text-slate-500">
-                                        {(() => {
+                                {(() => {
+                                    // Move the noisy data-health line into the Info icon tooltip.
+                                    let tooltip = 'Times shown in ET. Lines shown as (team/side, line, odds).';
+                                    try {
+                                        if (leagueFilter === 'NCAAM' && (dataHealth?.length > 0)) {
                                             const by = {};
                                             (dataHealth || []).forEach((x) => { if (x?.source) by[x.source] = x; });
                                             const fmt = (t) => {
@@ -593,21 +591,32 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                             const torvik = by['torvik'];
                                             const board = by['board:NCAAM'];
 
-                                            const boardMini = (() => {
-                                                if (!board?.notes) return '';
+                                            let boardTxt = '';
+                                            if (board?.notes) {
                                                 try {
                                                     const n = JSON.parse(board.notes);
                                                     const pct = (x) => `${Math.round((x || 0) * 100)}%`;
-                                                    return ` • board: ${board?.status || '—'} (totals ${pct(n?.pct_with_total)}, spreads ${pct(n?.pct_with_spread)})`;
-                                                } catch (e) {
-                                                    return ` • board: ${board?.status || '—'}`;
+                                                    boardTxt = ` | board: ${board?.status || '—'} (totals ${pct(n?.pct_with_total)}, spreads ${pct(n?.pct_with_spread)})`;
+                                                } catch {
+                                                    boardTxt = ` | board: ${board?.status || '—'}`;
                                                 }
-                                            })();
+                                            }
 
-                                            return `Data health — odds: ${odds?.status || '—'} (${fmt(odds?.last_success_at)}) • torvik: ${torvik?.status || '—'} (${fmt(torvik?.last_success_at)})${boardMini}`;
-                                        })()}
-                                    </div>
-                                )}
+                                            tooltip += `\n\nData health — odds: ${odds?.status || '—'} (${fmt(odds?.last_success_at)}) • torvik: ${torvik?.status || '—'} (${fmt(torvik?.last_success_at)})${boardTxt}`;
+                                        }
+                                    } catch {
+                                        // ignore
+                                    }
+
+                                    return (
+                                        <div className="text-[11px] text-slate-400 flex items-center mt-1 leading-snug">
+                                            <span title={tooltip} className="inline-flex items-center cursor-help">
+                                                <Info size={12} className="mr-1" />
+                                                Times shown in ET • lines shown as (team/side, line, odds)
+                                            </span>
+                                        </div>
+                                    );
+                                })()}
                             </div>
 
                             <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-950/30 border border-slate-700/40">
