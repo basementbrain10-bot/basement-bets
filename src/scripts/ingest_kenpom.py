@@ -88,12 +88,17 @@ def ensure_tables():
         CREATE TABLE IF NOT EXISTS kenpom_player_stats_daily (
           asof_date DATE NOT NULL,
           player_name TEXT NOT NULL,
-          team_name TEXT,
+          team_name TEXT NOT NULL DEFAULT '',
           metrics JSONB,
           raw JSONB,
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          PRIMARY KEY (asof_date, player_name, COALESCE(team_name, ''))
+          PRIMARY KEY (asof_date, player_name, team_name)
         );
+
+        -- Migration hardening (if table existed with nullable team_name)
+        ALTER TABLE kenpom_player_stats_daily ALTER COLUMN team_name SET DEFAULT '';
+        UPDATE kenpom_player_stats_daily SET team_name='' WHERE team_name IS NULL;
+        ALTER TABLE kenpom_player_stats_daily ALTER COLUMN team_name SET NOT NULL;
         """)
         conn.commit()
 
@@ -328,10 +333,14 @@ def upsert_daily(table: str, asof_date: str, rows: list[dict], key_fields: list[
                 n += 1
 
             elif table == 'kenpom_player_stats_daily':
+                team_name = payload.get('team_name')
+                if team_name is None:
+                    team_name = ''
+                payload['team_name'] = team_name
                 _exec(conn, """
                 INSERT INTO kenpom_player_stats_daily(asof_date, player_name, team_name, metrics, raw, updated_at)
                 VALUES (%(asof_date)s, %(player_name)s, %(team_name)s, %(metrics)s::jsonb, %(raw)s::jsonb, NOW())
-                ON CONFLICT (asof_date, player_name, COALESCE(team_name,'')) DO UPDATE SET
+                ON CONFLICT (asof_date, player_name, team_name) DO UPDATE SET
                   metrics=EXCLUDED.metrics,
                   raw=EXCLUDED.raw,
                   updated_at=NOW();
