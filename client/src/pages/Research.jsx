@@ -594,13 +594,31 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                     Today
                                 </button>
                             </div>
-                        </div>
-                    </div>
 
-                    <div className="bg-slate-900/40 rounded-2xl border border-slate-700/40 shadow-xl overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-700/40 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
-                            <div>
-                                <h2 className="text-base font-semibold text-slate-200">Board</h2>
+                            {/* Board tabs + Data health */}
+                            <div className="inline-flex items-center gap-2">
+                                <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-950/30 border border-slate-700/40">
+                                    <button
+                                        onClick={() => setBoardTab('recommended')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${boardTab === 'recommended'
+                                            ? 'bg-slate-800/70 text-slate-100 border-white/10 shadow-sm'
+                                            : 'bg-transparent text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-slate-200'
+                                            }`}
+                                    >
+                                        Recommended
+                                    </button>
+                                    <button
+                                        onClick={() => setBoardTab('full')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${boardTab === 'full'
+                                            ? 'bg-slate-800/70 text-slate-100 border-white/10 shadow-sm'
+                                            : 'bg-transparent text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-slate-200'
+                                            }`}
+                                    >
+                                        Full board
+                                    </button>
+                                </div>
+
+                                {/* Data health shield (hover) */}
                                 {(() => {
                                     let tooltip = 'System status';
                                     let iconStatus = 'unknown';
@@ -629,18 +647,15 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                             return `${src}: ${st} (${t})`;
                                         };
 
-                                        // Top section: plain English
                                         if (iconStatus === 'ok') tooltip += `\nOK — all pipelines healthy.`;
-                                        else if (iconStatus === 'stale') tooltip += `\nDegraded — some data is stale (jobs delayed or no recent rows).`;
-                                        else if (iconStatus === 'error') tooltip += `\nDegraded — a job is failing (error).`;
+                                        else if (iconStatus === 'stale') tooltip += `\nDegraded — some data is stale.`;
+                                        else if (iconStatus === 'error') tooltip += `\nDegraded — a job is failing.`;
                                         else tooltip += `\nUnknown — no health data yet.`;
 
-                                        // Key sources first
                                         const key = ['odds', 'torvik', 'kenpom', `board:${leagueFilter}`];
                                         tooltip += `\n\nKey sources:`;
                                         tooltip += `\n- ${key.map(shortLine).join('\n- ')}`;
 
-                                        // Only show "why" details for non-ok sources
                                         const problems = items
                                             .filter((x) => x?.status && x.status !== 'ok')
                                             .slice()
@@ -659,7 +674,6 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                             });
                                         }
 
-                                        // Picks pipeline short summary
                                         try {
                                             const matched = (edges || []).filter((e) => (rowTopPicks?.[e?.id]?.rec)).length;
                                             const tp = topPicksStats || {};
@@ -679,53 +693,33 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                     const color = (iconStatus === 'ok') ? 'text-emerald-400' : (iconStatus === 'error') ? 'text-red-400' : (iconStatus === 'stale') ? 'text-amber-300' : 'text-slate-400';
 
                                     return (
-                                        <div className="text-[11px] text-slate-400 flex items-center mt-1 leading-snug">
-                                            <span className="relative inline-flex items-center">
-                                                <span
-                                                    className="inline-flex items-center cursor-help"
-                                                    onMouseEnter={(e) => {
-                                                        try {
-                                                            const r = e.currentTarget.getBoundingClientRect();
-                                                            const maxW = 560;
-                                                            const pad = 12;
-                                                            const x = Math.max(pad, Math.min(r.left, window.innerWidth - maxW - pad));
-                                                            const y = Math.max(pad, Math.min(r.bottom + 8, window.innerHeight - 320));
-                                                            setDhTip({ open: true, x, y, text: tooltip });
-                                                        } catch {
-                                                            setDhTip({ open: true, x: 16, y: 16, text: tooltip });
-                                                        }
-                                                    }}
-                                                    onMouseLeave={() => setDhTip((p) => ({ ...p, open: false }))}
-                                                >
-                                                    <Icon size={14} className={`${color}`} />
-                                                </span>
+                                        <span className="inline-flex items-center">
+                                            <span
+                                                className="inline-flex items-center cursor-help"
+                                                onMouseEnter={(e) => {
+                                                    try {
+                                                        const r = e.currentTarget.getBoundingClientRect();
+                                                        const maxW = 560;
+                                                        const pad = 12;
+                                                        const x = Math.max(pad, Math.min(r.left, window.innerWidth - maxW - pad));
+                                                        const y = Math.max(pad, Math.min(r.bottom + 8, window.innerHeight - 320));
+                                                        setDhTip({ open: true, x, y, text: tooltip });
+                                                    } catch {
+                                                        setDhTip({ open: true, x: 16, y: 16, text: tooltip });
+                                                    }
+                                                }}
+                                                onMouseLeave={() => setDhTip((p) => ({ ...p, open: false }))}
+                                            >
+                                                <Icon size={16} className={color} />
                                             </span>
-                                        </div>
+                                        </span>
                                     );
                                 })()}
                             </div>
-
-                            <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-950/30 border border-slate-700/40">
-                                <button
-                                    onClick={() => setBoardTab('recommended')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${boardTab === 'recommended'
-                                        ? 'bg-slate-800/70 text-slate-100 border-white/10 shadow-sm'
-                                        : 'bg-transparent text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-slate-200'
-                                        }`}
-                                >
-                                    Recommended
-                                </button>
-                                <button
-                                    onClick={() => setBoardTab('full')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${boardTab === 'full'
-                                        ? 'bg-slate-800/70 text-slate-100 border-white/10 shadow-sm'
-                                        : 'bg-transparent text-slate-400 border-transparent hover:bg-slate-800/40 hover:text-slate-200'
-                                        }`}
-                                >
-                                    Full board
-                                </button>
-                            </div>
                         </div>
+                    </div>
+
+                    <div className="bg-slate-900/40 rounded-2xl border border-slate-700/40 shadow-xl overflow-hidden">
 
                         {loading && (
                             <div className="flex flex-col justify-center items-center py-20 bg-slate-800/50">
