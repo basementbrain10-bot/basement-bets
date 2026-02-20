@@ -2602,6 +2602,25 @@ def get_team_last_game(team_name: str) -> dict:
     return {}
 
 
+def upsert_referee_assignment(event_id: str, referee_1: str = None, referee_2: str = None, referee_3: str = None, crew_avg_fouls: float = None, source: str = 'manual') -> None:
+    """Insert/update referee crew for an event (manual or automated)."""
+    init_referee_assignments_table()
+    sql = """
+    INSERT INTO referee_assignments(event_id, referee_1, referee_2, referee_3, crew_avg_fouls, source, fetched_at)
+    VALUES (%s, %s, %s, %s, %s, %s, NOW())
+    ON CONFLICT (event_id) DO UPDATE SET
+      referee_1=EXCLUDED.referee_1,
+      referee_2=EXCLUDED.referee_2,
+      referee_3=EXCLUDED.referee_3,
+      crew_avg_fouls=COALESCE(EXCLUDED.crew_avg_fouls, referee_assignments.crew_avg_fouls),
+      source=EXCLUDED.source,
+      fetched_at=NOW();
+    """
+    with get_admin_db_connection() as conn:
+        _exec(conn, sql, (event_id, referee_1, referee_2, referee_3, crew_avg_fouls, source))
+        conn.commit()
+
+
 def get_referee_assignment(event_id: str) -> dict:
     """Get referee crew and their foul rate for an event."""
     query = """

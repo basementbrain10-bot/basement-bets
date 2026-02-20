@@ -30,6 +30,13 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
     const [correlationResult, setCorrelationResult] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+    // Manual referee entry (optional)
+    const [ref1, setRef1] = useState('');
+    const [ref2, setRef2] = useState('');
+    const [ref3, setRef3] = useState('');
+    const [refsSaving, setRefsSaving] = useState(false);
+    const [refsError, setRefsError] = useState(null);
+
     // Quick-pick state (board row badges)
     const [rowTopPicks, setRowTopPicks] = useState({}); // event_id -> { rec, analyzedAt }
     const [topPicksError, setTopPicksError] = useState(null);
@@ -231,6 +238,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
         setIsAnalyzing(true);
         setAnalysisResult(null);
         setCorrelationResult(null);
+        setRefsError(null);
+        // Keep current manual refs in the inputs; user may want to set them before re-run.
 
         try {
             const [analysisRes, corrRes] = await Promise.all([
@@ -289,6 +298,10 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
         setSelectedGame(null);
         setAnalysisResult(null);
         setCorrelationResult(null);
+        setRefsError(null);
+        setRef1('');
+        setRef2('');
+        setRef3('');
     };
 
     const refreshData = async () => {
@@ -1714,6 +1727,53 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
                             {/* Content */}
                             <div className="p-6">
+                                {/* Manual referee assignment (optional). Model uses aggregate ref tendencies if not set. */}
+                                {selectedGame?.sport === 'NCAAM' && (
+                                    <div className="mb-4 p-3 rounded-xl border border-slate-700/60 bg-slate-950/20">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Refs (manual override)</div>
+                                                <div className="text-xs text-slate-400 mt-1">If you know the crew, paste names here and re-run. Otherwise the model uses KenPom ref tendencies in aggregate.</div>
+                                            </div>
+                                            <button
+                                                disabled={refsSaving || !selectedGame?.id}
+                                                onClick={async () => {
+                                                    try {
+                                                        setRefsSaving(true);
+                                                        setRefsError(null);
+                                                        await api.post('/api/ncaam/referees', {
+                                                            event_id: selectedGame.id,
+                                                            referee_1: ref1 || null,
+                                                            referee_2: ref2 || null,
+                                                            referee_3: ref3 || null,
+                                                        });
+                                                        // re-run analysis in-place
+                                                        const analysisRes = await api.post('/api/ncaam/analyze', { event_id: selectedGame.id });
+                                                        setAnalysisResult(analysisRes.data);
+                                                    } catch (e) {
+                                                        setRefsError(e?.response?.data?.detail || e?.message || 'Failed to save refs');
+                                                    } finally {
+                                                        setRefsSaving(false);
+                                                    }
+                                                }}
+                                                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800/60 hover:bg-slate-700/60 text-slate-200 border border-white/10"
+                                            >
+                                                {refsSaving ? 'Saving…' : 'Save & Re-run'}
+                                            </button>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+                                            <input value={ref1} onChange={(e) => setRef1(e.target.value)} placeholder="Referee 1" className="bg-slate-900/40 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none" />
+                                            <input value={ref2} onChange={(e) => setRef2(e.target.value)} placeholder="Referee 2" className="bg-slate-900/40 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none" />
+                                            <input value={ref3} onChange={(e) => setRef3(e.target.value)} placeholder="Referee 3" className="bg-slate-900/40 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none" />
+                                        </div>
+
+                                        {refsError && (
+                                            <div className="text-xs text-red-300 mt-2">{refsError}</div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {isAnalyzing && !analysisResult ? (
                                     <div className="py-20 flex flex-col items-center justify-center text-slate-400">
                                         <RefreshCw className="animate-spin w-12 h-12 text-blue-500 mb-4" />

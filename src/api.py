@@ -1903,6 +1903,37 @@ async def get_data_health():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/ncaam/referees")
+async def set_ncaam_referees(request: Request, user: dict = Depends(get_current_user)):
+    """Manual referee assignment entry.
+
+    Body:
+      { event_id, referee_1, referee_2, referee_3 }
+
+    Notes:
+    - We intentionally do NOT require crew_avg_fouls; model can use KenPom tendencies.
+    - Stored in referee_assignments with source='manual'.
+    """
+    try:
+        data = await request.json()
+        event_id = data.get('event_id')
+        r1 = data.get('referee_1')
+        r2 = data.get('referee_2')
+        r3 = data.get('referee_3')
+
+        if not event_id:
+            raise HTTPException(status_code=400, detail='event_id required')
+
+        from src.database import upsert_referee_assignment
+        upsert_referee_assignment(event_id=event_id, referee_1=r1, referee_2=r2, referee_3=r3, crew_avg_fouls=None, source='manual')
+        return {"status": "ok", "event_id": event_id, "referee_1": r1, "referee_2": r2, "referee_3": r3}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/model/health")
 async def get_model_health(date: Optional[str] = None, league: Optional[str] = None, market: Optional[str] = None, user: dict = Depends(get_current_user)):
     """

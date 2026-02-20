@@ -147,6 +147,35 @@ class KenPomClient:
             return None
         return sum(vals) / len(vals)
 
+    def estimate_league_avg_ref_fouls(self) -> Optional[float]:
+        """Aggregate baseline when we *don't* have a crew assignment.
+
+        Computes an average of whatever foul-rate column KenPom provides on the ref table.
+        """
+        asof = self._latest_asof_date('kenpom_ref_ratings_daily')
+        if not asof:
+            return None
+
+        vals = []
+        with get_db_connection() as conn:
+            rows = _exec(conn, """
+                SELECT metrics
+                FROM kenpom_ref_ratings_daily
+                WHERE asof_date=%s
+            """, (asof,)).fetchall()
+            for row in rows or []:
+                m = (row['metrics'] if isinstance(row, dict) else row[0]) or {}
+                headers = m.get('headers') or []
+                cols = m.get('cols') or []
+                mapping = self._pair_headers(headers, cols)
+                v = self._find_numeric(mapping, ["foul", "pf", "fouls/game", "fouls per game"])
+                if v is not None:
+                    vals.append(v)
+
+        if not vals:
+            return None
+        return sum(vals) / len(vals)
+
     def get_team_player_agg(self, team_name: str) -> Optional[Dict]:
         matched = self.matcher.find_source_name(team_name, "kenpom_team_player_agg_daily", "team_name")
         if not matched:

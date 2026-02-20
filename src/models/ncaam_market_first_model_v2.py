@@ -233,6 +233,9 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 names = [n for n in names if n]
                 if names:
                     crew_fouls = self.kenpom_client.estimate_crew_avg_fouls(names)
+                else:
+                    # No assignment available: use KenPom ref tendencies in aggregate.
+                    crew_fouls = self.kenpom_client.estimate_league_avg_ref_fouls()
 
             if crew_fouls is not None:
                 # Every 1 foul above average adds ~0.8 points to total
