@@ -147,6 +147,27 @@ class KenPomClient:
             return None
         return sum(vals) / len(vals)
 
+    def get_team_player_agg(self, team_name: str) -> Optional[Dict]:
+        matched = self.matcher.find_source_name(team_name, "kenpom_team_player_agg_daily", "team_name")
+        if not matched:
+            return None
+        asof = self._latest_asof_date('kenpom_team_player_agg_daily')
+        if not asof:
+            return None
+
+        with get_db_connection() as conn:
+            row = _exec(conn, """
+                SELECT team_name, asof_date, n_players, minutes_weight_sum,
+                       ortg_w, usage_w, efg_w, ts_w, ast_rate_w, reb_rate_w,
+                       tov_rate_w, ft_rate_w, three_par_w, top7_minutes_pct
+                FROM kenpom_team_player_agg_daily
+                WHERE asof_date=%s AND team_name=%s
+                LIMIT 1
+            """, (asof, matched)).fetchone()
+            if not row:
+                return None
+            return dict(row)
+
     def get_player_stats_for_team(self, team_name: str, limit: int = 40) -> List[Dict]:
         matched = self.matcher.find_source_name(team_name, "kenpom_player_stats_daily", "team_name")
         if not matched:

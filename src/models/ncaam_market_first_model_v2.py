@@ -551,12 +551,33 @@ class NCAAMMarketFirstModelV2(BaseModel):
         kenpom_total_adj = kenpom_adj.get('total_adj') or 0.0
         market_total = market_snapshot.get('total') or 145.0
         mu_kenpom_total = market_total + kenpom_total_adj
+
+        # KenPom player-based (rotation-weighted) efficiency signal (best-effort)
+        # This helps totals (PPP proxy) and later props.
+        kp_player_total_adj = 0.0
+        kp_team_player_home = None
+        kp_team_player_away = None
+        try:
+            kp_team_player_home = self.kenpom_client.get_team_player_agg(event['home_team'])
+            kp_team_player_away = self.kenpom_client.get_team_player_agg(event['away_team'])
+            # Use ORtg_w deltas as a very small total adjustment (capped).
+            if kp_team_player_home and kp_team_player_away:
+                h_ortg = kp_team_player_home.get('ortg_w')
+                a_ortg = kp_team_player_away.get('ortg_w')
+                if h_ortg is not None and a_ortg is not None:
+                    # ORtg is points per 100 possessions. Convert mismatch to points with a modest scale.
+                    # Roughly: 5 ORtg pts difference ~ 1.0 total point.
+                    delta = (float(h_ortg) + float(a_ortg)) / 2.0 - 105.0
+                    kp_player_total_adj = max(min(delta * 0.10, 1.5), -1.5)
+        except Exception as e:
+            print(f"[MODEL] KenPom player agg error: {e}")
         
         # Ensure mu_market_total is not None
         if mu_market_total is None:
             mu_market_total = 145.0
         
         mu_total_final = mu_market_total + (w_base * (mu_torvik_total - mu_market_total)) + (self.W_KENPOM * (mu_kenpom_total - mu_market_total))
+        mu_total_final += kp_player_total_adj
         
         if abs(mu_total_final - mu_market_total) > self.CAP_TOTAL:
              mu_total_final = mu_market_total + (self.CAP_TOTAL * math.copysign(1, mu_total_final - mu_market_total))
@@ -573,6 +594,21 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         sigma_spread = (base_sigma_spread * tempo_factor) + 0.1 * abs(diff_torvik)
         sigma_total = (base_sigma_total * tempo_factor) + 0.1 * abs(mu_torvik_total - mu_market_total)
+
+        # Possessions validation: compare Torvik game_tempo vs KenPom team tempo (AdjT) average.
+        kp_tempo = None
+        kp_tempo_gap = None
+        try:
+            hr = self.kenpom_client.get_team_rating(event['home_team'])
+            ar = self.kenpom_client.get_team_rating(event['away_team'])
+            if hr and ar and hr.get('adj_t') is not None and ar.get('adj_t') is not None:
+                kp_tempo = (float(hr['adj_t']) + float(ar['adj_t'])) / 2.0
+                kp_tempo_gap = float(game_tempo) - float(kp_tempo)
+                # If tempo sources disagree materially, inflate sigma_total (uncertainty).
+                if abs(kp_tempo_gap) >= 3.0:
+                    sigma_total *= 1.10
+        except Exception as e:
+            print(f"[MODEL] tempo validation error: {e}")
 
         # NOTE: We avoid hard sigma clamps; data-quality guardrails are applied later via
         # sanity scoring (sigma inflation / higher EV thresholds) rather than forcing caps.
@@ -701,6 +737,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "torvik_refresh": datetime.now().strftime('%Y-%m-%d %H:%M'),  # When Torvik data was fetched
             "kenpom_players_home_n": len(kp_players_home or []),
             "kenpom_players_away_n": len(kp_players_away or []),
+            "kenpom_player_total_adj": kp_player_total_adj if 'kp_player_total_adj' in locals() else 0.0,
+            "kenpom_team_player_home": kp_team_player_home,
+            "kenpom_team_player_away": kp_team_player_away,
+            "tempo_torvik": game_tempo,
+            "tempo_kenpom": kp_tempo if 'kp_tempo' in locals() else None,
+            "tempo_gap": kp_tempo_gap if 'kp_tempo_gap' in locals() else None,
         }
         
         # 8. Narrative (UI MATCH)

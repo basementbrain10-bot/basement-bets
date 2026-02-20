@@ -100,10 +100,57 @@ def ensure_tables():
           PRIMARY KEY (asof_date, player_name, team_name)
         );
 
+        CREATE TABLE IF NOT EXISTS kenpom_player_stats_norm_daily (
+          asof_date DATE NOT NULL,
+          player_name TEXT NOT NULL,
+          team_name TEXT NOT NULL DEFAULT '',
+          min_pct REAL,
+          minutes REAL,
+          usage REAL,
+          ortg REAL,
+          efg REAL,
+          ts REAL,
+          ast_rate REAL,
+          orb_rate REAL,
+          drb_rate REAL,
+          tov_rate REAL,
+          ft_rate REAL,
+          three_par REAL,
+          raw JSONB,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (asof_date, player_name, team_name)
+        );
+        CREATE INDEX IF NOT EXISTS ix_kp_player_norm_team ON kenpom_player_stats_norm_daily(asof_date, team_name);
+
+        CREATE TABLE IF NOT EXISTS kenpom_team_player_agg_daily (
+          asof_date DATE NOT NULL,
+          team_name TEXT NOT NULL,
+          n_players BIGINT,
+          minutes_weight_sum REAL,
+          ortg_w REAL,
+          usage_w REAL,
+          efg_w REAL,
+          ts_w REAL,
+          ast_rate_w REAL,
+          reb_rate_w REAL,
+          tov_rate_w REAL,
+          ft_rate_w REAL,
+          three_par_w REAL,
+          top7_minutes_pct REAL,
+          raw JSONB,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (asof_date, team_name)
+        );
+        CREATE INDEX IF NOT EXISTS ix_kp_team_player_agg_team ON kenpom_team_player_agg_daily(asof_date, team_name);
+
         -- Migration hardening (if table existed with nullable team_name)
         ALTER TABLE kenpom_player_stats_daily ALTER COLUMN team_name SET DEFAULT '';
         UPDATE kenpom_player_stats_daily SET team_name='' WHERE team_name IS NULL;
         ALTER TABLE kenpom_player_stats_daily ALTER COLUMN team_name SET NOT NULL;
+
+        ALTER TABLE kenpom_player_stats_norm_daily ALTER COLUMN team_name SET DEFAULT '';
+        UPDATE kenpom_player_stats_norm_daily SET team_name='' WHERE team_name IS NULL;
+        ALTER TABLE kenpom_player_stats_norm_daily ALTER COLUMN team_name SET NOT NULL;
         """)
         conn.commit()
 
@@ -313,6 +360,164 @@ def scrape_player_stats(sess: requests.Session) -> list[dict]:
     return out
 
 
+def _to_float(x):
+    try:
+        if x is None:
+            return None
+        s = str(x).replace('%','').replace('+','').strip()
+        if s == '':
+            return None
+        return float(s)
+    except Exception:
+        return None
+
+
+def _pair_headers(headers: list[str] | None, cols: list | None) -> dict:
+    if not headers or not cols:
+        return {}
+    m = min(len(headers), len(cols))
+    out = {}
+    for i in range(m):
+        k = str(headers[i]).strip() if headers[i] is not None else ''
+        if not k:
+            continue
+        out[k] = cols[i]
+    return out
+
+
+def _find(mapping: dict, candidates: list[str]):
+    for k, v in (mapping or {}).items():
+        lk = str(k).lower()
+        if any(c.lower() in lk for c in candidates):
+            return v
+    return None
+
+
+def normalize_player_rows(player_rows: list[dict]) -> list[dict]:
+    """Convert raw player rows -> typed columns best-effort."""
+    out = []
+    for r in player_rows or []:
+        m = (r.get('metrics') or {})
+        headers = m.get('headers') or []
+        cols = m.get('cols') or []
+        mapping = _pair_headers(headers, cols)
+
+        # Common KenPom headers (vary): Min%, Min, ORtg, Usage, eFG%, TS%, Ast%, OR%, DR%, TO%, FT Rate, 3PA Rate
+        min_pct = _to_float(_find(mapping, ['min%','min %','%min','minutes%','minutes %']))
+        minutes = _to_float(_find(mapping, ['min', 'minutes']))
+        usage = _to_float(_find(mapping, ['usage']))
+        ortg = _to_float(_find(mapping, ['ortg','off rtg','offensive rating']))
+        efg = _to_float(_find(mapping, ['efg']))
+        ts = _to_float(_find(mapping, ['ts%','ts %','true shooting']))
+        ast_rate = _to_float(_find(mapping, ['ast%','assist%','assist %']))
+        orb_rate = _to_float(_find(mapping, ['or%','off reb','off reb%','orb%']))
+        drb_rate = _to_float(_find(mapping, ['dr%','def reb','def reb%','drb%']))
+        tov_rate = _to_float(_find(mapping, ['to%','tov%','turnover%','turnover %']))
+        ft_rate = _to_float(_find(mapping, ['ft rate','ftr']))
+        three_par = _to_float(_find(mapping, ['3pa rate','3par','3pa/fg','3pa / fg']))
+
+        out.append({
+            'player_name': r.get('player_name'),
+            'team_name': r.get('team_name') or '',
+            'min_pct': min_pct,
+            'minutes': minutes,
+            'usage': usage,
+            'ortg': ortg,
+            'efg': efg,
+            'ts': ts,
+            'ast_rate': ast_rate,
+            'orb_rate': orb_rate,
+            'drb_rate': drb_rate,
+            'tov_rate': tov_rate,
+            'ft_rate': ft_rate,
+            'three_par': three_par,
+            'raw': {
+                'headers': headers,
+                'cols': cols,
+            }
+        })
+    return out
+
+
+def compute_team_player_agg(norm_rows: list[dict]) -> list[dict]:
+    """Compute team-level rotation-weighted aggregates for modeling."""
+    by_team = {}
+    for r in norm_rows or []:
+        t = (r.get('team_name') or '').strip()
+        if not t:
+            continue
+        by_team.setdefault(t, []).append(r)
+
+    outs = []
+    for team, rows in by_team.items():
+        # Weight by min_pct if available else minutes else 1
+        def w_of(x):
+            w = x.get('min_pct')
+            if w is None:
+                w = x.get('minutes')
+            if w is None:
+                w = 1.0
+            try:
+                return float(w)
+            except Exception:
+                return 1.0
+
+        # Top-7 minute concentration
+        ws = sorted([w_of(r) for r in rows], reverse=True)
+        top7 = sum(ws[:7]) if ws else 0.0
+        totw = sum(ws) if ws else 0.0
+        top7_pct = (top7 / totw) if totw else None
+
+        def wavg(field: str):
+            num = 0.0
+            den = 0.0
+            for r in rows:
+                v = r.get(field)
+                if v is None:
+                    continue
+                w = w_of(r)
+                num += w * float(v)
+                den += w
+            return (num / den) if den else None
+
+        reb_rate_w = None
+        # If we have both, use sum.
+        if any(r.get('orb_rate') is not None for r in rows) or any(r.get('drb_rate') is not None for r in rows):
+            # compute wavg of (orb+drb)
+            num = 0.0
+            den = 0.0
+            for r in rows:
+                o = r.get('orb_rate')
+                d = r.get('drb_rate')
+                if o is None and d is None:
+                    continue
+                w = w_of(r)
+                num += w * float((o or 0.0) + (d or 0.0))
+                den += w
+            reb_rate_w = (num / den) if den else None
+
+        outs.append({
+            'team_name': team,
+            'n_players': len(rows),
+            'minutes_weight_sum': float(totw) if totw else None,
+            'ortg_w': wavg('ortg'),
+            'usage_w': wavg('usage'),
+            'efg_w': wavg('efg'),
+            'ts_w': wavg('ts'),
+            'ast_rate_w': wavg('ast_rate'),
+            'reb_rate_w': reb_rate_w,
+            'tov_rate_w': wavg('tov_rate'),
+            'ft_rate_w': wavg('ft_rate'),
+            'three_par_w': wavg('three_par'),
+            'top7_minutes_pct': top7_pct,
+            'raw': {
+                'fields_present': sorted({k for r in rows for k,v in r.items() if v is not None}),
+            }
+        })
+
+    return outs
+
+
 def upsert_daily(table: str, asof_date: str, rows: list[dict], key_fields: list[str]):
     if not rows:
         return 0
@@ -385,6 +590,84 @@ def upsert_daily(table: str, asof_date: str, rows: list[dict], key_fields: list[
                 })
                 n += 1
 
+            elif table == 'kenpom_player_stats_norm_daily':
+                team_name = payload.get('team_name')
+                if team_name is None:
+                    team_name = ''
+                payload['team_name'] = team_name
+                _exec(conn, """
+                INSERT INTO kenpom_player_stats_norm_daily(
+                  asof_date, player_name, team_name,
+                  min_pct, minutes, usage, ortg, efg, ts,
+                  ast_rate, orb_rate, drb_rate, tov_rate,
+                  ft_rate, three_par,
+                  raw, updated_at
+                )
+                VALUES (
+                  %(asof_date)s, %(player_name)s, %(team_name)s,
+                  %(min_pct)s, %(minutes)s, %(usage)s, %(ortg)s, %(efg)s, %(ts)s,
+                  %(ast_rate)s, %(orb_rate)s, %(drb_rate)s, %(tov_rate)s,
+                  %(ft_rate)s, %(three_par)s,
+                  %(raw)s::jsonb, NOW()
+                )
+                ON CONFLICT (asof_date, player_name, team_name) DO UPDATE SET
+                  min_pct=EXCLUDED.min_pct,
+                  minutes=EXCLUDED.minutes,
+                  usage=EXCLUDED.usage,
+                  ortg=EXCLUDED.ortg,
+                  efg=EXCLUDED.efg,
+                  ts=EXCLUDED.ts,
+                  ast_rate=EXCLUDED.ast_rate,
+                  orb_rate=EXCLUDED.orb_rate,
+                  drb_rate=EXCLUDED.drb_rate,
+                  tov_rate=EXCLUDED.tov_rate,
+                  ft_rate=EXCLUDED.ft_rate,
+                  three_par=EXCLUDED.three_par,
+                  raw=EXCLUDED.raw,
+                  updated_at=NOW();
+                """, {**payload, "raw": json.dumps(payload.get('raw') or {})})
+                n += 1
+
+            elif table == 'kenpom_team_player_agg_daily':
+                team_name = payload.get('team_name')
+                if team_name is None:
+                    team_name = ''
+                payload['team_name'] = team_name
+                _exec(conn, """
+                INSERT INTO kenpom_team_player_agg_daily(
+                  asof_date, team_name,
+                  n_players, minutes_weight_sum,
+                  ortg_w, usage_w, efg_w, ts_w,
+                  ast_rate_w, reb_rate_w, tov_rate_w,
+                  ft_rate_w, three_par_w, top7_minutes_pct,
+                  raw, updated_at
+                )
+                VALUES (
+                  %(asof_date)s, %(team_name)s,
+                  %(n_players)s, %(minutes_weight_sum)s,
+                  %(ortg_w)s, %(usage_w)s, %(efg_w)s, %(ts_w)s,
+                  %(ast_rate_w)s, %(reb_rate_w)s, %(tov_rate_w)s,
+                  %(ft_rate_w)s, %(three_par_w)s, %(top7_minutes_pct)s,
+                  %(raw)s::jsonb, NOW()
+                )
+                ON CONFLICT (asof_date, team_name) DO UPDATE SET
+                  n_players=EXCLUDED.n_players,
+                  minutes_weight_sum=EXCLUDED.minutes_weight_sum,
+                  ortg_w=EXCLUDED.ortg_w,
+                  usage_w=EXCLUDED.usage_w,
+                  efg_w=EXCLUDED.efg_w,
+                  ts_w=EXCLUDED.ts_w,
+                  ast_rate_w=EXCLUDED.ast_rate_w,
+                  reb_rate_w=EXCLUDED.reb_rate_w,
+                  tov_rate_w=EXCLUDED.tov_rate_w,
+                  ft_rate_w=EXCLUDED.ft_rate_w,
+                  three_par_w=EXCLUDED.three_par_w,
+                  top7_minutes_pct=EXCLUDED.top7_minutes_pct,
+                  raw=EXCLUDED.raw,
+                  updated_at=NOW();
+                """, {**payload, "raw": json.dumps(payload.get('raw') or {})})
+                n += 1
+
         conn.commit()
         return n
 
@@ -424,12 +707,24 @@ def main():
     n_players = upsert_daily('kenpom_player_stats_daily', asof, players, ['player_name','team_name'])
     print(f"players: scraped={len(players)} upserted={n_players}")
 
+    # Normalize player rows -> typed columns, then compute team aggregates.
+    n_players_norm = 0
+    n_team_agg = 0
+    try:
+        norm = normalize_player_rows(players)
+        n_players_norm = upsert_daily('kenpom_player_stats_norm_daily', asof, norm, ['player_name','team_name'])
+        aggs = compute_team_player_agg(norm)
+        n_team_agg = upsert_daily('kenpom_team_player_agg_daily', asof, aggs, ['team_name'])
+        print(f"players_norm: upserted={n_players_norm} team_player_agg: upserted={n_team_agg}")
+    except Exception as e:
+        print(f"[kenpom] normalize/agg failed: {e}")
+
     # Update data_health row
     try:
         from src.scripts.update_data_health import upsert
-        total = int(n_team or 0) + int(n_hca or 0) + int(n_refs or 0) + int(n_players or 0)
+        total = int(n_team or 0) + int(n_hca or 0) + int(n_refs or 0) + int(n_players or 0) + int(n_players_norm or 0) + int(n_team_agg or 0)
         status = 'ok' if (n_team and n_team > 0) else 'stale'
-        upsert('kenpom', status=status, row_count=total, notes=f"team={n_team} hca={n_hca} refs={n_refs} players={n_players}")
+        upsert('kenpom', status=status, row_count=total, notes=f"team={n_team} hca={n_hca} refs={n_refs} players={n_players} players_norm={n_players_norm} team_agg={n_team_agg}")
     except Exception as e:
         print(f"[kenpom] data_health upsert failed: {e}")
 
