@@ -130,16 +130,36 @@ def fetch_html(sess: requests.Session, path: str, params: dict | None = None) ->
     return r.text
 
 
-def _table_to_rows(table) -> list[list[str]]:
-    out = []
+def _table_headers_and_rows(table) -> tuple[list[str], list[list[str]]]:
+    """Return (headers, rows). Headers best-effort."""
     if not table:
-        return out
+        return [], []
+
+    headers: list[str] = []
+    thead = table.find("thead")
+    if thead:
+        # Prefer last header row (often has the real column labels)
+        trs = thead.find_all("tr")
+        if trs:
+            ths = trs[-1].find_all(["th", "td"])
+            headers = [h.get_text(" ", strip=True) for h in ths]
+
+    rows: list[list[str]] = []
     tbody = table.find("tbody") or table
     for tr in tbody.find_all("tr"):
         cols = [c.get_text(" ", strip=True) for c in tr.find_all(["td", "th"])]
         if cols:
-            out.append(cols)
-    return out
+            rows.append(cols)
+
+    # If we didn't find headers and the first row looks like headers, use it.
+    if not headers and rows:
+        first = rows[0]
+        # Heuristic: header-ish if it contains non-numeric strings like 'Rank'/'Team'
+        if any(str(x).lower() in ("rank", "team", "player") for x in first):
+            headers = first
+            rows = rows[1:]
+
+    return headers, rows
 
 
 def scrape_team_ratings(sess: requests.Session) -> list[dict]:
@@ -154,7 +174,7 @@ def scrape_team_ratings(sess: requests.Session) -> list[dict]:
                 table = t
                 break
 
-    rows = _table_to_rows(table)
+    headers, rows = _table_headers_and_rows(table)
     teams = []
     for cols in rows:
         # Expect rank, team, conf, record, AdjEM, AdjO, ..., AdjD, ..., AdjT
@@ -186,7 +206,7 @@ def scrape_team_ratings(sess: requests.Session) -> list[dict]:
             "adj_t": adj_t,
             "conf": conf,
             "record": record,
-            "raw": {"cols": cols},
+            "raw": {"headers": headers, "cols": cols},
         })
     return teams
 
@@ -211,7 +231,7 @@ def scrape_home_court(sess: requests.Session) -> list[dict]:
 
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table")
-    rows = _table_to_rows(table)
+    headers, rows = _table_headers_and_rows(table)
     out = []
     for cols in rows:
         if len(cols) < 2:
@@ -221,7 +241,7 @@ def scrape_home_court(sess: requests.Session) -> list[dict]:
             hca = float(cols[1].replace("+", "").strip())
         except Exception:
             continue
-        out.append({"team_name": team, "hca": hca, "raw": {"cols": cols}})
+        out.append({"team_name": team, "hca": hca, "raw": {"headers": headers, "cols": cols}})
     return out
 
 
@@ -245,18 +265,17 @@ def scrape_ref_ratings(sess: requests.Session) -> list[dict]:
 
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table")
-    rows = _table_to_rows(table)
+    headers, rows = _table_headers_and_rows(table)
 
     out = []
     # Store as JSONB per ref to avoid brittle column parsing.
-    # First row could be headers; detect non-numeric first cell.
     for cols in rows:
         if not cols:
             continue
         name = cols[0]
         if not name or name.lower() in ("ref", "official"):
             continue
-        out.append({"ref_name": name, "metrics": {"cols": cols[1:]}, "raw": {"cols": cols}})
+        out.append({"ref_name": name, "metrics": {"headers": headers, "cols": cols[1:]}, "raw": {"headers": headers, "cols": cols}})
     return out
 
 
@@ -279,7 +298,7 @@ def scrape_player_stats(sess: requests.Session) -> list[dict]:
 
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table")
-    rows = _table_to_rows(table)
+    headers, rows = _table_headers_and_rows(table)
 
     out = []
     for cols in rows:
@@ -290,7 +309,7 @@ def scrape_player_stats(sess: requests.Session) -> list[dict]:
         team = cols[1] if len(cols) > 1 else None
         if not player or player.lower() in ("player", "name"):
             continue
-        out.append({"player_name": player, "team_name": team, "metrics": {"cols": cols[2:]}, "raw": {"cols": cols}})
+        out.append({"player_name": player, "team_name": team, "metrics": {"headers": headers, "cols": cols[2:]}, "raw": {"headers": headers, "cols": cols}})
     return out
 
 

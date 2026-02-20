@@ -208,19 +208,33 @@ class NCAAMMarketFirstModelV2(BaseModel):
         return adj
 
     def _apply_referee_signal(self, event_id: str, mu_total: float) -> float:
-        """
-        Referee Signal: Adjust total based on officiating crew tendencies.
-        Crews that call more fouls = more free throws = higher totals.
+        """Referee Signal: Adjust total based on officiating crew tendencies.
+
+        Priority:
+        1) referee_assignments.crew_avg_fouls (if present)
+        2) KenPom ref ratings (best-effort, header-driven)
         """
         from src.database import get_referee_assignment
-        
+
         NCAA_AVG_FOULS = 36.0  # National average fouls per game
-        
+
         try:
-            ref_data = get_referee_assignment(event_id)
-            if ref_data and ref_data.get('crew_avg_fouls'):
-                crew_fouls = float(ref_data['crew_avg_fouls'])
-                
+            ref_data = get_referee_assignment(event_id) or {}
+            crew_fouls = None
+            if ref_data.get('crew_avg_fouls') is not None:
+                try:
+                    crew_fouls = float(ref_data['crew_avg_fouls'])
+                except Exception:
+                    crew_fouls = None
+
+            # Fall back to KenPom ref table if we have names.
+            if crew_fouls is None:
+                names = [ref_data.get('referee_1'), ref_data.get('referee_2'), ref_data.get('referee_3')]
+                names = [n for n in names if n]
+                if names:
+                    crew_fouls = self.kenpom_client.estimate_crew_avg_fouls(names)
+
+            if crew_fouls is not None:
                 # Every 1 foul above average adds ~0.8 points to total
                 if crew_fouls > NCAA_AVG_FOULS:
                     over_adj = (crew_fouls - NCAA_AVG_FOULS) * 0.8
@@ -230,10 +244,10 @@ class NCAAMMarketFirstModelV2(BaseModel):
                     under_adj = (NCAA_AVG_FOULS - crew_fouls) * 0.5
                     mu_total -= min(under_adj, 2.0)  # Cap at -2 points
                     print(f"[REF] Tight crew {crew_fouls:.1f} fouls → Total -{under_adj:.1f}")
-                    
+
         except Exception as e:
             print(f"[MODEL] Referee signal error: {e}")
-            
+
         return mu_total
 
     def _calculate_fatigue_penalty(self, team_name: str, event_id: str, current_game_date) -> float:
@@ -583,7 +597,22 @@ class NCAAMMarketFirstModelV2(BaseModel):
         altitude_adj = self.geo_service.get_altitude_adjustment(event['home_team'], neutral_site=is_neutral) or 0.0
         if altitude_adj > 0:
             mu_spread_final -= altitude_adj
-            
+
+        # KenPom Home Court (best-effort): add a small adjustment for above/below average arenas.
+        # We keep it modest because market + AdjEM already bake in generic HCA.
+        kp_hca = 0.0
+        try:
+            if not is_neutral:
+                hca_row = self.kenpom_client.get_home_court(event['home_team'])
+                if hca_row and hca_row.get('hca') is not None:
+                    hca_val = float(hca_row['hca'])
+                    # baseline ~3.0-3.5; only use the deviation.
+                    delta = hca_val - 3.2
+                    kp_hca = max(min(delta * 0.5, 1.5), -1.5)  # cap
+                    mu_spread_final -= kp_hca  # negative spread_home means home favored; stronger HCA boosts home
+        except Exception as e:
+            print(f"[MODEL] KenPom HCA error: {e}")
+
         # Travel
         dist = self.geo_service.calculate_distance(event['home_team'], event['away_team']) or 0.0
         if dist > 1000 and not is_neutral:
@@ -600,6 +629,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         raw_basement_line = (mu_torvik_spread + mu_kenpom_line) / 2.0
         raw_basement_line += luck_adjustment
         if altitude_adj > 0: raw_basement_line -= altitude_adj
+        if kp_hca: raw_basement_line -= kp_hca
         if dist > 1000 and not is_neutral: raw_basement_line -= 0.5
         if self.manual_adjustments:
             raw_basement_line += self.manual_adjustments.get('home_injury', 0.0)
@@ -644,12 +674,22 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 print(f"[NEWS] fetch_game_context failed: {e}")
                 news_context = {}
         
+        # KenPom player stats (best-effort): currently used for UI/debug only.
+        kp_players_home = []
+        kp_players_away = []
+        try:
+            kp_players_home = self.kenpom_client.get_player_stats_for_team(event['home_team'], limit=50) or []
+            kp_players_away = self.kenpom_client.get_player_stats_for_team(event['away_team'], limit=50) or []
+        except Exception as e:
+            print(f"[MODEL] KenPom player stats fetch error: {e}")
+
         debug_info = {
             "mu_spread_final": mu_spread_final,
             "sigma_spread": sigma_spread,
             "tempo_factor": tempo_factor,
             "luck_adj": luck_adjustment,
             "geo_adj": altitude_adj if 'altitude_adj' in locals() else 0.0,
+            "kenpom_hca_adj": kp_hca if 'kp_hca' in locals() else 0.0,
             "is_neutral": is_neutral,
             "basement_line": raw_basement_line,
             "w_base": self.W_BASE,
@@ -659,6 +699,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "bell_curve_spread": bell_curve_spread,
             "bell_curve_total": bell_curve_total,
             "torvik_refresh": datetime.now().strftime('%Y-%m-%d %H:%M'),  # When Torvik data was fetched
+            "kenpom_players_home_n": len(kp_players_home or []),
+            "kenpom_players_away_n": len(kp_players_away or []),
         }
         
         # 8. Narrative (UI MATCH)
