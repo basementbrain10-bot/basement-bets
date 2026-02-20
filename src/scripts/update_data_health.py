@@ -56,12 +56,21 @@ def main():
     # Board coverage health (actionable, per league)
     try:
         from src.scripts.board_health import compute_board_health, status_from_health, notes_from_health
-        for lg in ['NCAAM', 'NFL', 'EPL']:
+        for lg in ['NCAAM', 'EPL']:
             h = compute_board_health(lg, days=3)
             st = status_from_health(h)
             upsert(f'board:{lg}', status=st, row_count=h.get('events_total'), notes=notes_from_health(h))
     except Exception as e:
         upsert('board:ERROR', status='error', row_count=None, notes=str(e))
+
+    # (Seasonal) Remove NFL board health rows if they exist (season over).
+    try:
+        with get_admin_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM data_health WHERE source='board:NFL'")
+            conn.commit()
+    except Exception:
+        pass
 
     # KenPom health (daily snapshots)
     with get_admin_db_connection() as conn:
