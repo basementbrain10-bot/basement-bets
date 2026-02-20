@@ -654,24 +654,47 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         const by = {};
                                         items.forEach((x) => { if (x?.source) by[x.source] = x; });
 
-                                        const statusRank = (s) => (s === 'error') ? 3 : (s === 'stale') ? 2 : (s === 'ok') ? 1 : 0;
-                                        const worst = items.reduce((acc, x) => {
-                                            const r = statusRank(x?.status);
-                                            return r > acc.r ? { r, s: x?.status } : acc;
-                                        }, { r: 0, s: 'unknown' });
-                                        iconStatus = worst.s || 'unknown';
+                                        const hasErr = items.some((x) => x?.status === 'error');
+                                        const hasStale = items.some((x) => x?.status === 'stale');
+                                        const hasAlert = items.some((x) => x?.status === 'alert');
+
+                                        // Icon semantics:
+                                        // - error => red
+                                        // - stale => amber
+                                        // - alert => amber (warning)
+                                        // - ok => green
+                                        if (hasErr) iconStatus = 'error';
+                                        else if (hasStale) iconStatus = 'stale';
+                                        else if (hasAlert) iconStatus = 'alert';
+                                        else if (items.length) iconStatus = 'ok';
+                                        else iconStatus = 'unknown';
+
+                                        const ageMin = (t) => {
+                                            if (!t) return null;
+                                            try {
+                                                const ms = (new Date(t)).getTime();
+                                                if (!ms) return null;
+                                                return Math.round((Date.now() - ms) / 60000);
+                                            } catch {
+                                                return null;
+                                            }
+                                        };
 
                                         const shortLine = (src) => {
                                             const x = by[src];
                                             if (!x) return `${src}: —`;
                                             const st = x.status || '—';
                                             const t = fmtTime(x.last_success_at);
-                                            return `${src}: ${st} (${t})`;
+                                            const m = ageMin(x.last_success_at);
+                                            const ago = (m !== null && m >= 0) ? ` • ${m}m ago` : '';
+                                            return `${src}: ${st} (${t})${ago}`;
                                         };
 
-                                        if (iconStatus === 'ok') tooltip += `\nOK — all pipelines healthy.`;
-                                        else if (iconStatus === 'stale') tooltip += `\nDegraded — some data is stale.`;
-                                        else if (iconStatus === 'error') tooltip += `\nDegraded — a job is failing.`;
+                                        // Plain English summary (do NOT say "job failing" unless error)
+                                        if (iconStatus === 'ok') tooltip += `\nOK — everything updating.`;
+                                        else if (iconStatus === 'alert') tooltip += `\nWarning — coverage looks thin (not a failure).`;
+                                        else if (iconStatus === 'stale') tooltip += `\nStale — data not updating recently.`;
+                                        else if (iconStatus === 'error') tooltip += `\nError — one or more jobs failed.`;
                                         else tooltip += `\nUnknown — no health data yet.`;
 
                                         const boardKey = (leagueFilter === 'EPL') ? 'board:EPL' : 'board:NCAAM';
@@ -681,8 +704,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
                                         const problems = items
                                             .filter((x) => x?.status && x.status !== 'ok')
-                                            .slice()
-                                            .sort((a, b) => statusRank(b?.status) - statusRank(a?.status));
+                                            .slice();
 
                                         const note = (x) => {
                                             if (!x?.notes) return '';
@@ -691,10 +713,28 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         };
 
                                         if (problems.length) {
-                                            tooltip += `\n\nWhy degraded:`;
-                                            problems.slice(0, 8).forEach((x) => {
-                                                tooltip += `\n- ${x.source}: ${x.status} (${fmtTime(x.last_success_at)})${note(x) ? ` — ${note(x)}` : ''}`;
-                                            });
+                                            const errs = problems.filter((x) => x.status === 'error');
+                                            const stales = problems.filter((x) => x.status === 'stale');
+                                            const alerts = problems.filter((x) => x.status === 'alert');
+
+                                            if (errs.length) {
+                                                tooltip += `\n\nErrors (jobs failing):`;
+                                                errs.slice(0, 6).forEach((x) => {
+                                                    tooltip += `\n- ${x.source} (${fmtTime(x.last_success_at)}): ${note(x) || 'error'}`;
+                                                });
+                                            }
+                                            if (stales.length) {
+                                                tooltip += `\n\nStale (no recent data):`;
+                                                stales.slice(0, 6).forEach((x) => {
+                                                    tooltip += `\n- ${x.source} (${fmtTime(x.last_success_at)})${note(x) ? ` — ${note(x)}` : ''}`;
+                                                });
+                                            }
+                                            if (alerts.length) {
+                                                tooltip += `\n\nWarnings (coverage):`;
+                                                alerts.slice(0, 6).forEach((x) => {
+                                                    tooltip += `\n- ${x.source} (${fmtTime(x.last_success_at)})${note(x) ? ` — ${note(x)}` : ''}`;
+                                                });
+                                            }
                                         }
 
                                         try {
@@ -712,8 +752,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         // ignore
                                     }
 
-                                    const Icon = (iconStatus === 'ok') ? ShieldCheck : (iconStatus === 'error') ? ShieldAlert : (iconStatus === 'stale') ? ShieldAlert : Shield;
-                                    const color = (iconStatus === 'ok') ? 'text-emerald-400' : (iconStatus === 'error') ? 'text-red-400' : (iconStatus === 'stale') ? 'text-amber-300' : 'text-slate-400';
+                                    const Icon = (iconStatus === 'ok') ? ShieldCheck : (iconStatus === 'error') ? ShieldAlert : (iconStatus === 'stale' || iconStatus === 'alert') ? ShieldAlert : Shield;
+                                    const color = (iconStatus === 'ok') ? 'text-emerald-400' : (iconStatus === 'error') ? 'text-red-400' : (iconStatus === 'stale' || iconStatus === 'alert') ? 'text-amber-300' : 'text-slate-400';
 
                                     return (
                                         <span className="inline-flex items-center">
