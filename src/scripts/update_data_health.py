@@ -60,6 +60,16 @@ def main():
             h = compute_board_health(lg, days=3)
             st = status_from_health(h)
             upsert(f'board:{lg}', status=st, row_count=h.get('events_total'), notes=notes_from_health(h))
+
+        # If board health succeeded, clear any prior error sentinel row.
+        try:
+            with get_admin_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM data_health WHERE source='board:ERROR'")
+                conn.commit()
+        except Exception:
+            pass
+
     except Exception as e:
         upsert('board:ERROR', status='error', row_count=None, notes=str(e))
 

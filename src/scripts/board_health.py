@@ -115,12 +115,17 @@ def compute_board_health(league: str, days: int = 3) -> dict:
     def _get(row, key: str, idx: int, default=0):
         if row is None:
             return default
+
+        # Dict-like rows (psycopg2 DictRow) support string indexing; tuples do not.
         try:
-            # DictCursor rows
-            if isinstance(row, dict) or hasattr(row, 'keys'):
-                return row.get(key, default) if isinstance(row, dict) else row[key]
+            if isinstance(row, dict):
+                return row.get(key, default)
+            if not isinstance(row, (tuple, list)) and hasattr(row, 'keys'):
+                return row[key]
         except Exception:
             pass
+
+        # Fallback: positional
         try:
             return row[idx]
         except Exception:
