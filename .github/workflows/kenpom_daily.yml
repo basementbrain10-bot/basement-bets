@@ -38,22 +38,27 @@ jobs:
           python3 --version
           python3 -m pip --version
 
-      - name: Install dependencies
+      - name: Install dependencies (venv)
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements-worker.txt
+          python3 -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-worker.txt
 
       - name: Ingest KenPom (daily)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           KENPOM_COOKIE: ${{ secrets.KENPOM_COOKIE }}
         run: |
-          python3 src/scripts/ingest_kenpom.py
+          source .venv/bin/activate
+          python src/scripts/ingest_kenpom.py
 
       - name: Update Data Health
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python3 src/scripts/update_data_health.py
+        run: |
+          source .venv/bin/activate
+          python src/scripts/update_data_health.py
 
       - name: Summary
         run: |
