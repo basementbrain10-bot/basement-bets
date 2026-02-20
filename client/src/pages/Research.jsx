@@ -591,51 +591,36 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                 <h2 className="text-base font-semibold text-slate-200">Board</h2>
                                 {(() => {
                                     // Move the noisy data-health line into the Info icon tooltip.
-                                    let tooltip = 'Times shown in ET. Lines shown as (team/side, line, odds).';
+                                    let tooltip = 'Data health (ET times)';
                                     let iconStatus = 'unknown';
                                     try {
-                                        if (leagueFilter === 'NCAAM' && (dataHealth?.length > 0)) {
-                                            const by = {};
-                                            (dataHealth || []).forEach((x) => { if (x?.source) by[x.source] = x; });
+                                        if ((dataHealth?.length || 0) > 0) {
                                             const fmt = (t) => {
                                                 if (!t) return '—';
                                                 try { return new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York' }); } catch (e) { return String(t); }
                                             };
-                                            const odds = by['odds'];
-                                            const torvik = by['torvik'];
-                                            const kenpom = by['kenpom'];
-                                            const board = by['board:NCAAM'];
 
-                                            let boardTxt = '';
-                                            if (board?.notes) {
-                                                try {
-                                                    const n = JSON.parse(board.notes);
-                                                    const pct = (x) => `${Math.round((x || 0) * 100)}%`;
-                                                    boardTxt = ` | board: ${board?.status || '—'} (totals ${pct(n?.pct_with_total)}, spreads ${pct(n?.pct_with_spread)})`;
-                                                } catch {
-                                                    boardTxt = ` | board: ${board?.status || '—'}`;
-                                                }
-                                            }
+                                            const items = (dataHealth || []).filter(Boolean).slice().sort((a, b) => String(a?.source || '').localeCompare(String(b?.source || '')));
+                                            const sts = items.map((x) => x?.status).filter(Boolean);
+                                            if (sts.some((s) => s === 'error')) iconStatus = 'error';
+                                            else if (sts.some((s) => s === 'stale')) iconStatus = 'stale';
+                                            else if (sts.length > 0 && sts.every((s) => s === 'ok')) iconStatus = 'ok';
 
-                                            iconStatus = (() => {
-                                                const sts = [odds?.status, torvik?.status, kenpom?.status, board?.status].filter(Boolean);
-                                                if (sts.some((s) => s === 'error')) return 'error';
-                                                if (sts.some((s) => s === 'stale')) return 'stale';
-                                                if (sts.length > 0 && sts.every((s) => s === 'ok')) return 'ok';
-                                                return 'unknown';
-                                            })();
+                                            const safeNotes = (n) => {
+                                                if (!n) return '';
+                                                const s = String(n);
+                                                // Keep hover readable
+                                                return s.length > 180 ? (s.slice(0, 180) + '…') : s;
+                                            };
 
-                                            const kpNotes = (() => {
-                                                if (!kenpom?.notes) return '';
-                                                try {
-                                                    const n = JSON.parse(kenpom.notes);
-                                                    return ` (asof ${n?.asof_date || '—'}, team ${n?.team || 0}, hca ${n?.home_court || 0}, refs ${n?.refs || 0}, players ${n?.players || 0})`;
-                                                } catch {
-                                                    return kenpom?.notes ? ` (${kenpom.notes})` : '';
-                                                }
-                                            })();
-
-                                            tooltip += `\n\nData health — odds: ${odds?.status || '—'} (${fmt(odds?.last_success_at)}) • torvik: ${torvik?.status || '—'} (${fmt(torvik?.last_success_at)}) • kenpom: ${kenpom?.status || '—'} (${fmt(kenpom?.last_success_at)})${kpNotes}${boardTxt}`;
+                                            tooltip += '\n\n' + items.map((x) => {
+                                                const src = x?.source || '—';
+                                                const st = x?.status || '—';
+                                                const t = fmt(x?.last_success_at);
+                                                const rows = (x?.last_row_count !== null && x?.last_row_count !== undefined) ? x.last_row_count : '—';
+                                                const notes = safeNotes(x?.notes);
+                                                return `${src}: ${st} | ${t} | rows=${rows}${notes ? ` | ${notes}` : ''}`;
+                                            }).join('\n');
                                         }
                                     } catch {
                                         // ignore
@@ -647,9 +632,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                     return (
                                         <div className="text-[11px] text-slate-400 flex items-center mt-1 leading-snug">
                                             <span title={tooltip} className="inline-flex items-center cursor-help">
-                                                <Icon size={14} className={`mr-1 ${color}`} />
-                                                <Info size={12} className="mr-1" />
-                                                Times shown in ET • lines shown as (team/side, line, odds)
+                                                <Icon size={14} className={`${color}`} />
                                             </span>
                                         </div>
                                     );
