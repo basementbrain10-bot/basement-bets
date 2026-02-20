@@ -7,6 +7,10 @@ on:
         description: "Lookback window in days"
         required: true
         default: "14"
+      mode:
+        description: "Backtest mode: mae|simulate"
+        required: true
+        default: "simulate"
       limit:
         description: "Max games"
         required: true
@@ -50,6 +54,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           BACKTEST_DAYS: ${{ inputs.days }}
           BACKTEST_LIMIT: ${{ inputs.limit }}
+          BACKTEST_MODE: ${{ inputs.mode }}
           BACKTEST_NO_NETWORK: "1"
           NCAAM_W_BASE: ${{ inputs.w_base }}
           NCAAM_W_KENPOM: ${{ inputs.w_kenpom }}
