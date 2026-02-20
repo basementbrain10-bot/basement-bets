@@ -13,7 +13,9 @@ concurrency:
 
 jobs:
   ingest:
-    runs-on: ubuntu-latest
+    # KenPom is protected by Cloudflare; GitHub-hosted runners frequently get 403.
+    # Use a self-hosted runner on your home/residential IP.
+    runs-on: [self-hosted, kenpom]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4

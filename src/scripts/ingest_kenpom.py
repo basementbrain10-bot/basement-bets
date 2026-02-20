@@ -111,7 +111,17 @@ def _asof_date_et() -> str:
 def fetch_html(sess: requests.Session, path: str, params: dict | None = None) -> str:
     url = path if path.startswith("http") else BASE + path
     r = sess.get(url, params=params, timeout=25)
-    r.raise_for_status()
+    try:
+        r.raise_for_status()
+    except requests.HTTPError as e:
+        if r is not None and getattr(r, 'status_code', None) == 403:
+            msg = (
+                "KenPom returned 403 Forbidden. This is usually Cloudflare blocking GitHub-hosted runner IPs. "
+                "Fix: run this workflow on a self-hosted runner (home/residential IP) with label 'kenpom', "
+                "and set KENPOM_COOKIE (include PHPSESSID and cf_clearance if present)."
+            )
+            raise requests.HTTPError(msg) from e
+        raise
     return r.text
 
 
