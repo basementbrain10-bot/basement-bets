@@ -77,7 +77,9 @@ def _exec(conn, sql, params=None):
         sql = sql.replace('?', '%s')
 
     # 2. Convert :key to %(key)s (but avoid postgres casts ::)
-    if ':' in sql and not '%(' in sql:
+    # IMPORTANT: only do this when params is a dict (named params).
+    # Otherwise colons inside string literals like 'action:ncaam:%' will get mangled.
+    if isinstance(params, dict) and ':' in sql and not '%(' in sql:
         sql = re.sub(r'(?<!:):([a-zA-Z_]\w*)', r'%(\1)s', sql)
 
     # 3. Handle INSERT OR IGNORE -> ON CONFLICT DO NOTHING
