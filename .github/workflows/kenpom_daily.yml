@@ -17,7 +17,16 @@ jobs:
     # Use a self-hosted runner on your home/residential IP.
     runs-on: [self-hosted, kenpom]
     timeout-minutes: 25
+
+    # actions/setup-python wants to install into the runner toolcache.
+    # On some self-hosted macOS setups it defaults to /Users/runner (which may not exist / be writable).
+    env:
+      ACTIONS_RUNNER_TOOL_CACHE: /Users/basementai/actions-runner-kenpom/_toolcache
+
     steps:
+      - name: Ensure toolcache dir
+        run: mkdir -p "$ACTIONS_RUNNER_TOOL_CACHE"
+
       - uses: actions/checkout@v4
 
       - name: Set up Python
