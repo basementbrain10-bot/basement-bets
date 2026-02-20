@@ -93,6 +93,10 @@ def compute_board_health(league: str, days: int = 3) -> dict:
             (league, start_et, end_et),
         ).fetchone()
 
+        # Harden row types (some envs return tuples)
+        if rows is not None and not isinstance(rows, dict) and hasattr(rows, 'keys'):
+            rows = dict(rows)
+
         # Snapshot volume (recent)
         snap_rows = _exec(
             conn,
@@ -111,6 +115,12 @@ def compute_board_health(league: str, days: int = 3) -> dict:
             """,
             (league,),
         ).fetchall()
+
+        # Normalize list rows as dicts when possible.
+        try:
+            snap_rows = [dict(r) if (r is not None and not isinstance(r, dict) and hasattr(r, 'keys')) else r for r in (snap_rows or [])]
+        except Exception:
+            pass
 
     def _get(row, key: str, idx: int, default=0):
         if row is None:
