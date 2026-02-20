@@ -112,14 +112,37 @@ def compute_board_health(league: str, days: int = 3) -> dict:
             (league,),
         ).fetchall()
 
-    events_total = int(rows[0] or 0) if rows else 0
-    with_spread = int(rows[1] or 0) if rows else 0
-    with_total = int(rows[2] or 0) if rows else 0
-    with_ml = int(rows[3] or 0) if rows else 0
+    def _get(row, key: str, idx: int, default=0):
+        if row is None:
+            return default
+        try:
+            # DictCursor rows
+            if isinstance(row, dict) or hasattr(row, 'keys'):
+                return row.get(key, default) if isinstance(row, dict) else row[key]
+        except Exception:
+            pass
+        try:
+            return row[idx]
+        except Exception:
+            return default
+
+    events_total = int(_get(rows, 'events_total', 0, 0) or 0)
+    with_spread = int(_get(rows, 'with_spread', 1, 0) or 0)
+    with_total = int(_get(rows, 'with_total', 2, 0) or 0)
+    with_ml = int(_get(rows, 'with_moneyline', 3, 0) or 0)
 
     pct = lambda a, b: (float(a) / float(b)) if b else 0.0
 
-    markets_6h = {r[0]: int(r[1] or 0) for r in (snap_rows or [])}
+    markets_6h = {}
+    for r in (snap_rows or []):
+        mt = _get(r, 'market_type', 0, None)
+        n = _get(r, 'n', 1, 0)
+        if mt is None:
+            continue
+        try:
+            markets_6h[str(mt)] = int(n or 0)
+        except Exception:
+            markets_6h[str(mt)] = 0
 
     return {
         'league': league,
