@@ -16,9 +16,13 @@ NOTE: KenPom HTML can change; keep parsing defensive.
 """
 
 import os
+import sys
 import time
 import json
 from datetime import datetime, timezone
+
+# Allow running from repo root in GitHub Actions
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 import requests
 from bs4 import BeautifulSoup
