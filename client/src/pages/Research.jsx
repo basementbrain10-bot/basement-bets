@@ -602,72 +602,75 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                             <div>
                                 <h2 className="text-base font-semibold text-slate-200">Board</h2>
                                 {(() => {
-                                    // Move the noisy data-health line into the Info icon tooltip.
-                                    let tooltip = 'Data health (ET times)';
+                                    let tooltip = 'System status';
                                     let iconStatus = 'unknown';
                                     try {
-                                        // Also include pick-pipeline stats in this hover (so we never print it inline).
+                                        const fmtTime = (t) => {
+                                            if (!t) return '—';
+                                            try { return new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', month: '2-digit', day: '2-digit' }); } catch { return String(t); }
+                                        };
+
+                                        const items = (dataHealth || []).filter(Boolean);
+                                        const by = {};
+                                        items.forEach((x) => { if (x?.source) by[x.source] = x; });
+
+                                        const statusRank = (s) => (s === 'error') ? 3 : (s === 'stale') ? 2 : (s === 'ok') ? 1 : 0;
+                                        const worst = items.reduce((acc, x) => {
+                                            const r = statusRank(x?.status);
+                                            return r > acc.r ? { r, s: x?.status } : acc;
+                                        }, { r: 0, s: 'unknown' });
+                                        iconStatus = worst.s || 'unknown';
+
+                                        const shortLine = (src) => {
+                                            const x = by[src];
+                                            if (!x) return `${src}: —`;
+                                            const st = x.status || '—';
+                                            const t = fmtTime(x.last_success_at);
+                                            return `${src}: ${st} (${t})`;
+                                        };
+
+                                        // Top section: plain English
+                                        if (iconStatus === 'ok') tooltip += `\nOK — all pipelines healthy.`;
+                                        else if (iconStatus === 'stale') tooltip += `\nDegraded — some data is stale (jobs delayed or no recent rows).`;
+                                        else if (iconStatus === 'error') tooltip += `\nDegraded — a job is failing (error).`;
+                                        else tooltip += `\nUnknown — no health data yet.`;
+
+                                        // Key sources first
+                                        const key = ['odds', 'torvik', 'kenpom', `board:${leagueFilter}`];
+                                        tooltip += `\n\nKey sources:`;
+                                        tooltip += `\n- ${key.map(shortLine).join('\n- ')}`;
+
+                                        // Only show "why" details for non-ok sources
+                                        const problems = items
+                                            .filter((x) => x?.status && x.status !== 'ok')
+                                            .slice()
+                                            .sort((a, b) => statusRank(b?.status) - statusRank(a?.status));
+
+                                        const note = (x) => {
+                                            if (!x?.notes) return '';
+                                            const s = String(x.notes);
+                                            return s.length > 140 ? (s.slice(0, 140) + '…') : s;
+                                        };
+
+                                        if (problems.length) {
+                                            tooltip += `\n\nWhy degraded:`;
+                                            problems.slice(0, 8).forEach((x) => {
+                                                tooltip += `\n- ${x.source}: ${x.status} (${fmtTime(x.last_success_at)})${note(x) ? ` — ${note(x)}` : ''}`;
+                                            });
+                                        }
+
+                                        // Picks pipeline short summary
                                         try {
                                             const matched = (edges || []).filter((e) => (rowTopPicks?.[e?.id]?.rec)).length;
                                             const tp = topPicksStats || {};
-                                            const diagTxt = (() => {
-                                                try {
-                                                    // diag exists in this closure (recommended view render); fall back silently if not.
-                                                    return `Pass basic: ${diag?.passBasic ?? 0}/${diag?.withPick ?? 0} • Pass EV>=2: ${diag?.passEv ?? 0} • Pass win: ${diag?.passWin ?? 0} • Pass both: ${diag?.passBoth ?? 0}`;
-                                                } catch { return null; }
-                                            })();
-                                            const serverTxt = tp.server
-                                                ? `Scanned: ${tp.server.scanned}/${tp.server.events_total} • Stored: ${tp.server.stored} • Computed: ${tp.server.computed_with_pick}/${tp.server.computed_attempted} • Errors: ${tp.server.errors}`
-                                                : null;
-
-                                            tooltip += `\n\nPicks pipeline — Board games: ${edges.length} • Top-picks picks: ${tp.games || 0} • With pick: ${tp.withPick || 0} • Actionable: ${tp.actionable || 0} • NoBet: ${tp.noBet || 0} • Matched rows: ${matched}`
-                                                + (diagTxt ? ` • ${diagTxt}` : '')
-                                                + (serverTxt ? ` • ${serverTxt}` : '')
-                                                + (topPicksError ? ` • Top-picks error: ${topPicksError}` : '')
-                                                + ((tp?.errors?.length && tp?.errors?.[0]?.error) ? ` • Err sample: ${String(tp.errors[0].error).slice(0, 140)}` : '');
+                                            tooltip += `\n\nPicks:`
+                                                + ` games=${edges.length}`
+                                                + ` picks=${tp.withPick || 0}`
+                                                + ` actionable=${tp.actionable || 0}`
+                                                + ` matched=${matched}`
+                                                + (topPicksError ? `\nTop-picks error: ${String(topPicksError).slice(0, 140)}` : '');
                                         } catch { }
 
-                                        if ((dataHealth?.length || 0) > 0) {
-                                            const fmt = (t) => {
-                                                if (!t) return '—';
-                                                try { return new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York' }); } catch (e) { return String(t); }
-                                            };
-
-                                            const items = (dataHealth || []).filter(Boolean).slice().sort((a, b) => String(a?.source || '').localeCompare(String(b?.source || '')));
-                                            const sts = items.map((x) => x?.status).filter(Boolean);
-                                            if (sts.some((s) => s === 'error')) iconStatus = 'error';
-                                            else if (sts.some((s) => s === 'stale')) iconStatus = 'stale';
-                                            else if (sts.length > 0 && sts.every((s) => s === 'ok')) iconStatus = 'ok';
-
-                                            // Clear degraded explanation
-                                            const degraded = items.filter((x) => (x?.status && x.status !== 'ok'));
-                                            if (!degraded.length) {
-                                                tooltip += `\n\nOverall: OK`;
-                                            } else {
-                                                const errs = degraded.filter((x) => x?.status === 'error');
-                                                const stales = degraded.filter((x) => x?.status === 'stale');
-                                                tooltip += `\n\nOverall: DEGRADED`;
-                                                if (errs.length) tooltip += `\nErrors: ${errs.map((x) => x.source).join(', ')}`;
-                                                if (stales.length) tooltip += `\nStale: ${stales.map((x) => x.source).join(', ')}`;
-                                            }
-
-                                            const safeNotes = (n) => {
-                                                if (!n) return '';
-                                                const s = String(n);
-                                                // Keep hover readable
-                                                return s.length > 180 ? (s.slice(0, 180) + '…') : s;
-                                            };
-
-                                            tooltip += '\n\nSources:';
-                                            tooltip += '\n' + items.map((x) => {
-                                                const src = x?.source || '—';
-                                                const st = x?.status || '—';
-                                                const t = fmt(x?.last_success_at);
-                                                const rows = (x?.last_row_count !== null && x?.last_row_count !== undefined) ? x.last_row_count : '—';
-                                                const notes = safeNotes(x?.notes);
-                                                return `${src}: ${st} | ${t} | rows=${rows}${notes ? ` | ${notes}` : ''}`;
-                                            }).join('\n');
-                                        }
                                     } catch {
                                         // ignore
                                     }
