@@ -628,7 +628,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                             try { return new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', month: '2-digit', day: '2-digit' }); } catch { return String(t); }
                                         };
 
-                                        const items = (dataHealth || []).filter(Boolean);
+                                        // Filter out seasonal NFL rows (no longer relevant)
+                                        const items = (dataHealth || []).filter((x) => x && x.source && !String(x.source).includes('NFL'));
                                         const by = {};
                                         items.forEach((x) => { if (x?.source) by[x.source] = x; });
 
@@ -652,7 +653,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         else if (iconStatus === 'error') tooltip += `\nDegraded — a job is failing.`;
                                         else tooltip += `\nUnknown — no health data yet.`;
 
-                                        const key = ['odds', 'torvik', 'kenpom', `board:${leagueFilter}`];
+                                        const boardKey = (leagueFilter === 'EPL') ? 'board:EPL' : 'board:NCAAM';
+                                        const key = ['odds', 'torvik', 'kenpom', boardKey];
                                         tooltip += `\n\nKey sources:`;
                                         tooltip += `\n- ${key.map(shortLine).join('\n- ')}`;
 
