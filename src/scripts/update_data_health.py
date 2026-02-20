@@ -71,7 +71,8 @@ def main():
             pass
 
     except Exception as e:
-        upsert('board:ERROR', status='error', row_count=None, notes=str(e))
+        import traceback
+        upsert('board:ERROR', status='error', row_count=None, notes=traceback.format_exc())
 
     # (Seasonal) Remove NFL board health rows if they exist (season over).
     try:
