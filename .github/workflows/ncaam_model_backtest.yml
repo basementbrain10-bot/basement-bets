@@ -55,7 +55,17 @@ jobs:
           NCAAM_CAP_SPREAD: ${{ inputs.cap_spread }}
           NCAAM_CAP_TOTAL: ${{ inputs.cap_total }}
         run: |
-          python3 src/scripts/backtest_ncaam_model.py
+          # Important: keep this in unbuffered mode so logs stream
+          python3 -u src/scripts/backtest_ncaam_model.py
+
+      - name: Upload backtest output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-output
+          path: |
+            backtest_output.json
+          if-no-files-found: ignore
 
       - name: Summary
         run: |
