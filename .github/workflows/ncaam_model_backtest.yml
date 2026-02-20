@@ -50,6 +50,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           BACKTEST_DAYS: ${{ inputs.days }}
           BACKTEST_LIMIT: ${{ inputs.limit }}
+          BACKTEST_NO_NETWORK: "1"
           NCAAM_W_BASE: ${{ inputs.w_base }}
           NCAAM_W_KENPOM: ${{ inputs.w_kenpom }}
           NCAAM_CAP_SPREAD: ${{ inputs.cap_spread }}
