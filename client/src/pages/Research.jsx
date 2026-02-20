@@ -58,7 +58,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
     const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
 
     // Data health hover tooltip (custom, fixed-position to avoid clipping)
-    const [dhTip, setDhTip] = useState({ open: false, x: 16, y: 16, text: '' });
+    const [dhTip, setDhTip] = useState({ open: false, pinned: false, x: 16, y: 16, text: '' });
+    const [dhHideTimer, setDhHideTimer] = useState(null);
 
     const BOARD_DAYS_DEFAULT = showModelPerformanceTab ? 3 : 1;
 
@@ -498,9 +499,29 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
             {/* Data health tooltip (fixed; rendered at top level to avoid clipping by overflow-hidden containers) */}
             {dhTip?.open && (
                 <div
-                    className="fixed z-[9999] max-w-[560px] whitespace-pre-line rounded-lg border border-slate-700/70 bg-slate-950/95 px-3 py-2 text-[11px] text-slate-200 shadow-2xl"
+                    className="fixed z-[9999] max-w-[560px] whitespace-pre-line rounded-lg border border-slate-700/70 bg-slate-950/95 px-3 py-2 text-[11px] text-slate-200 shadow-2xl pointer-events-auto"
                     style={{ left: dhTip.x, top: dhTip.y, maxHeight: 360, overflow: 'auto' }}
+                    onMouseEnter={() => {
+                        if (dhHideTimer) { clearTimeout(dhHideTimer); setDhHideTimer(null); }
+                        setDhTip((p) => ({ ...p, open: true }));
+                    }}
+                    onMouseLeave={() => {
+                        if (dhTip?.pinned) return;
+                        const t = setTimeout(() => setDhTip((p) => ({ ...p, open: false })), 350);
+                        setDhHideTimer(t);
+                    }}
                 >
+                    <div className="flex items-center justify-between mb-1">
+                        <div className="text-[10px] uppercase tracking-widest text-slate-400 font-black">
+                            {dhTip?.pinned ? 'System status (pinned)' : 'System status'}
+                        </div>
+                        <button
+                            className="text-slate-400 hover:text-white text-xs"
+                            onClick={() => setDhTip((p) => ({ ...p, open: false, pinned: false }))}
+                        >
+                            Close
+                        </button>
+                    </div>
                     {dhTip.text}
                 </div>
             )}
@@ -705,12 +726,19 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                         const pad = 12;
                                                         const x = Math.max(pad, Math.min(r.left, window.innerWidth - maxW - pad));
                                                         const y = Math.max(pad, Math.min(r.bottom + 8, window.innerHeight - 320));
-                                                        setDhTip({ open: true, x, y, text: tooltip });
+                                                        if (dhHideTimer) { clearTimeout(dhHideTimer); setDhHideTimer(null); }
+                                                setDhTip({ open: true, pinned: false, x, y, text: tooltip });
                                                     } catch {
-                                                        setDhTip({ open: true, x: 16, y: 16, text: tooltip });
+                                                        if (dhHideTimer) { clearTimeout(dhHideTimer); setDhHideTimer(null); }
+                                                        setDhTip({ open: true, pinned: false, x: 16, y: 16, text: tooltip });
                                                     }
                                                 }}
-                                                onMouseLeave={() => setDhTip((p) => ({ ...p, open: false }))}
+                                                onClick={() => setDhTip((p) => ({ ...p, open: true, pinned: !p?.pinned, text: tooltip }))}
+                                                onMouseLeave={() => {
+                                                    if (dhTip?.pinned) return;
+                                                    const t = setTimeout(() => setDhTip((p) => ({ ...p, open: false })), 350);
+                                                    setDhHideTimer(t);
+                                                }}
                                             >
                                                 <Icon size={16} className={color} />
                                             </span>
