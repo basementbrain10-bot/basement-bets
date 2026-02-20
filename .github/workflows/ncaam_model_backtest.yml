@@ -1,0 +1,62 @@
+name: NCAAM Model Backtest (Staging)
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Lookback window in days"
+        required: true
+        default: "14"
+      limit:
+        description: "Max games"
+        required: true
+        default: "200"
+      w_base:
+        description: "Override: NCAAM_W_BASE (blank = dynamic by month)"
+        required: false
+        default: ""
+      w_kenpom:
+        description: "Override: NCAAM_W_KENPOM"
+        required: false
+        default: "0.20"
+      cap_spread:
+        description: "Override: NCAAM_CAP_SPREAD"
+        required: false
+        default: "2.0"
+      cap_total:
+        description: "Override: NCAAM_CAP_TOTAL"
+        required: false
+        default: "3.0"
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-worker.txt
+
+      - name: Run backtest
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKTEST_DAYS: ${{ inputs.days }}
+          BACKTEST_LIMIT: ${{ inputs.limit }}
+          NCAAM_W_BASE: ${{ inputs.w_base }}
+          NCAAM_W_KENPOM: ${{ inputs.w_kenpom }}
+          NCAAM_CAP_SPREAD: ${{ inputs.cap_spread }}
+          NCAAM_CAP_TOTAL: ${{ inputs.cap_total }}
+        run: |
+          python3 src/scripts/backtest_ncaam_model.py
+
+      - name: Summary
+        run: |
+          echo "✅ Backtest finished at $(date)"

@@ -54,23 +54,41 @@ class NCAAMMarketFirstModelV2(BaseModel):
     AGGRESSIVE_CAP_TOTAL = 5.0
 
     def __init__(self, aggressive: bool = False, cap_spread: float = None, cap_total: float = None, manual_adjustments: dict = None):
+        """Initialize model with configurable parameters.
+
+        Staging/tuning: core knobs can be overridden via env vars.
         """
-        Initialize model with configurable parameters.
-        """
-        super().__init__(sport_key="ncaam") # BaseModel init
+        super().__init__(sport_key="ncaam")  # BaseModel init
         self.torvik_service = TorvikProjectionService()
         self.odds_selector = OddsSelectionService()
         self.kenpom_client = KenPomClient()
         self.news_service = NewsService()
         self.geo_service = GeoService()
-        
+
         self.manual_adjustments = manual_adjustments or {}
-        
-        # Set weights (Sniper Config)
+
+        # Set weights (defaults)
         self.W_BASE = self.DEFAULT_W_BASE
         self.W_SCHED = self.DEFAULT_W_SCHED
         self.W_KENPOM = self.DEFAULT_W_KENPOM
-        
+
+        # Env overrides (staging tune)
+        try:
+            if os.getenv('NCAAM_W_BASE') is not None:
+                self.W_BASE = float(os.getenv('NCAAM_W_BASE'))
+        except Exception:
+            pass
+        try:
+            if os.getenv('NCAAM_W_KENPOM') is not None:
+                self.W_KENPOM = float(os.getenv('NCAAM_W_KENPOM'))
+        except Exception:
+            pass
+        try:
+            if os.getenv('NCAAM_W_SCHED') is not None:
+                self.W_SCHED = float(os.getenv('NCAAM_W_SCHED'))
+        except Exception:
+            pass
+
         # Set caps (priority: explicit > aggressive > default)
         if cap_spread is not None:
             self.CAP_SPREAD = cap_spread
@@ -78,13 +96,25 @@ class NCAAMMarketFirstModelV2(BaseModel):
             self.CAP_SPREAD = self.AGGRESSIVE_CAP_SPREAD
         else:
             self.CAP_SPREAD = self.DEFAULT_CAP_SPREAD
-            
+
         if cap_total is not None:
             self.CAP_TOTAL = cap_total
         elif aggressive:
             self.CAP_TOTAL = self.AGGRESSIVE_CAP_TOTAL
         else:
             self.CAP_TOTAL = self.DEFAULT_CAP_TOTAL
+
+        # Env overrides for caps
+        try:
+            if os.getenv('NCAAM_CAP_SPREAD') is not None:
+                self.CAP_SPREAD = float(os.getenv('NCAAM_CAP_SPREAD'))
+        except Exception:
+            pass
+        try:
+            if os.getenv('NCAAM_CAP_TOTAL') is not None:
+                self.CAP_TOTAL = float(os.getenv('NCAAM_CAP_TOTAL'))
+        except Exception:
+            pass
 
     def fetch_data(self):
         """Pre-load data (No-op for V2, as it fetches per-request)."""
@@ -474,7 +504,14 @@ class NCAAMMarketFirstModelV2(BaseModel):
         news_context = {}
         
         # 4. Dynamic Weight Scaling
-        self.W_BASE = self._get_dynamic_weights(game_date_obj)
+        # If NCAAM_W_BASE is set, treat it as a fixed override (staging tuning).
+        if os.getenv('NCAAM_W_BASE') is not None:
+            try:
+                self.W_BASE = float(os.getenv('NCAAM_W_BASE'))
+            except Exception:
+                self.W_BASE = self._get_dynamic_weights(game_date_obj)
+        else:
+            self.W_BASE = self._get_dynamic_weights(game_date_obj)
         w_base = self.W_BASE
 
         # 5. Blend Math (Strict mu_final)
