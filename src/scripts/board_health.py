@@ -51,8 +51,8 @@ def compute_board_health(league: str, days: int = 3) -> dict:
                   '[^a-z0-9]+', '', 'g'
                 )) AS away_key,
                 CASE
-                  WHEN e.id LIKE 'action:ncaam:%' THEN 0
-                  WHEN e.id LIKE 'espn:ncaam:%' THEN 1
+                  WHEN e.id LIKE 'action:ncaam:%%' THEN 0
+                  WHEN e.id LIKE 'espn:ncaam:%%' THEN 1
                   ELSE 2
                 END AS src_rank
               FROM events e
