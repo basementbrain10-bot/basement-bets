@@ -30,50 +30,17 @@ def compute_board_health(league: str, days: int = 3) -> dict:
             conn,
             """
             WITH base_events AS (
-              SELECT e.*,
-                DATE(e.start_time AT TIME ZONE 'America/New_York') AS day_et,
-                LOWER(regexp_replace(
-                  replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.home_team,''),
-                    'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
-                    'App State', 'Appalachian State'), 'Appalachian St.', 'Appalachian State'), 'Appalachian St', 'Appalachian State'),
-                    'South Carolina Upstate', 'USC Upstate'), 'U.S.C. Upstate', 'USC Upstate'),
-                    'Long Island University', 'LIU'), 'L.I.U.', 'LIU'),
-                    'St. Francis', 'Saint Francis'),
-                  '[^a-z0-9]+', '', 'g'
-                )) AS home_key,
-                LOWER(regexp_replace(
-                  replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.away_team,''),
-                    'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
-                    'App State', 'Appalachian State'), 'Appalachian St.', 'Appalachian State'), 'Appalachian St', 'Appalachian State'),
-                    'South Carolina Upstate', 'USC Upstate'), 'U.S.C. Upstate', 'USC Upstate'),
-                    'Long Island University', 'LIU'), 'L.I.U.', 'LIU'),
-                    'St. Francis', 'Saint Francis'),
-                  '[^a-z0-9]+', '', 'g'
-                )) AS away_key,
-                CASE
-                  WHEN e.id LIKE 'action:ncaam:%%' THEN 0
-                  WHEN e.id LIKE 'espn:ncaam:%%' THEN 1
-                  ELSE 2
-                END AS src_rank
+              SELECT e.id
               FROM events e
               WHERE e.league = %s
                 AND DATE(e.start_time AT TIME ZONE 'America/New_York') BETWEEN %s AND %s
-            ),
-            dedup_events AS (
-              SELECT id
-              FROM (
-                SELECT id,
-                  ROW_NUMBER() OVER (PARTITION BY league, day_et, home_key, away_key ORDER BY src_rank ASC, start_time ASC) AS rn
-                FROM base_events
-              ) t
-              WHERE rn = 1
             ),
             per_event AS (
               SELECT e.id AS event_id,
                 MAX(CASE WHEN o.market_type='SPREAD' THEN 1 ELSE 0 END) AS has_spread,
                 MAX(CASE WHEN o.market_type='TOTAL' THEN 1 ELSE 0 END) AS has_total,
                 MAX(CASE WHEN o.market_type='MONEYLINE' THEN 1 ELSE 0 END) AS has_ml
-              FROM dedup_events e
+              FROM base_events e
               LEFT JOIN (
                 SELECT DISTINCT ON (event_id, market_type)
                   event_id, market_type
