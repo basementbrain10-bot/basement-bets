@@ -44,11 +44,21 @@ def fetch_event_ids_for_date(date_et: str, limit_games: int = 250):
       SELECT e.*,
         DATE(e.start_time AT TIME ZONE 'America/New_York') AS day_et,
         LOWER(regexp_replace(
-          replace(replace(replace(replace(COALESCE(e.home_team,''), 'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
+          replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.home_team,''),
+            'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
+            'App State', 'Appalachian State'), 'Appalachian St.', 'Appalachian State'), 'Appalachian St', 'Appalachian State'),
+            'South Carolina Upstate', 'USC Upstate'), 'U.S.C. Upstate', 'USC Upstate'),
+            'Long Island University', 'LIU'), 'L.I.U.', 'LIU'),
+            'St. Francis', 'Saint Francis'),
           '[^a-z0-9]+', '', 'g'
         )) AS home_key,
         LOWER(regexp_replace(
-          replace(replace(replace(replace(COALESCE(e.away_team,''), 'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
+          replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.away_team,''),
+            'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
+            'App State', 'Appalachian State'), 'Appalachian St.', 'Appalachian State'), 'Appalachian St', 'Appalachian State'),
+            'South Carolina Upstate', 'USC Upstate'), 'U.S.C. Upstate', 'USC Upstate'),
+            'Long Island University', 'LIU'), 'L.I.U.', 'LIU'),
+            'St. Francis', 'Saint Francis'),
           '[^a-z0-9]+', '', 'g'
         )) AS away_key,
         CASE
