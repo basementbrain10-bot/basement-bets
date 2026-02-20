@@ -40,7 +40,12 @@ def _session() -> requests.Session:
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     })
 
-    cookie = (os.getenv("KENPOM_COOKIE") or "").strip()
+    cookie = (os.getenv("KENPOM_COOKIE") or "")
+    # GitHub secrets sometimes end up with newlines/whitespace; requests forbids that in headers.
+    cookie = cookie.replace("\r", " ").replace("\n", " ").strip()
+    # If someone pasted with surrounding quotes, strip them.
+    if (cookie.startswith('"') and cookie.endswith('"')) or (cookie.startswith("'") and cookie.endswith("'")):
+        cookie = cookie[1:-1].strip()
     if cookie:
         # requests expects Cookie header or cookie jar.
         s.headers["Cookie"] = cookie
