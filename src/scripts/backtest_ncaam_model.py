@@ -141,6 +141,8 @@ def main():
             # Need both spread_home + total for the model to run
             if not s_home or not t_over:
                 continue
+            if s_home.get('line_value') is None or t_over.get('line_value') is None:
+                continue
 
             market_snapshot = {
                 'spread_home': float(s_home['line_value']),
