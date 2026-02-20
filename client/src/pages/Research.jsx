@@ -631,8 +631,14 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
                                     return (
                                         <div className="text-[11px] text-slate-400 flex items-center mt-1 leading-snug">
-                                            <span title={tooltip} className="inline-flex items-center cursor-help">
-                                                <Icon size={14} className={`${color}`} />
+                                            <span className="relative inline-flex items-center group">
+                                                <span className="inline-flex items-center cursor-help">
+                                                    <Icon size={14} className={`${color}`} />
+                                                </span>
+                                                {/* Custom tooltip (title/newlines are unreliable across browsers + svg) */}
+                                                <div className="pointer-events-none absolute left-0 top-full mt-2 hidden group-hover:block min-w-[260px] max-w-[520px] whitespace-pre-line rounded-lg border border-slate-700/70 bg-slate-950/95 px-3 py-2 text-[11px] text-slate-200 shadow-2xl z-50">
+                                                    {tooltip}
+                                                </div>
                                             </span>
                                         </div>
                                     );
