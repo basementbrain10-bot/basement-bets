@@ -171,6 +171,24 @@ export default function Picks() {
       6: { w: 0, l: 0 },
     };
 
+    // Yesterday: determine W/L/P by rank (Top-6 by EV/u).
+    const yByRank = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
+    try {
+      const yRows = (yesterdaySlate || [])
+        .slice()
+        .sort((a, b) => (ev(b) ?? -999) - (ev(a) ?? -999))
+        .slice(0, 6);
+      yRows.forEach((h, idx) => {
+        const rank = idx + 1;
+        const r = res(h);
+        if (rank < 1 || rank > 6) return;
+        if (isW(r)) yByRank[rank] = 'W';
+        else if (isL(r)) yByRank[rank] = 'L';
+        else if (r == 'PUSH') yByRank[rank] = 'P';
+        else yByRank[rank] = null;
+      });
+    } catch (e) { }
+
     Object.keys(byDay).forEach((day) => {
       const rows = (byDay[day] || [])
         .slice()
@@ -194,6 +212,8 @@ export default function Picks() {
         winRate: winRate === null ? null : Number(winRate.toFixed(1)),
         n: decided,
         _fill: (winRate !== null && winRate >= 50) ? '#34d399' : '#60a5fa',
+        yesterday: yByRank[rank] || '—',
+        _yFill: (yByRank[rank] === 'W') ? '#34d399' : (yByRank[rank] === 'L') ? '#fb7185' : (yByRank[rank] === 'P') ? '#e2e8f0' : '#64748b',
       };
     });
 
@@ -201,7 +221,7 @@ export default function Picks() {
     const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
 
     return { rows: out, avg: avg === null ? null : Number(avg.toFixed(1)) };
-  }, [graded]);
+  }, [graded, yesterdaySlate]);
 
   const top6DailyWinRate30 = useMemo(() => {
     // For each ET day (last 30 days), compute win% of that day's Top 6 recommended picks (ranked by EV/u).
@@ -255,7 +275,7 @@ export default function Picks() {
     const vals = rows.map((x) => x.winRate).filter((x) => Number.isFinite(x));
     const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
     return { rows, avg: avg === null ? null : Number(avg.toFixed(1)) };
-  }, [graded]);
+  }, [graded, yesterdaySlate]);
 
   const dailyPerformance = useMemo(() => {
     // Daily net units based on graded recommended picks.
@@ -328,7 +348,7 @@ export default function Picks() {
     }).filter((x) => x.picks > 0);
 
     return out;
-  }, [graded]);
+  }, [graded, yesterdaySlate]);
 
   const edgeBandChart = useMemo(() => {
     // EV/u decimal bands
@@ -369,7 +389,7 @@ export default function Picks() {
         };
       })
       .filter((x) => x.picks > 0);
-  }, [graded]);
+  }, [graded, yesterdaySlate]);
 
   return (
     <div className="space-y-6">
@@ -520,7 +540,7 @@ export default function Picks() {
         <div className="h-[150px] overflow-x-auto">
           <div className="min-w-[300px] h-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 8, right: 16, left: 6, bottom: 8 }}>
+              <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 8, right: 64, left: 6, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                 <XAxis type="number" domain={[0, 100]} ticks={[0,25,50,75,100]} interval={0} tick={{ fill: '#94a3b8', fontSize: 11 }} />
                 <YAxis type="category" dataKey="rank" interval={0} tick={{ fill: '#e2e8f0', fontSize: 11, fontWeight: 800 }} width={28} />
@@ -535,6 +555,26 @@ export default function Picks() {
                     <Cell key={`cell-${index}`} fill={entry._fill || '#60a5fa'} />
                   ))}
                   <LabelList dataKey="winRate" position="right" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} fill="#94a3b8" fontSize={11} />
+                  <LabelList
+                    dataKey="yesterday"
+                    position="right"
+                    content={(props) => {
+                      const { x, y, width, height, value, payload } = props;
+                      const v = String(value || '—');
+                      const fill = payload?._yFill || '#64748b';
+                      // Place a small pill to the right of the win% label
+                      const px = (x || 0) + (width || 0) + 38;
+                      const py = (y || 0) + (height || 0) / 2 - 8;
+                      return (
+                        <g>
+                          <rect x={px} y={py} rx={6} ry={6} width={22} height={16} fill={fill} opacity={0.20} />
+                          <text x={px + 11} y={py + 11.5} textAnchor="middle" fontSize={11} fontWeight={900} fill={fill}>
+                            {v}
+                          </text>
+                        </g>
+                      );
+                    }}
+                  />
                   <LabelList dataKey="n" position="insideRight" formatter={(v) => (v ? `N=${v}` : '')} fill="#0b1220" fontSize={10} />
                 </Bar>
               </BarChart>
