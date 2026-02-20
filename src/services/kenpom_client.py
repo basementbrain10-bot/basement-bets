@@ -24,15 +24,17 @@ class KenPomClient:
         Returns:
             Dict with adj_em, adj_o, adj_d, adj_t or None
         """
-        matched_name = self.matcher.find_source_name(team_name, "kenpom_ratings", "team_name")
+        # Ratings are stored as daily snapshots.
+        matched_name = self.matcher.find_source_name(team_name, "kenpom_team_ratings_daily", "team_name")
         if not matched_name:
             return None
 
         with get_db_connection() as conn:
             query = """
             SELECT team_name, rank, adj_em, adj_o, adj_d, adj_t
-            FROM kenpom_ratings
+            FROM kenpom_team_ratings_daily
             WHERE team_name = %s
+            ORDER BY asof_date DESC
             LIMIT 1
             """
             cursor = _exec(conn, query, (matched_name,))
