@@ -579,6 +579,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                 {(() => {
                                     // Move the noisy data-health line into the Info icon tooltip.
                                     let tooltip = 'Times shown in ET. Lines shown as (team/side, line, odds).';
+                                    let iconStatus = 'unknown';
                                     try {
                                         if (leagueFilter === 'NCAAM' && (dataHealth?.length > 0)) {
                                             const by = {};
@@ -589,6 +590,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                             };
                                             const odds = by['odds'];
                                             const torvik = by['torvik'];
+                                            const kenpom = by['kenpom'];
                                             const board = by['board:NCAAM'];
 
                                             let boardTxt = '';
@@ -602,15 +604,37 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 }
                                             }
 
-                                            tooltip += `\n\nData health — odds: ${odds?.status || '—'} (${fmt(odds?.last_success_at)}) • torvik: ${torvik?.status || '—'} (${fmt(torvik?.last_success_at)})${boardTxt}`;
+                                            iconStatus = (() => {
+                                                const sts = [odds?.status, torvik?.status, kenpom?.status, board?.status].filter(Boolean);
+                                                if (sts.some((s) => s === 'error')) return 'error';
+                                                if (sts.some((s) => s === 'stale')) return 'stale';
+                                                if (sts.length > 0 && sts.every((s) => s === 'ok')) return 'ok';
+                                                return 'unknown';
+                                            })();
+
+                                            const kpNotes = (() => {
+                                                if (!kenpom?.notes) return '';
+                                                try {
+                                                    const n = JSON.parse(kenpom.notes);
+                                                    return ` (asof ${n?.asof_date || '—'}, team ${n?.team || 0}, hca ${n?.home_court || 0}, refs ${n?.refs || 0}, players ${n?.players || 0})`;
+                                                } catch {
+                                                    return kenpom?.notes ? ` (${kenpom.notes})` : '';
+                                                }
+                                            })();
+
+                                            tooltip += `\n\nData health — odds: ${odds?.status || '—'} (${fmt(odds?.last_success_at)}) • torvik: ${torvik?.status || '—'} (${fmt(torvik?.last_success_at)}) • kenpom: ${kenpom?.status || '—'} (${fmt(kenpom?.last_success_at)})${kpNotes}${boardTxt}`;
                                         }
                                     } catch {
                                         // ignore
                                     }
 
+                                    const Icon = (iconStatus === 'ok') ? ShieldCheck : (iconStatus === 'error') ? ShieldAlert : (iconStatus === 'stale') ? ShieldAlert : Shield;
+                                    const color = (iconStatus === 'ok') ? 'text-emerald-400' : (iconStatus === 'error') ? 'text-red-400' : (iconStatus === 'stale') ? 'text-amber-300' : 'text-slate-400';
+
                                     return (
                                         <div className="text-[11px] text-slate-400 flex items-center mt-1 leading-snug">
                                             <span title={tooltip} className="inline-flex items-center cursor-help">
+                                                <Icon size={14} className={`mr-1 ${color}`} />
                                                 <Info size={12} className="mr-1" />
                                                 Times shown in ET • lines shown as (team/side, line, odds)
                                             </span>
