@@ -544,7 +544,24 @@ function App() {
 
                     {page === 'today' ? (
                         <Research
-                            onAddBet={() => setShowAddBet(true)}
+                            onAddBet={(prefill) => {
+                                // If a pick row is passed, open manual add-bet prefilled.
+                                if (prefill && typeof prefill === 'object') {
+                                    setAddBetMode('manual');
+                                    setManualBet(prev => ({
+                                        ...prev,
+                                        sport: prefill.sport || prev.sport,
+                                        event_name: prefill.game || prev.event_name,
+                                        selection: prefill.pick || prev.selection,
+                                        odds: (prefill.odds !== null && prefill.odds !== undefined) ? String(prefill.odds) : prev.odds,
+                                        placed_at: prev.placed_at || new Date().toISOString().slice(0, 10),
+                                    }));
+                                } else {
+                                    // Default Add Bet button opens the slip flow.
+                                    setAddBetMode('slip');
+                                }
+                                setShowAddBet(true);
+                            }}
                             showModelPerformanceTab={false}
                             formatCurrency={formatCurrency}
                             formatDateMDY={formatDateMDY}
