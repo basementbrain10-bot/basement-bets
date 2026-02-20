@@ -57,6 +57,9 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
     // Sorting State
     const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
 
+    // Data health hover tooltip (custom, fixed-position to avoid clipping)
+    const [dhTip, setDhTip] = useState({ open: false, x: 16, y: 16, text: '' });
+
     const BOARD_DAYS_DEFAULT = showModelPerformanceTab ? 3 : 1;
 
     useEffect(() => {
@@ -492,6 +495,15 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
     return (
         <div className="p-4 md:p-6 bg-slate-900 min-h-screen text-white">
+            {/* Data health tooltip (fixed; rendered at top level to avoid clipping by overflow-hidden containers) */}
+            {dhTip?.open && (
+                <div
+                    className="fixed z-[9999] max-w-[560px] whitespace-pre-line rounded-lg border border-slate-700/70 bg-slate-950/95 px-3 py-2 text-[11px] text-slate-200 shadow-2xl"
+                    style={{ left: dhTip.x, top: dhTip.y, maxHeight: 360, overflow: 'auto' }}
+                >
+                    {dhTip.text}
+                </div>
+            )}
             <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-6">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-400 to-green-400 bg-clip-text text-transparent">
@@ -627,6 +639,18 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                             else if (sts.some((s) => s === 'stale')) iconStatus = 'stale';
                                             else if (sts.length > 0 && sts.every((s) => s === 'ok')) iconStatus = 'ok';
 
+                                            // Clear degraded explanation
+                                            const degraded = items.filter((x) => (x?.status && x.status !== 'ok'));
+                                            if (!degraded.length) {
+                                                tooltip += `\n\nOverall: OK`;
+                                            } else {
+                                                const errs = degraded.filter((x) => x?.status === 'error');
+                                                const stales = degraded.filter((x) => x?.status === 'stale');
+                                                tooltip += `\n\nOverall: DEGRADED`;
+                                                if (errs.length) tooltip += `\nErrors: ${errs.map((x) => x.source).join(', ')}`;
+                                                if (stales.length) tooltip += `\nStale: ${stales.map((x) => x.source).join(', ')}`;
+                                            }
+
                                             const safeNotes = (n) => {
                                                 if (!n) return '';
                                                 const s = String(n);
@@ -634,7 +658,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 return s.length > 180 ? (s.slice(0, 180) + '…') : s;
                                             };
 
-                                            tooltip += '\n\n' + items.map((x) => {
+                                            tooltip += '\n\nSources:';
+                                            tooltip += '\n' + items.map((x) => {
                                                 const src = x?.source || '—';
                                                 const st = x?.status || '—';
                                                 const t = fmt(x?.last_success_at);
@@ -652,14 +677,25 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
                                     return (
                                         <div className="text-[11px] text-slate-400 flex items-center mt-1 leading-snug">
-                                            <span className="relative inline-flex items-center group">
-                                                <span className="inline-flex items-center cursor-help">
+                                            <span className="relative inline-flex items-center">
+                                                <span
+                                                    className="inline-flex items-center cursor-help"
+                                                    onMouseEnter={(e) => {
+                                                        try {
+                                                            const r = e.currentTarget.getBoundingClientRect();
+                                                            const maxW = 560;
+                                                            const pad = 12;
+                                                            const x = Math.max(pad, Math.min(r.left, window.innerWidth - maxW - pad));
+                                                            const y = Math.max(pad, Math.min(r.bottom + 8, window.innerHeight - 320));
+                                                            setDhTip({ open: true, x, y, text: tooltip });
+                                                        } catch {
+                                                            setDhTip({ open: true, x: 16, y: 16, text: tooltip });
+                                                        }
+                                                    }}
+                                                    onMouseLeave={() => setDhTip((p) => ({ ...p, open: false }))}
+                                                >
                                                     <Icon size={14} className={`${color}`} />
                                                 </span>
-                                                {/* Custom tooltip (title/newlines are unreliable across browsers + svg) */}
-                                                <div className="pointer-events-none absolute left-0 top-full mt-2 hidden group-hover:block min-w-[260px] max-w-[520px] whitespace-pre-line rounded-lg border border-slate-700/70 bg-slate-950/95 px-3 py-2 text-[11px] text-slate-200 shadow-2xl z-50">
-                                                    {tooltip}
-                                                </div>
                                             </span>
                                         </div>
                                     );
@@ -796,23 +832,6 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         return (
                                             <div className="text-slate-500">
                                                 No recommendations available for this window.
-                                                {!showModelPerformanceTab && leagueFilter === 'NCAAM' && (
-                                                    <div className="mt-2 text-[11px] text-slate-600">
-                                                        {(() => {
-                                                            let matched = 0;
-                                                            try {
-                                                                matched = (edges || []).filter((e) => (rowTopPicks?.[e?.id]?.rec)).length;
-                                                            } catch (e) { }
-                                                            return (
-                                                                `Board games: ${edges.length} • Top-picks picks: ${topPicksStats.games} • With pick: ${topPicksStats.withPick} • Actionable: ${topPicksStats.actionable} • NoBet: ${topPicksStats.noBet} • Matched rows: ${matched}`
-                                                                + ` • Pass basic: ${diag.passBasic}/${diag.withPick} • Pass EV>=2: ${diag.passEv} • Pass win: ${diag.passWin} • Pass both: ${diag.passBoth}`
-                                                                + (topPicksStats.server ? ` • Scanned: ${topPicksStats.server.scanned}/${topPicksStats.server.events_total} • Stored: ${topPicksStats.server.stored} • Computed: ${topPicksStats.server.computed_with_pick}/${topPicksStats.server.computed_attempted} • Errors: ${topPicksStats.server.errors}` : '')
-                                                                + (topPicksStats?.errors?.length ? ` • Err sample: ${(topPicksStats.errors[0]?.error || '').slice(0, 120)}` : '')
-                                                                + (topPicksError ? ` • Top-picks error: ${topPicksError}` : '')
-                                                            );
-                                                        })()}
-                                                    </div>
-                                                )}
                                             </div>
                                         );
                                     }
