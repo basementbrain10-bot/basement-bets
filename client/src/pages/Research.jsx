@@ -530,9 +530,6 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                     <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-400 to-green-400 bg-clip-text text-transparent">
                         {showModelPerformanceTab ? 'Model Recommendations' : "Today's Recommended Bets"}
                     </h1>
-                    <div className="text-slate-400 text-sm mt-1">
-                        {showModelPerformanceTab ? 'Board + model performance.' : 'Recommended plays + your open bets in one place.'}
-                    </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                     {showModelPerformanceTab && (

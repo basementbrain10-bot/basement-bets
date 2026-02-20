@@ -142,7 +142,6 @@ export default function OpenBetsPanel({ formatCurrency, formatDateMDY, title = '
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div>
             <div className="text-sm font-black text-slate-100 uppercase tracking-wider">{title}</div>
-            <div className="text-[11px] text-slate-500">All books • Click a row to edit/settle</div>
           </div>
           <div className="text-xs text-slate-400">
             {loading ? 'Loading…' : `${(openBets || []).length} open • ${formatCurrency ? formatCurrency(totalOpenStake) : totalOpenStake.toFixed(2)} staked`}

@@ -421,7 +421,6 @@ function App() {
                                 <h1 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
                                     Basement Bets
                                 </h1>
-                                <p className="text-gray-400">Balances, performance, and the board.</p>
                             </div>        </div>
                         <div className="flex flex-wrap gap-2 items-center">
                             {/* Primary nav (segmented control) */}
