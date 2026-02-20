@@ -22,13 +22,27 @@ class DraftKingsTextParser:
             return []
 
         def infer_date(buf: List[str]) -> str:
+            """Infer the bet's placed_at timestamp.
+
+            DK often includes multiple timestamps in a single line (e.g. game start + bet placed).
+            We prefer the *last* timestamp we can find in the tail of the block.
+            """
             raw_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             for j in range(1, min(len(buf) + 1, 11)):
-                d_match = date_pattern.search(buf[-j])
+                s = buf[-j]
+                try:
+                    all_matches = date_pattern.findall(s)
+                    if all_matches:
+                        return all_matches[-1]
+                except Exception:
+                    pass
+
+                d_match = date_pattern.search(s)
                 if d_match:
                     return d_match.group(1)
-                if re.search(r"[A-Z][a-z]{2} \d{1,2}, \d{4}", buf[-j]):
-                    return buf[-j]
+
+                if re.search(r"[A-Z][a-z]{2} \d{1,2}, \d{4}", s):
+                    return s
             return raw_date
 
         # Robust block splitting: DK ids often appear inline (no newlines).
@@ -164,15 +178,22 @@ class DraftKingsTextParser:
             wager_idx = -1
             matchup = ""
             matchup_idx = -1
-            paid = 0.0
             paid_idx = -1
-            wager_idx = -1
-            matchup = ""
-            matchup_idx = -1
             header = ""
             header_idx = -1
             odds = None
-            
+
+            # Compact one-line DK paste support (common on mobile):
+            # Example:
+            #   Tennessee State -3.5-108 Spread Won Wager: $10.00Paid: $19.25 ... Final Score Feb 19, 2026, ... DK...
+            text_one = " ".join([str(x) for x in (lines or [])]).strip()
+            text_one = text_one.replace('\u2212', '-').replace('\u2013', '-').replace('\u2014', '-')
+            compact = re.search(
+                r"^(?P<team>.+?)\s+(?P<line>[+-]\d+(?:\.\d+)?)\s*(?P<odds>[+-]\d{3,})\s+(?P<mkt>SPREAD|TOTAL|MONEYLINE|ML)\s+(?P<status>WON|LOST|PUSH|CASHED\s+OUT)\b",
+                text_one,
+                re.IGNORECASE,
+            )
+
             for i, l in enumerate(lines):
                 # Normalize dashes to standard hyphen (Already done above, but safe to keep or remove)
                 l_up = l.upper()
@@ -216,10 +237,30 @@ class DraftKingsTextParser:
 
             # Matchup & Team Detection
             teams_found = []
-            
+
             # Team Keywords — use shared sport detection module
             from src.parsers.sport_detection import detect_sport, NCAAM_TEAMS, NFL_TEAMS, NBA_TEAMS, MLB_KEYWORDS, NHL_KEYWORDS, SOCCER_KEYWORDS
             all_team_keywords = NCAAM_TEAMS + NFL_TEAMS + NBA_TEAMS + MLB_KEYWORDS + NHL_KEYWORDS + SOCCER_KEYWORDS
+
+            # If we have a compact header match, pre-seed obvious fields early.
+            compact_team = None
+            compact_line = None
+            compact_mkt = None
+            compact_status = None
+            if compact:
+                try:
+                    compact_team = compact.group('team').strip()
+                    compact_line = float(compact.group('line'))
+                    odds = int(compact.group('odds'))
+                    compact_mkt = compact.group('mkt').strip().upper()
+                    compact_status = compact.group('status').strip().upper().replace(' ', '_')
+                    if compact_status == 'CASHED_OUT':
+                        status = 'CASHED OUT'
+                    else:
+                        status = compact_status
+                    status_idx = 0
+                except Exception:
+                    pass
 
             for i, l in enumerate(lines):
                 l_lower = l.lower()
@@ -242,6 +283,15 @@ class DraftKingsTextParser:
             # We treat them as artifacts and try not to surface them as "Leg" bet_type.
             # PRIORITY: Check for explicit bet type keywords on their own lines FIRST
             explicit_bet_type = None
+
+            # If compact header tells us the market, lock bet_type from that.
+            if compact_mkt:
+                if compact_mkt == 'SPREAD':
+                    explicit_bet_type = 'Spread'
+                elif compact_mkt in ('TOTAL',):
+                    explicit_bet_type = 'Over/Under'
+                elif compact_mkt in ('MONEYLINE', 'ML'):
+                    explicit_bet_type = 'ML'
             explicit_bet_type_keywords = {
                 "SPREAD": "Spread", "POINT SPREAD": "Spread",
                 "MONEYLINE": "ML", "MONEY LINE": "ML", "ML": "ML",
@@ -395,7 +445,13 @@ class DraftKingsTextParser:
             
             # Build selection: combine team name with spread/total line
             selection = ""
-            if selection_parts:
+            if compact_team and (compact_line is not None) and (compact_mkt == 'SPREAD'):
+                # Spread team + line
+                selection = f"{compact_team} {compact_line:+.1f}".replace('+', '')
+            elif compact_team and (compact_line is not None) and (compact_mkt in ('TOTAL',)):
+                # Total: try to infer side from team text (rare); default to line only
+                selection = f"{compact_team} {compact_line:.1f}"
+            elif selection_parts:
                 if len(selection_parts) >= 2 and re.match(r'^[+-]?\d+\.?\d*$', selection_parts[1]):
                     # Team + line (e.g. "Ohio State" + "-6.5" → "Ohio State -6.5")
                     selection = f"{selection_parts[0]} {selection_parts[1]}"
@@ -404,7 +460,8 @@ class DraftKingsTextParser:
             
             # Construct Matchup from detected Teams if implicit
             if not matchup and len(teams_found) >= 2:
-                matchup = f"{teams_found[0]} vs {teams_found[1]}"
+                # Use @ convention (away @ home) when we only have two teams; DK score tables often list away then home.
+                matchup = f"{teams_found[0]} @ {teams_found[1]}"
 
             # DK compact paste often provides teams as two adjacent ALLCAPS tokens (e.g., "OHIO MIAMI OH" or "MICHIGAN STATE WISCONSIN")
             if (not matchup or matchup == "Unknown Matchup") and len(teams_found) < 2:
