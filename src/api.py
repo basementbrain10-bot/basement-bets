@@ -2043,7 +2043,7 @@ async def get_board(request: Request, league: str, date: Optional[str] = None, d
       SELECT e.*,
         DATE(e.start_time AT TIME ZONE 'America/New_York') AS day_et,
         LOWER(regexp_replace(
-          replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.home_team,''),
+          replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.home_team,''),
             'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
             'App State', 'Appalachian State'), 'Appalachian St.', 'Appalachian State'), 'Appalachian St', 'Appalachian State'),
             'South Carolina Upstate', 'USC Upstate'), 'U.S.C. Upstate', 'USC Upstate'),
@@ -2052,7 +2052,7 @@ async def get_board(request: Request, league: str, date: Optional[str] = None, d
           '[^a-z0-9]+', '', 'g'
         )) AS home_key,
         LOWER(regexp_replace(
-          replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.away_team,''),
+          replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.away_team,''),
             'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
             'App State', 'Appalachian State'), 'Appalachian St.', 'Appalachian State'), 'Appalachian St', 'Appalachian State'),
             'South Carolina Upstate', 'USC Upstate'), 'U.S.C. Upstate', 'USC Upstate'),
@@ -2223,7 +2223,7 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
               SELECT e.*,
                 DATE(e.start_time AT TIME ZONE 'America/New_York') AS day_et,
                 LOWER(regexp_replace(
-                  replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.home_team,''),
+                  replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.home_team,''),
                     'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
                     'App State', 'Appalachian State'), 'Appalachian St.', 'Appalachian State'), 'Appalachian St', 'Appalachian State'),
                     'South Carolina Upstate', 'USC Upstate'), 'U.S.C. Upstate', 'USC Upstate'),
@@ -2232,7 +2232,7 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
                   '[^a-z0-9]+', '', 'g'
                 )) AS home_key,
                 LOWER(regexp_replace(
-                  replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.away_team,''),
+                  replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(COALESCE(e.away_team,''),
                     'North Carolina State', 'NC State'), 'N.C. State', 'NC State'), 'N.C. St.', 'NC State'), 'NC St.', 'NC State'),
                     'App State', 'Appalachian State'), 'Appalachian St.', 'Appalachian State'), 'Appalachian St', 'Appalachian State'),
                     'South Carolina Upstate', 'USC Upstate'), 'U.S.C. Upstate', 'USC Upstate'),
