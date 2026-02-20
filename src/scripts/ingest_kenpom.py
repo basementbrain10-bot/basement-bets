@@ -1,0 +1,391 @@
+"""KenPom ingestion (subscription/cookie-auth).
+
+Scope: current season only.
+
+This script is designed to run **once per day** via GitHub Actions.
+Auth:
+- Prefer `KENPOM_COOKIE` (session cookie string, e.g. "PHPSESSID=...; other=...").
+
+Data ingested:
+- Team ratings (AdjEM/AdjO/AdjD/AdjT + rank)
+- Ref ratings (where available)
+- Home-court ratings (where available)
+- Player stats (stored as JSONB rows)
+
+NOTE: KenPom HTML can change; keep parsing defensive.
+"""
+
+import os
+import time
+import json
+from datetime import datetime, timezone
+
+import requests
+from bs4 import BeautifulSoup
+
+from src.database import get_admin_db_connection, get_db_connection, _exec
+
+
+BASE = "https://kenpom.com"
+
+
+def _session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    })
+
+    cookie = (os.getenv("KENPOM_COOKIE") or "").strip()
+    if cookie:
+        # requests expects Cookie header or cookie jar.
+        s.headers["Cookie"] = cookie
+    return s
+
+
+def ensure_tables():
+    # Use daily snapshots so we can backtest/compare.
+    with get_admin_db_connection() as conn:
+        _exec(conn, """
+        CREATE TABLE IF NOT EXISTS kenpom_team_ratings_daily (
+          asof_date DATE NOT NULL,
+          team_name TEXT NOT NULL,
+          rank INTEGER,
+          adj_em REAL,
+          adj_o REAL,
+          adj_d REAL,
+          adj_t REAL,
+          conf TEXT,
+          record TEXT,
+          raw JSONB,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (asof_date, team_name)
+        );
+        CREATE INDEX IF NOT EXISTS ix_kp_team_asof_rank ON kenpom_team_ratings_daily(asof_date, rank);
+
+        CREATE TABLE IF NOT EXISTS kenpom_ref_ratings_daily (
+          asof_date DATE NOT NULL,
+          ref_name TEXT NOT NULL,
+          metrics JSONB,
+          raw JSONB,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (asof_date, ref_name)
+        );
+
+        CREATE TABLE IF NOT EXISTS kenpom_home_court_daily (
+          asof_date DATE NOT NULL,
+          team_name TEXT NOT NULL,
+          hca REAL,
+          raw JSONB,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (asof_date, team_name)
+        );
+
+        CREATE TABLE IF NOT EXISTS kenpom_player_stats_daily (
+          asof_date DATE NOT NULL,
+          player_name TEXT NOT NULL,
+          team_name TEXT,
+          metrics JSONB,
+          raw JSONB,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (asof_date, player_name, COALESCE(team_name, ''))
+        );
+        """)
+        conn.commit()
+
+
+def _asof_date_et() -> str:
+    with get_db_connection() as conn:
+        return _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text").fetchone()[0]
+
+
+def fetch_html(sess: requests.Session, path: str, params: dict | None = None) -> str:
+    url = path if path.startswith("http") else BASE + path
+    r = sess.get(url, params=params, timeout=25)
+    r.raise_for_status()
+    return r.text
+
+
+def _table_to_rows(table) -> list[list[str]]:
+    out = []
+    if not table:
+        return out
+    tbody = table.find("tbody") or table
+    for tr in tbody.find_all("tr"):
+        cols = [c.get_text(" ", strip=True) for c in tr.find_all(["td", "th"])]
+        if cols:
+            out.append(cols)
+    return out
+
+
+def scrape_team_ratings(sess: requests.Session) -> list[dict]:
+    html = fetch_html(sess, "/")
+    soup = BeautifulSoup(html, "html.parser")
+
+    table = soup.find("table", {"id": "ratings-table"})
+    if not table:
+        # If logged-in view changes, try any table containing "AdjEM".
+        for t in soup.find_all("table"):
+            if "AdjEM" in (t.get_text(" ", strip=True)[:500] or ""):
+                table = t
+                break
+
+    rows = _table_to_rows(table)
+    teams = []
+    for cols in rows:
+        # Expect rank, team, conf, record, AdjEM, AdjO, ..., AdjD, ..., AdjT
+        if len(cols) < 10:
+            continue
+        try:
+            rank = int(cols[0])
+        except Exception:
+            continue
+        team = cols[1]
+        conf = cols[2] if len(cols) > 2 else None
+        record = cols[3] if len(cols) > 3 else None
+        def f(x):
+            try:
+                return float(str(x).replace("+", "").strip())
+            except Exception:
+                return None
+        adj_em = f(cols[4])
+        adj_o = f(cols[5])
+        # cols[6] is AdjO rank in the public table; skip
+        adj_d = f(cols[7])
+        adj_t = f(cols[9])
+        teams.append({
+            "team_name": team,
+            "rank": rank,
+            "adj_em": adj_em,
+            "adj_o": adj_o,
+            "adj_d": adj_d,
+            "adj_t": adj_t,
+            "conf": conf,
+            "record": record,
+            "raw": {"cols": cols},
+        })
+    return teams
+
+
+def scrape_home_court(sess: requests.Session) -> list[dict]:
+    # KenPom has a home-court ranking page; path may vary. Try a few known guesses.
+    candidates = [
+        "/hca.php",
+        "/home.php",
+        "/homeratings.php",
+    ]
+    html = None
+    for p in candidates:
+        try:
+            html = fetch_html(sess, p)
+            if html and "Home" in html and "Court" in html:
+                break
+        except Exception:
+            html = None
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, "html.parser")
+    table = soup.find("table")
+    rows = _table_to_rows(table)
+    out = []
+    for cols in rows:
+        if len(cols) < 2:
+            continue
+        team = cols[0]
+        try:
+            hca = float(cols[1].replace("+", "").strip())
+        except Exception:
+            continue
+        out.append({"team_name": team, "hca": hca, "raw": {"cols": cols}})
+    return out
+
+
+def scrape_ref_ratings(sess: requests.Session) -> list[dict]:
+    # Ref data is less standardized; try common paths.
+    candidates = [
+        "/refs.php",
+        "/ref.php",
+        "/refstats.php",
+    ]
+    html = None
+    for p in candidates:
+        try:
+            html = fetch_html(sess, p)
+            if html and ("Ref" in html or "Officials" in html):
+                break
+        except Exception:
+            html = None
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, "html.parser")
+    table = soup.find("table")
+    rows = _table_to_rows(table)
+
+    out = []
+    # Store as JSONB per ref to avoid brittle column parsing.
+    # First row could be headers; detect non-numeric first cell.
+    for cols in rows:
+        if not cols:
+            continue
+        name = cols[0]
+        if not name or name.lower() in ("ref", "official"):
+            continue
+        out.append({"ref_name": name, "metrics": {"cols": cols[1:]}, "raw": {"cols": cols}})
+    return out
+
+
+def scrape_player_stats(sess: requests.Session) -> list[dict]:
+    # Player stats page path can vary; use a best-effort.
+    candidates = [
+        "/playerstats.php",
+        "/player.php",
+    ]
+    html = None
+    for p in candidates:
+        try:
+            html = fetch_html(sess, p)
+            if html and ("Player" in html or "ORtg" in html or "Usage" in html):
+                break
+        except Exception:
+            html = None
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, "html.parser")
+    table = soup.find("table")
+    rows = _table_to_rows(table)
+
+    out = []
+    for cols in rows:
+        # Heuristic: player rows usually have name + team.
+        if len(cols) < 2:
+            continue
+        player = cols[0]
+        team = cols[1] if len(cols) > 1 else None
+        if not player or player.lower() in ("player", "name"):
+            continue
+        out.append({"player_name": player, "team_name": team, "metrics": {"cols": cols[2:]}, "raw": {"cols": cols}})
+    return out
+
+
+def upsert_daily(table: str, asof_date: str, rows: list[dict], key_fields: list[str]):
+    if not rows:
+        return 0
+
+    with get_db_connection() as conn:
+        n = 0
+        for r in rows:
+            payload = dict(r)
+            payload["asof_date"] = asof_date
+
+            if table == 'kenpom_team_ratings_daily':
+                _exec(conn, """
+                INSERT INTO kenpom_team_ratings_daily(asof_date, team_name, rank, adj_em, adj_o, adj_d, adj_t, conf, record, raw, updated_at)
+                VALUES (%(asof_date)s, %(team_name)s, %(rank)s, %(adj_em)s, %(adj_o)s, %(adj_d)s, %(adj_t)s, %(conf)s, %(record)s, %(raw)s::jsonb, NOW())
+                ON CONFLICT (asof_date, team_name) DO UPDATE SET
+                  rank=EXCLUDED.rank,
+                  adj_em=EXCLUDED.adj_em,
+                  adj_o=EXCLUDED.adj_o,
+                  adj_d=EXCLUDED.adj_d,
+                  adj_t=EXCLUDED.adj_t,
+                  conf=EXCLUDED.conf,
+                  record=EXCLUDED.record,
+                  raw=EXCLUDED.raw,
+                  updated_at=NOW();
+                """, {**payload, "raw": json.dumps(payload.get("raw") or {})})
+                n += 1
+
+            elif table == 'kenpom_home_court_daily':
+                _exec(conn, """
+                INSERT INTO kenpom_home_court_daily(asof_date, team_name, hca, raw, updated_at)
+                VALUES (%(asof_date)s, %(team_name)s, %(hca)s, %(raw)s::jsonb, NOW())
+                ON CONFLICT (asof_date, team_name) DO UPDATE SET
+                  hca=EXCLUDED.hca,
+                  raw=EXCLUDED.raw,
+                  updated_at=NOW();
+                """, {**payload, "raw": json.dumps(payload.get("raw") or {})})
+                n += 1
+
+            elif table == 'kenpom_ref_ratings_daily':
+                _exec(conn, """
+                INSERT INTO kenpom_ref_ratings_daily(asof_date, ref_name, metrics, raw, updated_at)
+                VALUES (%(asof_date)s, %(ref_name)s, %(metrics)s::jsonb, %(raw)s::jsonb, NOW())
+                ON CONFLICT (asof_date, ref_name) DO UPDATE SET
+                  metrics=EXCLUDED.metrics,
+                  raw=EXCLUDED.raw,
+                  updated_at=NOW();
+                """, {
+                    **payload,
+                    "metrics": json.dumps(payload.get("metrics") or {}),
+                    "raw": json.dumps(payload.get("raw") or {}),
+                })
+                n += 1
+
+            elif table == 'kenpom_player_stats_daily':
+                _exec(conn, """
+                INSERT INTO kenpom_player_stats_daily(asof_date, player_name, team_name, metrics, raw, updated_at)
+                VALUES (%(asof_date)s, %(player_name)s, %(team_name)s, %(metrics)s::jsonb, %(raw)s::jsonb, NOW())
+                ON CONFLICT (asof_date, player_name, COALESCE(team_name,'')) DO UPDATE SET
+                  metrics=EXCLUDED.metrics,
+                  raw=EXCLUDED.raw,
+                  updated_at=NOW();
+                """, {
+                    **payload,
+                    "metrics": json.dumps(payload.get("metrics") or {}),
+                    "raw": json.dumps(payload.get("raw") or {}),
+                })
+                n += 1
+
+        conn.commit()
+        return n
+
+
+def main():
+    print(f"[{datetime.now(timezone.utc).isoformat()}] ingest_kenpom")
+
+    cookie = (os.getenv("KENPOM_COOKIE") or "").strip()
+    if not cookie:
+        raise RuntimeError("KENPOM_COOKIE is required for subscription scrape")
+
+    ensure_tables()
+    asof = _asof_date_et()
+
+    sess = _session()
+
+    # Be polite.
+    time.sleep(1.0)
+
+    teams = scrape_team_ratings(sess)
+    n_team = upsert_daily('kenpom_team_ratings_daily', asof, teams, ['team_name'])
+    print(f"teams: scraped={len(teams)} upserted={n_team}")
+
+    time.sleep(1.0)
+    hca = scrape_home_court(sess)
+    n_hca = upsert_daily('kenpom_home_court_daily', asof, hca, ['team_name'])
+    print(f"home_court: scraped={len(hca)} upserted={n_hca}")
+
+    time.sleep(1.0)
+    refs = scrape_ref_ratings(sess)
+    n_refs = upsert_daily('kenpom_ref_ratings_daily', asof, refs, ['ref_name'])
+    print(f"refs: scraped={len(refs)} upserted={n_refs}")
+
+    # Player stats can be large. Run daily, but keep it best-effort.
+    time.sleep(1.0)
+    players = scrape_player_stats(sess)
+    n_players = upsert_daily('kenpom_player_stats_daily', asof, players, ['player_name','team_name'])
+    print(f"players: scraped={len(players)} upserted={n_players}")
+
+    # Update data_health row
+    try:
+        from src.scripts.update_data_health import upsert
+        total = int(n_team or 0) + int(n_hca or 0) + int(n_refs or 0) + int(n_players or 0)
+        status = 'ok' if (n_team and n_team > 0) else 'stale'
+        upsert('kenpom', status=status, row_count=total, notes=f"team={n_team} hca={n_hca} refs={n_refs} players={n_players}")
+    except Exception as e:
+        print(f"[kenpom] data_health upsert failed: {e}")
+
+
+if __name__ == '__main__':
+    main()
