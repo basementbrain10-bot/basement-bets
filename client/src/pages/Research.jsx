@@ -594,6 +594,27 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                     let tooltip = 'Data health (ET times)';
                                     let iconStatus = 'unknown';
                                     try {
+                                        // Also include pick-pipeline stats in this hover (so we never print it inline).
+                                        try {
+                                            const matched = (edges || []).filter((e) => (rowTopPicks?.[e?.id]?.rec)).length;
+                                            const tp = topPicksStats || {};
+                                            const diagTxt = (() => {
+                                                try {
+                                                    // diag exists in this closure (recommended view render); fall back silently if not.
+                                                    return `Pass basic: ${diag?.passBasic ?? 0}/${diag?.withPick ?? 0} • Pass EV>=2: ${diag?.passEv ?? 0} • Pass win: ${diag?.passWin ?? 0} • Pass both: ${diag?.passBoth ?? 0}`;
+                                                } catch { return null; }
+                                            })();
+                                            const serverTxt = tp.server
+                                                ? `Scanned: ${tp.server.scanned}/${tp.server.events_total} • Stored: ${tp.server.stored} • Computed: ${tp.server.computed_with_pick}/${tp.server.computed_attempted} • Errors: ${tp.server.errors}`
+                                                : null;
+
+                                            tooltip += `\n\nPicks pipeline — Board games: ${edges.length} • Top-picks picks: ${tp.games || 0} • With pick: ${tp.withPick || 0} • Actionable: ${tp.actionable || 0} • NoBet: ${tp.noBet || 0} • Matched rows: ${matched}`
+                                                + (diagTxt ? ` • ${diagTxt}` : '')
+                                                + (serverTxt ? ` • ${serverTxt}` : '')
+                                                + (topPicksError ? ` • Top-picks error: ${topPicksError}` : '')
+                                                + ((tp?.errors?.length && tp?.errors?.[0]?.error) ? ` • Err sample: ${String(tp.errors[0].error).slice(0, 140)}` : '');
+                                        } catch { }
+
                                         if ((dataHealth?.length || 0) > 0) {
                                             const fmt = (t) => {
                                                 if (!t) return '—';
