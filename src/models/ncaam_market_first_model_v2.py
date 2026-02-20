@@ -33,7 +33,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
     - Structured narratives.
     """
     
-    VERSION = "2.1.1-sniper"
+    VERSION = "2.1.2-sniper"
     
     # Optimized Model Weights (2026-02-01 Sniper Plan)
     # Target: 75% Market / 25% Torvik+KenPom
@@ -41,11 +41,9 @@ class NCAAMMarketFirstModelV2(BaseModel):
     # Weights apply to the DIFF. 0.25 on diff means 25% projection / 75% market anchor.
     DEFAULT_W_BASE = 0.25  # Torvik Weight (Increased from 0.20)
     DEFAULT_W_SCHED = 0.00 # Disabled (Season Stats removal)
-    DEFAULT_W_KENPOM = 0.00 # KenPom Weight (Integrated into base/torvik or handled separately? V1 plan said 25% total. Let's stick effectively to Torvik dominance for simplicity)
-    # Wait, implementation uses multiple diffs. Let's set Base 0.25 and KenPom 0.0 for now to match V1 exactly.
-    # Actually V2 has separate KenPom logic. Keep KenPom small or 0 if V1 disabled it? V1 ENABLED KenPom at 10% in plan.
-    # Re-reading plan: "Shift from 20% to 25% (Torvik)". "Increase KenPom Weight: 10%".
-    DEFAULT_W_KENPOM = 0.10
+    # KenPom weight applied to the KenPom-vs-market delta.
+    # Requested: make KenPom 20% of the model blend.
+    DEFAULT_W_KENPOM = 0.20
     
     # Default Caps
     DEFAULT_CAP_SPREAD = 2.0
