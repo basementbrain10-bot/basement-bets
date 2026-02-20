@@ -166,7 +166,15 @@ def main():
         'samples': samples,
     }
 
-    print(json.dumps(out, indent=2, default=str))
+    txt = json.dumps(out, indent=2, default=str)
+    print(txt)
+
+    # also write an artifact file for Actions
+    try:
+        with open('backtest_output.json', 'w', encoding='utf-8') as f:
+            f.write(txt)
+    except Exception:
+        pass
 
 
 if __name__ == '__main__':
