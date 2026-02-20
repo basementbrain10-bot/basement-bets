@@ -93,9 +93,7 @@ def compute_board_health(league: str, days: int = 3) -> dict:
             (league, start_et, end_et),
         ).fetchone()
 
-        # Harden row types (some envs return tuples)
-        if rows is not None and not isinstance(rows, dict) and hasattr(rows, 'keys'):
-            rows = dict(rows)
+        # row access is handled by _get() below (works for tuple + DictRow)
 
         # Snapshot volume (recent)
         snap_rows = _exec(
@@ -123,19 +121,21 @@ def compute_board_health(league: str, days: int = 3) -> dict:
             pass
 
     def _get(row, key: str, idx: int, default=0):
+        """Safely read from dict-like OR tuple-like cursor rows."""
         if row is None:
             return default
 
-        # Dict-like rows (psycopg2 DictRow) support string indexing; tuples do not.
+        # 1) dict
+        if isinstance(row, dict):
+            return row.get(key, default)
+
+        # 2) try key access (DictRow supports this; tuples will throw TypeError)
         try:
-            if isinstance(row, dict):
-                return row.get(key, default)
-            if not isinstance(row, (tuple, list)) and hasattr(row, 'keys'):
-                return row[key]
+            return row[key]
         except Exception:
             pass
 
-        # Fallback: positional
+        # 3) positional fallback
         try:
             return row[idx]
         except Exception:
