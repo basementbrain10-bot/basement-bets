@@ -32,6 +32,10 @@ jobs:
 
       - name: Set up Python
         uses: actions/setup-python@v5
+        env:
+          # Some self-hosted runners still try /Users/runner unless these are set on the step.
+          RUNNER_TOOL_CACHE: /Users/basementai/actions-runner-kenpom/_toolcache
+          AGENT_TOOLSDIRECTORY: /Users/basementai/actions-runner-kenpom/_toolcache
         with:
           python-version: '3.11'
 
