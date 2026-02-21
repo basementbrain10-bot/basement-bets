@@ -251,7 +251,6 @@ export default function Bankroll({ financials, bets, formatCurrency }) {
           </div>
         </div>
       </div>
-      </div>
     </div>
   );
 }
