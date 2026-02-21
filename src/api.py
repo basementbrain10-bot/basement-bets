@@ -3606,6 +3606,18 @@ async def trigger_build_daily_top_picks(request: Request, date: Optional[str] = 
     except Exception as e:
         print(f"[JOB ERROR] build_daily_top_picks failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/build_daily_top_picks")
+async def admin_build_daily_top_picks(request: Request, date: Optional[str] = None, limit_games: int = 250, user: dict = Depends(get_current_user)):
+    """Admin/UI: trigger daily_top_picks build using normal app auth.
+
+    This exists so the frontend can manually rebuild today's picks without needing
+    the CRON_SECRET.
+    """
+    # Delegate to the same implementation as the cron job.
+    return await trigger_build_daily_top_picks(request=request, date=date, limit_games=limit_games, authorized=True)
+
     """Cron/manual: grade model_predictions using local game_results.
 
     Default mode is **fast/bounded** to avoid Vercel function timeouts.
