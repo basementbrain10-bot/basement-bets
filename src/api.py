@@ -3582,12 +3582,20 @@ async def trigger_build_daily_top_picks(request: Request, date: Optional[str] = 
             limit_games = 250
         limit_games = max(1, min(limit_games, 500))
 
+        import time
+
         eids = fetch_event_ids_for_date(date, limit_games=limit_games)
         model = NCAAMMarketFirstModelV2()
 
         ok = 0
         err = 0
+        t0 = time.time()
+        # Vercel serverless hard limit (configured) is ~60s. Keep some buffer.
+        time_budget_s = float(os.getenv('BUILD_DAILY_TOP_PICKS_TIME_BUDGET_S', '50'))
+
         for eid in eids:
+            if (time.time() - t0) > time_budget_s:
+                break
             try:
                 res = model.analyze(eid, relax_gates=False, persist=False)
                 upsert_pick(date, eid, res if isinstance(res, dict) else {})
@@ -3599,7 +3607,17 @@ async def trigger_build_daily_top_picks(request: Request, date: Optional[str] = 
                 except Exception:
                     pass
 
-        return {"status": "success", "date": date, "events": len(eids), "ok": ok, "err": err}
+        processed = ok + err
+        status = "success" if processed >= len(eids) else "partial"
+        return {
+            "status": status,
+            "date": date,
+            "events": len(eids),
+            "processed": processed,
+            "ok": ok,
+            "err": err,
+            "time_budget_s": time_budget_s,
+        }
 
     except Exception as e:
         print(f"[JOB ERROR] build_daily_top_picks failed: {e}")
