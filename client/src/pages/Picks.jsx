@@ -521,51 +521,48 @@ export default function Picks() {
           <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Top 6 recommended (2026 YTD) — win% by rank</div>
           <div className="text-[11px] text-slate-500">Avg: {top6RankPerformance?.avg !== null && top6RankPerformance?.avg !== undefined ? `${top6RankPerformance.avg.toFixed(1)}%` : '—'}</div>
         </div>
-        <div className="text-[11px] text-slate-500 mb-3">Ranked by EV/u.</div>
-
-        <div className="h-[150px] overflow-x-auto">
-          <div className="min-w-[300px] h-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 8, right: 64, left: 6, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis type="number" domain={[0, 100]} ticks={[0,25,50,75,100]} interval={0} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis type="category" dataKey="rank" interval={0} tick={{ fill: '#e2e8f0', fontSize: 11, fontWeight: 800 }} width={28} />
-                <Tooltip
-                  contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
-                  labelStyle={{ color: '#e2e8f0' }}
-                  formatter={(v, name) => (name === 'Win%' ? [`${Number(v).toFixed(1)}%`, 'Win%'] : [v, name])}
-                />
-                <ReferenceLine x={50} stroke="#94a3b8" strokeDasharray="4 4" />
-                <Bar dataKey="winRate" name="Win%" radius={[6, 6, 6, 6]}>
-                  {(top6RankPerformance.rows || []).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry._fill || '#60a5fa'} />
-                  ))}
-                  <LabelList dataKey="winRate" position="right" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} fill="#94a3b8" fontSize={11} />
-                  <LabelList
-                    dataKey="yesterday"
-                    position="right"
-                    content={(props) => {
-                      const { x, y, width, height, value, payload } = props;
-                      const v = String(value || '—');
-                      const fill = payload?._yFill || '#64748b';
-                      // Place a small pill to the right of the win% label
-                      const px = (x || 0) + (width || 0) + 38;
-                      const py = (y || 0) + (height || 0) / 2 - 8;
-                      return (
-                        <g>
-                          <rect x={px} y={py} rx={6} ry={6} width={22} height={16} fill={fill} opacity={0.20} />
-                          <text x={px + 11} y={py + 11.5} textAnchor="middle" fontSize={11} fontWeight={900} fill={fill}>
-                            {v}
-                          </text>
-                        </g>
-                      );
-                    }}
-                  />
-                  <LabelList dataKey="n" position="insideRight" formatter={(v) => (v ? `N=${v}` : '')} fill="#0b1220" fontSize={10} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="h-[220px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 8, right: 34, left: 10, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+              <XAxis type="number" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} interval={0} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+              <YAxis
+                type="category"
+                dataKey="rank"
+                interval={0}
+                width={58}
+                tick={(props) => {
+                  const { x, y, payload } = props;
+                  const label = String(payload?.value || '');
+                  const row = (top6RankPerformance.rows || []).find((r) => String(r.rank) === label);
+                  const v = String(row?.yesterday || '—');
+                  const fill = row?._yFill || '#64748b';
+                  const cx = (x || 0);
+                  const cy = (y || 0);
+                  return (
+                    <g>
+                      <text x={cx} y={cy + 4} textAnchor="start" fontSize={11} fontWeight={900} fill="#e2e8f0">{label}</text>
+                      <rect x={cx + 30} y={cy - 8} rx={6} ry={6} width={22} height={16} fill={fill} opacity={0.20} />
+                      <text x={cx + 41} y={cy + 3.5} textAnchor="middle" fontSize={11} fontWeight={900} fill={fill}>{v}</text>
+                    </g>
+                  );
+                }}
+              />
+              <Tooltip
+                contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
+                labelStyle={{ color: '#e2e8f0' }}
+                formatter={(v, name) => (name === 'Win%' ? [`${Number(v).toFixed(1)}%`, 'Win%'] : [v, name])}
+              />
+              <ReferenceLine x={50} stroke="#94a3b8" strokeDasharray="4 4" />
+              <Bar dataKey="winRate" name="Win%" radius={[6, 6, 6, 6]}>
+                {(top6RankPerformance.rows || []).map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry._fill || '#60a5fa'} />
+                ))}
+                <LabelList dataKey="winRate" position="right" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} fill="#94a3b8" fontSize={11} />
+                <LabelList dataKey="n" position="insideRight" formatter={(v) => (v ? `N=${v}` : '')} fill="#0b1220" fontSize={10} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
       </div>
