@@ -928,23 +928,6 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                     <div className="text-[11px] text-slate-400">Actionable picks for {selectedDate} (ET)</div>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={async () => {
-                                                            try {
-                                                                setLoading(true);
-                                                                await api.post('/api/admin/build_daily_top_picks', null, { params: { date: selectedDate, limit_games: 120 } });
-                                                            } catch (e) {
-                                                                console.warn('build_daily_top_picks failed', e);
-                                                                alert(e?.response?.data?.detail || e?.message || 'Failed to rebuild daily picks');
-                                                            } finally {
-                                                                await fetchSchedule();
-                                                            }
-                                                        }}
-                                                        className="px-2 py-1 rounded-lg text-xs font-bold border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
-                                                        title="Recompute daily top picks for this date"
-                                                    >
-                                                        Rebuild picks
-                                                    </button>
                                                     <div className="text-[11px] text-slate-500 font-mono">Top 5 overall (max 5 spread + max 5 O/U)</div>
                                                 </div>
                                             </div>
@@ -967,7 +950,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 </div>
                                             ) : (
                                                 <div className="text-slate-400 text-sm">
-                                                    No actionable picks are currently stored for this date. Hit <span className="font-bold text-emerald-200">Rebuild picks</span> to compute them.
+                                                    No actionable picks are currently stored for this date yet. This should populate automatically from the backend cron pipeline.
                                                 </div>
                                             )}
                                         </div>
