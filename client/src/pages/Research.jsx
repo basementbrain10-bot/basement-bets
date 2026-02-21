@@ -874,7 +874,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         return `${d}|${a}|${h}`;
                                     };
 
-                                    const actionable = getProcessedEdges()
+                                    const actionableAll = getProcessedEdges()
                                         .map((e) => {
                                             const direct = rowTopPicks?.[e.id] || null;
                                             const k = makeKey(e?.day_et, e?.away_team, e?.home_team);
@@ -894,7 +894,21 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                             return bEv - aEv;
                                         });
 
-                                    if (!actionable.length) return null;
+                                    if (!actionableAll.length) return null;
+
+                                    const spreadTop = actionableAll.filter((x) => String(x?.top?.bet_type || '').toUpperCase() === 'SPREAD').slice(0, 5);
+                                    const totalTop = actionableAll.filter((x) => String(x?.top?.bet_type || '').toUpperCase() === 'TOTAL').slice(0, 5);
+
+                                    const topOverall = [...spreadTop, ...totalTop]
+                                        .slice()
+                                        .sort((a, b) => {
+                                            const aEv = Number(String(a.top?.edge ?? '').replace('%', '').trim()) || 0;
+                                            const bEv = Number(String(b.top?.edge ?? '').replace('%', '').trim()) || 0;
+                                            return bEv - aEv;
+                                        })
+                                        .slice(0, 5);
+
+                                    const actionable = topOverall;
 
                                     const fmtPick = (edge, top) => {
                                         let pickText = String(top.selection || '').trim();
@@ -915,7 +929,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                     <div className="text-[10px] uppercase tracking-widest text-emerald-300/90 font-black">Today's edges</div>
                                                     <div className="text-[11px] text-slate-400">Actionable picks for {selectedDate} (ET)</div>
                                                 </div>
-                                                <div className="text-[11px] text-slate-500 font-mono">{actionable.length} plays</div>
+                                                <div className="text-[11px] text-slate-500 font-mono">Top 5 overall (max 5 spread + max 5 O/U)</div>
                                             </div>
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
