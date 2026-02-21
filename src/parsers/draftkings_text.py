@@ -140,6 +140,8 @@ class DraftKingsTextParser:
                 r'^View Picks',
                 r'^\w{3} \d{1,2}, \d{4}', # Date inside block
                 r'Parlay Boost',
+                r'^\+\d+%\s+BOOST$',
+                r'^BOOST$',
                 r'^T$', # Single T from scorecard
                 r'^Paste Bet Slip',
                 r'^Sportsbook',
@@ -147,7 +149,12 @@ class DraftKingsTextParser:
                 r'^Main Bankroll',
                 r'^Paste Slip Text',
                 r'^Review Details',
-                r'^DraftKings$'
+                r'^DraftKings$',
+                # DK live market labels
+                r'^Live\s+Spread$',
+                r'^Live\s+Total$',
+                r'^Live\s+Money\s*line$',
+                r'^Live\s+Moneyline$',
             ]
             
             cleaned_lines = []
@@ -292,6 +299,20 @@ class DraftKingsTextParser:
                     explicit_bet_type = 'Over/Under'
                 elif compact_mkt in ('MONEYLINE', 'ML'):
                     explicit_bet_type = 'ML'
+
+            # If DK paste is the newline format but lacks the word "Spread"/"Total" in the header,
+            # infer market type from the first line shape.
+            first_line = (lines[0] if lines else '').strip()
+            if not explicit_bet_type and first_line:
+                # Total like: OVER 165.5-115+113
+                if re.match(r'^(OVER|UNDER)\s+\d+(?:\.\d+)?', first_line, re.IGNORECASE):
+                    explicit_bet_type = 'Over/Under'
+                # Spread like: MICHIGAN STATE +9.5-110+118
+                elif re.match(r'^.+\s+[+-]\d+(?:\.\d+)?', first_line):
+                    explicit_bet_type = 'Spread'
+                # Moneyline like: XAVIER+114 or MICHIGAN+200+260
+                elif re.match(r'^.+[+-]\d{3,}(?:[+-]\d{3,})?$', first_line) and (' ' not in first_line.strip()):
+                    explicit_bet_type = 'ML'
             explicit_bet_type_keywords = {
                 "SPREAD": "Spread", "POINT SPREAD": "Spread",
                 "MONEYLINE": "ML", "MONEY LINE": "ML", "ML": "ML",
@@ -375,6 +396,8 @@ class DraftKingsTextParser:
                 r'^View Picks',
                 r'^\w{3} \d{1,2}, \d{4}',   # Date inside block
                 r'Parlay Boost',
+                r'^\+\d+%\s+BOOST$',
+                r'^BOOST$',
                 r'^T$',
                 r'^Paste Bet Slip',
                 r'^Sportsbook',
@@ -398,6 +421,11 @@ class DraftKingsTextParser:
                 r'^KING OF THE ENDZONE$',
                 r'^Finished$',
                 r'^Final$',
+                # DK live market labels (not selections)
+                r'^Live\s+Spread$',
+                r'^Live\s+Total$',
+                r'^Live\s+Money\s*line$',
+                r'^Live\s+Moneyline$',
                 r'Wager:',
                 r'Paid:',
                 r'Payout:',
@@ -445,13 +473,43 @@ class DraftKingsTextParser:
             
             # Build selection: combine team name with spread/total line
             selection = ""
-            if compact_team and (compact_line is not None) and (compact_mkt == 'SPREAD'):
+
+            # Prefer parsing from the DK first line for the common newline format:
+            #   UNDER 165.5-110
+            #   MICHIGAN STATE +9.5-110+118
+            #   XAVIER+114
+            fl = (lines[0] if lines else '').strip()
+            if fl:
+                # Total like: UNDER 165.5-115+113
+                m = re.match(r'^(OVER|UNDER)\s+(\d+(?:\.\d+)?)', fl, re.IGNORECASE)
+                if m:
+                    selection = f"{m.group(1).upper()} {m.group(2)}"
+
+                # Spread like: TEAM +9.5-110+118
+                if not selection:
+                    m = re.match(r'^(.+?)\s+([+-]\d+(?:\.\d+)?)', fl)
+                    if m:
+                        team = m.group(1).strip()
+                        line = m.group(2).strip()
+                        # avoid junk headers like SGP2 Picks
+                        if team and not re.search(r'\b(PICKS?|SGP|PARLAY)\b', team, re.IGNORECASE):
+                            selection = f"{team} {line}"
+
+                # ML like: XAVIER+114 or MICHIGAN+200+260
+                if not selection:
+                    m = re.match(r'^(.+?)([+-]\d{3,})(?:[+-]\d{3,})?$', fl)
+                    if m and (' ' not in fl):
+                        team = m.group(1).strip()
+                        if team and not re.search(r'\b(PICKS?|SGP|PARLAY)\b', team, re.IGNORECASE):
+                            selection = f"{team} ML"
+
+            if not selection and compact_team and (compact_line is not None) and (compact_mkt == 'SPREAD'):
                 # Spread team + line
                 selection = f"{compact_team} {compact_line:+.1f}".replace('+', '')
-            elif compact_team and (compact_line is not None) and (compact_mkt in ('TOTAL',)):
+            elif not selection and compact_team and (compact_line is not None) and (compact_mkt in ('TOTAL',)):
                 # Total: try to infer side from team text (rare); default to line only
                 selection = f"{compact_team} {compact_line:.1f}"
-            elif selection_parts:
+            elif not selection and selection_parts:
                 if len(selection_parts) >= 2 and re.match(r'^[+-]?\d+\.?\d*$', selection_parts[1]):
                     # Team + line (e.g. "Ohio State" + "-6.5" → "Ohio State -6.5")
                     selection = f"{selection_parts[0]} {selection_parts[1]}"
