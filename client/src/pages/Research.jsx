@@ -932,7 +932,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                         onClick={async () => {
                                                             try {
                                                                 setLoading(true);
-                                                                await api.post('/api/admin/build_daily_top_picks', null, { params: { date: selectedDate, limit_games: 250 } });
+                                                                await api.post('/api/admin/build_daily_top_picks', null, { params: { date: selectedDate, limit_games: 120 } });
                                                             } catch (e) {
                                                                 console.warn('build_daily_top_picks failed', e);
                                                                 alert(e?.response?.data?.detail || e?.message || 'Failed to rebuild daily picks');
