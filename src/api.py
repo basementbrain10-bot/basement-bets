@@ -1961,13 +1961,25 @@ async def get_model_health(date: Optional[str] = None, league: Optional[str] = N
 async def verify_cron_secret(request: Request):
     """Verifies Authorization header matches CRON_SECRET.
 
-    If CRON_SECRET is not set, we return True (no-op) and rely on the global
-    Basement key middleware for protection.
+    Vercel Cron behavior:
+    - Vercel sends an `x-vercel-cron: 1` header on cron invocations.
+    - We allow those calls (server-side scheduled jobs) even if CRON_SECRET isn't set,
+      because they won't have the Basement password header.
+
+    If CRON_SECRET *is* set, we still require it for non-Vercel-cron callers.
     """
     from src.config import settings
+
+    # Allow Vercel cron invocations without additional auth.
+    try:
+        if str(request.headers.get('x-vercel-cron') or '').strip() == '1':
+            return True
+    except Exception:
+        pass
+
     expected = settings.CRON_SECRET
     if not expected:
-        # Allow when CRON_SECRET isn't configured (Basement-key gate still applies).
+        # No cron secret configured; allow (Basement-key middleware may still gate).
         return True
 
     auth = request.headers.get("Authorization")
