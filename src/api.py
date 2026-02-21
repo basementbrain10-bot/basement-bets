@@ -3590,15 +3590,31 @@ async def trigger_prediction_grading(request: Request, fast: bool = True, backfi
 
 
 @app.api_route("/api/jobs/build_daily_top_picks", methods=["GET", "POST"])
-async def trigger_build_daily_top_picks(request: Request, date: Optional[str] = None, limit_games: int = 250, authorized: bool = Depends(verify_cron_secret)):
+async def trigger_build_daily_top_picks(
+    request: Request,
+    date: Optional[str] = None,
+    limit_games: int = 250,
+    offset: int = 0,
+    max_events: int = 15,
+    authorized: bool = Depends(verify_cron_secret),
+):
     """Cron/manual: compute and upsert daily_top_picks for NCAAM.
 
     This powers /api/ncaam/top-picks fast-path (cached) and keeps the UI from
     needing to run expensive on-demand analysis.
 
-    NOTE (serverless):
-    Avoid holding long-lived DB connections/locks here (JobContext) because Vercel
-    can drop idle pooled connections, leading to "connection already closed".
+    Serverless note:
+    This endpoint must be **chunkable**. Vercel functions can time out; instead
+    of processing the full slate, callers should run multiple small batches.
+
+    Query params:
+      - date: YYYY-MM-DD (ET)
+      - limit_games: max slate size (<=500)
+      - offset: starting index into the slate
+      - max_events: max games to process this invocation
+
+    Returns:
+      { status, date, events_total, offset, processed, ok, err, next_offset, done }
     """
 
     # Resolve date_et in DB time so it matches backend.
@@ -3615,29 +3631,37 @@ async def trigger_build_daily_top_picks(request: Request, date: Optional[str] = 
         from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
 
         ensure_table()
+
+        # sanitize params
         try:
             limit_games = int(limit_games)
         except Exception:
             limit_games = 250
         limit_games = max(1, min(limit_games, 500))
 
-        import time
+        try:
+            offset = int(offset)
+        except Exception:
+            offset = 0
+        offset = max(0, offset)
 
-        eids = fetch_event_ids_for_date(date, limit_games=limit_games)
+        try:
+            max_events = int(max_events)
+        except Exception:
+            max_events = 15
+        max_events = max(1, min(max_events, 50))
+
+        eids_all = fetch_event_ids_for_date(date, limit_games=limit_games)
+        eids = eids_all[offset: offset + max_events]
+
         model = NCAAMMarketFirstModelV2()
-
         ok = 0
         err = 0
-        t0 = time.time()
-        # Vercel serverless hard limit (configured) is ~60s. Keep some buffer.
-        time_budget_s = float(os.getenv('BUILD_DAILY_TOP_PICKS_TIME_BUDGET_S', '50'))
 
         # Batch DB writes to reduce Neon egress.
         from src.database import get_db_connection
         with get_db_connection() as conn:
             for eid in eids:
-                if (time.time() - t0) > time_budget_s:
-                    break
                 try:
                     res = model.analyze(eid, relax_gates=False, persist=False)
                     upsert_pick(date, eid, res if isinstance(res, dict) else {}, conn=conn)
@@ -3648,19 +3672,24 @@ async def trigger_build_daily_top_picks(request: Request, date: Optional[str] = 
                         upsert_pick(date, eid, {"recommendations": [], "error": str(e), "model_version": getattr(model, 'VERSION', None), "block_reason": str(e)}, conn=conn)
                     except Exception:
                         pass
-
             conn.commit()
 
         processed = ok + err
-        status = "success" if processed >= len(eids) else "partial"
+        next_offset = offset + processed
+        done = next_offset >= len(eids_all)
+
+        status = "success" if done else "partial"
         return {
             "status": status,
             "date": date,
-            "events": len(eids),
+            "events_total": len(eids_all),
+            "offset": offset,
+            "max_events": max_events,
             "processed": processed,
             "ok": ok,
             "err": err,
-            "time_budget_s": time_budget_s,
+            "next_offset": next_offset,
+            "done": done,
         }
 
     except Exception as e:
