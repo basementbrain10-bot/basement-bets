@@ -924,12 +924,31 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
                                     return (
                                         <div className="mb-6 p-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/5">
-                                            <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center justify-between mb-3 gap-3">
                                                 <div>
                                                     <div className="text-[10px] uppercase tracking-widest text-emerald-300/90 font-black">Today's edges</div>
                                                     <div className="text-[11px] text-slate-400">Actionable picks for {selectedDate} (ET)</div>
                                                 </div>
-                                                <div className="text-[11px] text-slate-500 font-mono">Top 5 overall (max 5 spread + max 5 O/U)</div>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={async () => {
+                                                            try {
+                                                                setLoading(true);
+                                                                await api.post('/api/admin/build_daily_top_picks', null, { params: { date: selectedDate, limit_games: 250 } });
+                                                            } catch (e) {
+                                                                console.warn('build_daily_top_picks failed', e);
+                                                                alert(e?.response?.data?.detail || e?.message || 'Failed to rebuild daily picks');
+                                                            } finally {
+                                                                await fetchSchedule();
+                                                            }
+                                                        }}
+                                                        className="px-2 py-1 rounded-lg text-xs font-bold border border-emerald-500/25 bg-emerald-500/10 hover:bg-emerald-500/15 text-emerald-200"
+                                                        title="Recompute daily top picks for this date"
+                                                    >
+                                                        Rebuild picks
+                                                    </button>
+                                                    <div className="text-[11px] text-slate-500 font-mono">Top 5 overall (max 5 spread + max 5 O/U)</div>
+                                                </div>
                                             </div>
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
