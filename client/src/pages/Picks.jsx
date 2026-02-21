@@ -393,11 +393,7 @@ export default function Picks() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-white">Model Performance</h1>
-          <p className="text-slate-400 text-sm mt-1">All recommended picks (all leagues) • windows based on recommendation date (ET).</p>
-        </div>
+      <div className="flex items-center justify-end">
         <button
           onClick={load}
           className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-bold flex items-center gap-2"
