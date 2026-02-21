@@ -2538,7 +2538,9 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
             if inm and inm.strip() == etag:
                 return JSONResponse(status_code=304, content=None, headers={'ETag': etag})
             return JSONResponse(content=data, headers={'ETag': etag, 'Cache-Control': f"public, max-age={int(os.getenv('TOP_PICKS_TTL_SECONDS', '90'))}"})
-    except Exception:
+    except Exception as e:
+        # Don't fail the endpoint if the cache query fails, but do log so we can debug.
+        print(f"[top-picks] cached daily_top_picks query failed: {e}")
         pass
 
     # If we don't have precomputed daily_top_picks and there are no stored picks,
@@ -2585,6 +2587,12 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
             max_compute_i = 20
         max_compute_i = max(0, min(max_compute_i, 250))
 
+        import time
+        t0 = time.time()
+        # Keep on-demand top-picks computation bounded for serverless.
+        time_budget_s = float(os.getenv('TOP_PICKS_TIME_BUDGET_S', '15'))
+        target_picks = int(os.getenv('TOP_PICKS_TARGET_PICKS', '5'))
+
         for eid in event_ids:
             stats['scanned'] += 1
             try:
@@ -2610,7 +2618,16 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
                     continue
 
                 # Optional slow path: compute missing picks on-demand.
+                # Stop early if we've found enough actionable picks.
+                if target_picks and int(stats.get('computed_with_pick') or 0) >= int(target_picks):
+                    continue
+
+                # Hard cap on number of analyses.
                 if max_compute_i and stats['computed_attempted'] >= max_compute_i:
+                    continue
+
+                # Time budget cap (avoid 504s/timeouts).
+                if (time.time() - t0) > time_budget_s:
                     continue
 
                 stats['computed_attempted'] += 1
