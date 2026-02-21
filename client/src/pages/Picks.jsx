@@ -393,21 +393,11 @@ export default function Picks() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end">
-        <button
-          onClick={load}
-          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-bold flex items-center gap-2"
-        >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
-      </div>
-
       {err && <div className="p-3 rounded-lg bg-red-900/20 border border-red-800 text-red-200 text-sm">{err}</div>}
 
       {!loading && !err && (!history || history.length === 0) && (
         <div className="p-4 rounded-lg bg-slate-900/40 border border-slate-800 text-slate-400 text-sm">
-          No model-performance history returned yet. If you expect data here, try Refresh. If it still shows empty, it usually means the backend isn’t returning any stored recommended picks for your user.
+          No model-performance history returned yet. If it still shows empty, it usually means the backend isn’t returning any stored recommended picks for your user.
         </div>
       )}
 
