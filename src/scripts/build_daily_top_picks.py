@@ -89,7 +89,7 @@ def fetch_event_ids_for_date(date_et: str, limit_games: int = 250):
         return [r['id'] if isinstance(r, dict) else r[0] for r in rows]
 
 
-def upsert_pick(date_et: str, event_id: str, res: dict):
+def upsert_pick(date_et: str, event_id: str, res: dict, conn=None):
     rec = None
     try:
         rec = (res.get('recommendations') or [None])[0]
@@ -131,9 +131,12 @@ def upsert_pick(date_et: str, event_id: str, res: dict):
         "ctx": json.dumps(ctx) if ctx is not None else None,
     }
 
-    with get_db_connection() as conn:
+    if conn is None:
+        with get_db_connection() as conn2:
+            _exec(conn2, sql, payload)
+            conn2.commit()
+    else:
         _exec(conn, sql, payload)
-        conn.commit()
 
 
 def main():
@@ -162,19 +165,24 @@ def main():
 
     ok = 0
     err = 0
-    for eid in event_ids:
-        try:
-            # Use strict gates for cached picks so we don't surface negative/no-edge plays.
-            res = model.analyze(eid, relax_gates=False, persist=False)
-            upsert_pick(date_et, eid, res if isinstance(res, dict) else {})
-            ok += 1
-        except Exception as e:
-            err += 1
-            # still upsert a no-bet row with error reason
+
+    # Batch DB writes to reduce Neon egress: single connection + single commit.
+    with get_db_connection() as conn:
+        for eid in event_ids:
             try:
-                upsert_pick(date_et, eid, {"recommendations": [], "error": str(e), "model_version": getattr(model, 'VERSION', None), "block_reason": str(e)})
-            except Exception:
-                pass
+                # Use strict gates for cached picks so we don't surface negative/no-edge plays.
+                res = model.analyze(eid, relax_gates=False, persist=False)
+                upsert_pick(date_et, eid, res if isinstance(res, dict) else {}, conn=conn)
+                ok += 1
+            except Exception as e:
+                err += 1
+                # still upsert a no-bet row with error reason
+                try:
+                    upsert_pick(date_et, eid, {"recommendations": [], "error": str(e), "model_version": getattr(model, 'VERSION', None), "block_reason": str(e)}, conn=conn)
+                except Exception:
+                    pass
+
+        conn.commit()
 
     print(f"done ok={ok} err={err}")
 

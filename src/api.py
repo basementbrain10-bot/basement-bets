@@ -2491,14 +2491,17 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
     # Try cached daily picks first.
     try:
         with get_db_connection() as conn:
+            # Limit egress: only pull cached picks for the event_ids in the requested window.
             cached = _exec(
                 conn,
                 """
                 SELECT event_id, computed_at, is_actionable, reason, rec_json
                 FROM daily_top_picks
-                WHERE date_et = %s AND league='NCAAM'
+                WHERE date_et = %s
+                  AND league='NCAAM'
+                  AND event_id = ANY(%s)
                 """,
-                (date,),
+                (date, list(event_ids)),
             ).fetchall()
         if cached:
             picks = {}
@@ -3610,19 +3613,24 @@ async def trigger_build_daily_top_picks(request: Request, date: Optional[str] = 
         # Vercel serverless hard limit (configured) is ~60s. Keep some buffer.
         time_budget_s = float(os.getenv('BUILD_DAILY_TOP_PICKS_TIME_BUDGET_S', '50'))
 
-        for eid in eids:
-            if (time.time() - t0) > time_budget_s:
-                break
-            try:
-                res = model.analyze(eid, relax_gates=False, persist=False)
-                upsert_pick(date, eid, res if isinstance(res, dict) else {})
-                ok += 1
-            except Exception as e:
-                err += 1
+        # Batch DB writes to reduce Neon egress.
+        from src.database import get_db_connection
+        with get_db_connection() as conn:
+            for eid in eids:
+                if (time.time() - t0) > time_budget_s:
+                    break
                 try:
-                    upsert_pick(date, eid, {"recommendations": [], "error": str(e), "model_version": getattr(model, 'VERSION', None), "block_reason": str(e)})
-                except Exception:
-                    pass
+                    res = model.analyze(eid, relax_gates=False, persist=False)
+                    upsert_pick(date, eid, res if isinstance(res, dict) else {}, conn=conn)
+                    ok += 1
+                except Exception as e:
+                    err += 1
+                    try:
+                        upsert_pick(date, eid, {"recommendations": [], "error": str(e), "model_version": getattr(model, 'VERSION', None), "block_reason": str(e)}, conn=conn)
+                    except Exception:
+                        pass
+
+            conn.commit()
 
         processed = ok + err
         status = "success" if processed >= len(eids) else "partial"
