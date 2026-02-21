@@ -561,9 +561,6 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                                         </div>
                                     </div>
 
-                                    <div className="mt-2 text-[10px] text-gray-500">
-                                        Primary + Secondary = current balance
-                                    </div>
                                 </div>
                             );
                         };
