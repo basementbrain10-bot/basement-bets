@@ -2,13 +2,14 @@ import React, { useMemo, useState } from 'react';
 import { DollarSign } from 'lucide-react';
 import {
   ResponsiveContainer,
-  BarChart,
-  Bar,
+  ScatterChart,
+  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
+  ZAxis,
 } from 'recharts';
 
 export default function Bankroll({ financials, bets, formatCurrency }) {
@@ -202,23 +203,41 @@ export default function Bankroll({ financials, bets, formatCurrency }) {
           </div>
           <div className="h-[240px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={performanceBySport} margin={{ top: 10, right: 18, left: 6, bottom: 10 }}>
+              <ScatterChart margin={{ top: 10, right: 18, left: 6, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis dataKey="key" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <XAxis
+                  type="number"
+                  dataKey="winPct"
+                  name="Win%"
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  domain={[0, 100]}
+                  tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="roiPct"
+                  name="ROI%"
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
+                />
+                <ZAxis type="number" dataKey="n" range={[60, 240]} name="Bets" />
                 <Tooltip
+                  cursor={{ strokeDasharray: '3 3' }}
                   contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
                   labelStyle={{ color: '#e2e8f0' }}
-                  formatter={(v, name, props) => {
+                  formatter={(v, name) => {
                     if (name === 'Win%') return [`${Number(v).toFixed(1)}%`, 'Win%'];
                     if (name === 'ROI%') return [`${Number(v).toFixed(1)}%`, 'ROI%'];
+                    if (name === 'Bets') return [v, 'Bets'];
                     return [v, name];
+                  }}
+                  labelFormatter={(_, payload) => {
+                    try { return payload?.[0]?.payload?.key || ''; } catch (e) { return ''; }
                   }}
                 />
                 <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 11 }} />
-                <Bar dataKey="winPct" name="Win%" fill="#60a5fa" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="roiPct" name="ROI%" fill="#34d399" radius={[6, 6, 0, 0]} />
-              </BarChart>
+                <Scatter name="Sport" data={performanceBySport} fill="#60a5fa" />
+              </ScatterChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -230,23 +249,41 @@ export default function Bankroll({ financials, bets, formatCurrency }) {
           </div>
           <div className="h-[240px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={performanceByBetType} margin={{ top: 10, right: 18, left: 6, bottom: 10 }}>
+              <ScatterChart margin={{ top: 10, right: 18, left: 6, bottom: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis dataKey="key" tick={{ fill: '#94a3b8', fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={50} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <XAxis
+                  type="number"
+                  dataKey="winPct"
+                  name="Win%"
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  domain={[0, 100]}
+                  tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="roiPct"
+                  name="ROI%"
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
+                />
+                <ZAxis type="number" dataKey="n" range={[60, 240]} name="Bets" />
                 <Tooltip
+                  cursor={{ strokeDasharray: '3 3' }}
                   contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
                   labelStyle={{ color: '#e2e8f0' }}
                   formatter={(v, name) => {
                     if (name === 'Win%') return [`${Number(v).toFixed(1)}%`, 'Win%'];
                     if (name === 'ROI%') return [`${Number(v).toFixed(1)}%`, 'ROI%'];
+                    if (name === 'Bets') return [v, 'Bets'];
                     return [v, name];
+                  }}
+                  labelFormatter={(_, payload) => {
+                    try { return payload?.[0]?.payload?.key || ''; } catch (e) { return ''; }
                   }}
                 />
                 <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 11 }} />
-                <Bar dataKey="winPct" name="Win%" fill="#60a5fa" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="roiPct" name="ROI%" fill="#34d399" radius={[6, 6, 0, 0]} />
-              </BarChart>
+                <Scatter name="Bet Type" data={performanceByBetType} fill="#34d399" />
+              </ScatterChart>
             </ResponsiveContainer>
           </div>
         </div>
