@@ -460,8 +460,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
         else:
             raw_snaps = market_snapshot.get('_raw_snaps', [])
 
-        # VALIDATION: Abort if Critical Market Data is Missing
-        if market_snapshot.get('spread_home') is None or market_snapshot.get('total') is None:
+        # VALIDATION: If *both* spread and total are missing, we can't do anything.
+        # Otherwise, proceed and only generate recommendations for markets with valid lines.
+        has_spread = market_snapshot.get('spread_home') is not None
+        has_total = market_snapshot.get('total') is not None
+
+        if (not has_spread) and (not has_total):
             return {
                 "headline": "Market Data Waiting",
                 "recommendation": "No Line",
@@ -469,8 +473,10 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "is_actionable": False
             }
 
-        mu_market_spread = float(market_snapshot['spread_home'])
-        mu_market_total = float(market_snapshot['total'])
+        # If one market is missing, we still compute the other market.
+        # Use sane defaults to keep the math stable; _generate_recommendations will skip missing markets.
+        mu_market_spread = float(market_snapshot['spread_home']) if has_spread else 0.0
+        mu_market_total = float(market_snapshot['total']) if has_total else 145.0
 
         # 3. External Projections & Signals
         # Torvik - PRIMARY SIGNAL
