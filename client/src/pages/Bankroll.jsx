@@ -1,7 +1,17 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { DollarSign } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from 'recharts';
 
-export default function Bankroll({ financials, formatCurrency }) {
+export default function Bankroll({ financials, bets, formatCurrency }) {
   const [expandedBook, setExpandedBook] = useState(null);
 
   const normalizedFinancials = financials || {};
@@ -24,6 +34,75 @@ export default function Bankroll({ financials, formatCurrency }) {
 
   const providers = ['DraftKings', 'FanDuel', 'Other'];
   const fmt = (x) => (formatCurrency ? formatCurrency(Number(x || 0)) : String(Number(x || 0)));
+  const fmtPct = (x) => `${Number(x || 0).toFixed(1)}%`;
+
+  const settledBets = useMemo(() => {
+    const xs = Array.isArray(bets) ? bets : [];
+    return xs.filter((b) => {
+      const st = String(b?.status || '').toUpperCase().trim();
+      return st === 'WON' || st === 'LOST' || st === 'PUSH';
+    });
+  }, [bets]);
+
+  const performanceBySport = useMemo(() => {
+    const agg = {};
+    for (const b of settledBets) {
+      const k = String(b?.sport || 'Unknown');
+      agg[k] = agg[k] || { key: k, wins: 0, losses: 0, pushes: 0, wager: 0, profit: 0 };
+      const st = String(b?.status || '').toUpperCase().trim();
+      if (st === 'WON') agg[k].wins += 1;
+      else if (st === 'LOST') agg[k].losses += 1;
+      else if (st === 'PUSH') agg[k].pushes += 1;
+      agg[k].wager += Number(b?.wager || 0) || 0;
+      agg[k].profit += Number(b?.profit || 0) || 0;
+    }
+
+    return Object.values(agg)
+      .map((r) => {
+        const decided = r.wins + r.losses;
+        const winPct = decided ? (r.wins / decided) * 100 : 0;
+        const roiPct = r.wager ? (r.profit / r.wager) * 100 : 0;
+        return {
+          key: r.key,
+          winPct: Number(winPct.toFixed(1)),
+          roiPct: Number(roiPct.toFixed(1)),
+          n: decided,
+        };
+      })
+      .filter((r) => r.n > 0)
+      .sort((a, b) => b.roiPct - a.roiPct)
+      .slice(0, 10);
+  }, [settledBets]);
+
+  const performanceByBetType = useMemo(() => {
+    const agg = {};
+    for (const b of settledBets) {
+      const k = String(b?.bet_type || 'Unknown');
+      agg[k] = agg[k] || { key: k, wins: 0, losses: 0, pushes: 0, wager: 0, profit: 0 };
+      const st = String(b?.status || '').toUpperCase().trim();
+      if (st === 'WON') agg[k].wins += 1;
+      else if (st === 'LOST') agg[k].losses += 1;
+      else if (st === 'PUSH') agg[k].pushes += 1;
+      agg[k].wager += Number(b?.wager || 0) || 0;
+      agg[k].profit += Number(b?.profit || 0) || 0;
+    }
+
+    return Object.values(agg)
+      .map((r) => {
+        const decided = r.wins + r.losses;
+        const winPct = decided ? (r.wins / decided) * 100 : 0;
+        const roiPct = r.wager ? (r.profit / r.wager) * 100 : 0;
+        return {
+          key: r.key,
+          winPct: Number(winPct.toFixed(1)),
+          roiPct: Number(roiPct.toFixed(1)),
+          n: decided,
+        };
+      })
+      .filter((r) => r.n > 0)
+      .sort((a, b) => b.roiPct - a.roiPct)
+      .slice(0, 10);
+  }, [settledBets]);
 
   const topRows = providers
     .map((p) => {
@@ -113,6 +192,65 @@ export default function Bankroll({ financials, formatCurrency }) {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-end justify-between gap-3 mb-2">
+            <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Win% + ROI by Sport</div>
+            <div className="text-[11px] text-slate-500">Settled bets only</div>
+          </div>
+          <div className="h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={performanceBySport} margin={{ top: 10, right: 18, left: 6, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                <XAxis dataKey="key" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                  formatter={(v, name, props) => {
+                    if (name === 'Win%') return [`${Number(v).toFixed(1)}%`, 'Win%'];
+                    if (name === 'ROI%') return [`${Number(v).toFixed(1)}%`, 'ROI%'];
+                    return [v, name];
+                  }}
+                />
+                <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 11 }} />
+                <Bar dataKey="winPct" name="Win%" fill="#60a5fa" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="roiPct" name="ROI%" fill="#34d399" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-end justify-between gap-3 mb-2">
+            <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Win% + ROI by Bet Type</div>
+            <div className="text-[11px] text-slate-500">Settled bets only</div>
+          </div>
+          <div className="h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={performanceByBetType} margin={{ top: 10, right: 18, left: 6, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                <XAxis dataKey="key" tick={{ fill: '#94a3b8', fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={50} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <Tooltip
+                  contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                  formatter={(v, name) => {
+                    if (name === 'Win%') return [`${Number(v).toFixed(1)}%`, 'Win%'];
+                    if (name === 'ROI%') return [`${Number(v).toFixed(1)}%`, 'ROI%'];
+                    return [v, name];
+                  }}
+                />
+                <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 11 }} />
+                <Bar dataKey="winPct" name="Win%" fill="#60a5fa" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="roiPct" name="ROI%" fill="#34d399" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
       </div>
     </div>
   );

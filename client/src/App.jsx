@@ -568,7 +568,7 @@ function App() {
                     ) : page === 'model' ? (
                         <Picks />
                     ) : page === 'bankroll' ? (
-                        <Bankroll financials={financials} formatCurrency={formatCurrency} />
+                        <Bankroll financials={financials} bets={bets} formatCurrency={formatCurrency} />
                     ) : (
                         <>
                             {actualsTab === 'transactions' ? (
