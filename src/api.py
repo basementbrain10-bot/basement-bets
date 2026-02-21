@@ -66,6 +66,13 @@ async def check_access_key(request: Request, call_next):
          return await call_next(request)
          
     if request.url.path.startswith("/api"):
+        # Allow Vercel Cron invocations for job endpoints (cron requests don't carry X-BASEMENT-KEY).
+        try:
+            if str(request.headers.get('x-vercel-cron') or '').strip() == '1' and request.url.path.startswith('/api/jobs/'):
+                return await call_next(request)
+        except Exception:
+            pass
+
         # Allow public diagnostic endpoints + read-only UI endpoints
         public_paths = {
             "/api/version",
