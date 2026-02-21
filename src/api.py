@@ -3556,8 +3556,11 @@ async def trigger_build_daily_top_picks(request: Request, date: Optional[str] = 
 
     This powers /api/ncaam/top-picks fast-path (cached) and keeps the UI from
     needing to run expensive on-demand analysis.
+
+    NOTE (serverless):
+    Avoid holding long-lived DB connections/locks here (JobContext) because Vercel
+    can drop idle pooled connections, leading to "connection already closed".
     """
-    from src.services.job_service import JobContext, JobLockedException
 
     # Resolve date_et in DB time so it matches backend.
     try:
@@ -3568,41 +3571,36 @@ async def trigger_build_daily_top_picks(request: Request, date: Optional[str] = 
     except Exception:
         pass
 
-    job_key = f"build_daily_top_picks:{date or 'today'}"
-
     try:
-        with JobContext(job_key) as ctx:
-            from src.scripts.build_daily_top_picks import ensure_table, fetch_event_ids_for_date, upsert_pick
-            from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
+        from src.scripts.build_daily_top_picks import ensure_table, fetch_event_ids_for_date, upsert_pick
+        from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
 
-            ensure_table()
+        ensure_table()
+        try:
+            limit_games = int(limit_games)
+        except Exception:
+            limit_games = 250
+        limit_games = max(1, min(limit_games, 500))
+
+        eids = fetch_event_ids_for_date(date, limit_games=limit_games)
+        model = NCAAMMarketFirstModelV2()
+
+        ok = 0
+        err = 0
+        for eid in eids:
             try:
-                limit_games = int(limit_games)
-            except Exception:
-                limit_games = 250
-            limit_games = max(1, min(limit_games, 500))
-
-            eids = fetch_event_ids_for_date(date, limit_games=limit_games)
-            model = NCAAMMarketFirstModelV2()
-
-            ok = 0
-            err = 0
-            for eid in eids:
+                res = model.analyze(eid, relax_gates=False, persist=False)
+                upsert_pick(date, eid, res if isinstance(res, dict) else {})
+                ok += 1
+            except Exception as e:
+                err += 1
                 try:
-                    res = model.analyze(eid, relax_gates=False, persist=False)
-                    upsert_pick(date, eid, res if isinstance(res, dict) else {})
-                    ok += 1
-                except Exception as e:
-                    err += 1
-                    try:
-                        upsert_pick(date, eid, {"recommendations": [], "error": str(e), "model_version": getattr(model, 'VERSION', None), "block_reason": str(e)})
-                    except Exception:
-                        pass
+                    upsert_pick(date, eid, {"recommendations": [], "error": str(e), "model_version": getattr(model, 'VERSION', None), "block_reason": str(e)})
+                except Exception:
+                    pass
 
-            return {"status": "success", "date": date, "events": len(eids), "ok": ok, "err": err}
+        return {"status": "success", "date": date, "events": len(eids), "ok": ok, "err": err}
 
-    except JobLockedException:
-        return {"status": "skipped", "reason": "Locked/DB unavailable"}
     except Exception as e:
         print(f"[JOB ERROR] build_daily_top_picks failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
