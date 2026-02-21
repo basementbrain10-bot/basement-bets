@@ -311,7 +311,7 @@ class DraftKingsTextParser:
                 elif re.match(r'^.+\s+[+-]\d+(?:\.\d+)?', first_line):
                     explicit_bet_type = 'Spread'
                 # Moneyline like: XAVIER+114 or MICHIGAN+200+260
-                elif re.match(r'^.+[+-]\d{3,}(?:[+-]\d{3,})?$', first_line) and (' ' not in first_line.strip()):
+                elif re.match(r'^.+[+-]\d{3,}(?:[+-]\d{3,})?$', first_line):
                     explicit_bet_type = 'ML'
             explicit_bet_type_keywords = {
                 "SPREAD": "Spread", "POINT SPREAD": "Spread",
@@ -495,11 +495,11 @@ class DraftKingsTextParser:
                         if team and not re.search(r'\b(PICKS?|SGP|PARLAY)\b', team, re.IGNORECASE):
                             selection = f"{team} {line}"
 
-                # ML like: XAVIER+114 or MICHIGAN+200+260
+                # ML like: SAINT LOUIS+105 or MICHIGAN+200+260
                 if not selection:
-                    m = re.match(r'^(.+?)([+-]\d{3,})(?:[+-]\d{3,})?$', fl)
-                    if m and (' ' not in fl):
-                        team = m.group(1).strip()
+                    m = re.match(r'^(?P<team>.+?)(?P<odds>[+-]\d{3,})(?:[+-]\d{3,})?$', fl)
+                    if m:
+                        team = m.group('team').strip()
                         if team and not re.search(r'\b(PICKS?|SGP|PARLAY)\b', team, re.IGNORECASE):
                             selection = f"{team} ML"
 
@@ -517,6 +517,36 @@ class DraftKingsTextParser:
                     selection = selection_parts[0]
             
             # Construct Matchup from detected Teams if implicit
+            if not matchup:
+                # Prefer last two explicit team lines (DK often lists away then home as ALLCAPS lines)
+                try:
+                    caps = []
+                    noise_caps = {
+                        'WAGER', 'PAID', 'PAYOUT', 'FINAL', 'SCORE', 'LIVE', 'TOTAL', 'SPREAD',
+                        'WON', 'LOST', 'CASHED', 'OUT', 'BOOST', 'UNDER', 'OVER', 'VIEW', 'PICKS',
+                        'OT'
+                    }
+                    for ln in lines:
+                        t = str(ln or '').strip()
+                        if not t:
+                            continue
+                        if re.search(r'(Wager:|Paid:|Payout:)', t, re.IGNORECASE):
+                            continue
+                        if re.fullmatch(r"[A-Z][A-Z\s\.'\-&]+", t) and len(t) >= 3:
+                            if t.upper() in noise_caps:
+                                continue
+                            if re.fullmatch(r"\+\d+%\s+BOOST", t.upper()):
+                                continue
+                            caps.append(t)
+                    uniq=[]
+                    for t in caps:
+                        if t not in uniq:
+                            uniq.append(t)
+                    if len(uniq) >= 2:
+                        matchup = f"{uniq[-2].title()} @ {uniq[-1].title()}"
+                except Exception:
+                    pass
+
             if not matchup and len(teams_found) >= 2:
                 # Use @ convention (away @ home) when we only have two teams; DK score tables often list away then home.
                 matchup = f"{teams_found[0]} @ {teams_found[1]}"
