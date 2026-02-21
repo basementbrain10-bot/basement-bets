@@ -39,6 +39,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
     // Quick-pick state (board row badges)
     const [rowTopPicks, setRowTopPicks] = useState({}); // event_id -> { rec, analyzedAt }
+    const [rowTopPicksByKey, setRowTopPicksByKey] = useState({}); // matchup key -> { rec, analyzedAt }
     const [topPicksError, setTopPicksError] = useState(null);
     const [dataHealth, setDataHealth] = useState([]);
     const [topPicksStats, setTopPicksStats] = useState({ games: 0, withPick: 0, server: null, errors: [], actionable: 0, noBet: 0 });
@@ -113,16 +114,38 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                 const tp = topPicksRes?.data?.picks || null;
                 if (tp && typeof tp === 'object') {
                     const mapped = {};
+                    const mappedByKey = {};
+
+                    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
+                    const makeKey = (dayEt, away, home) => {
+                        const d = String(dayEt || '').slice(0, 10);
+                        const a = norm(away);
+                        const h = norm(home);
+                        if (!d || !a || !h) return null;
+                        return `${d}|${a}|${h}`;
+                    };
+
                     Object.keys(tp).forEach((eid) => {
-                        mapped[eid] = {
+                        const recObj = {
                             rec: tp[eid]?.rec,
                             analyzedAt: tp[eid]?.analyzed_at,
                             isActionable: tp[eid]?.is_actionable,
                             reason: tp[eid]?.reason,
                             source: tp[eid]?.source,
+                            event: tp[eid]?.event,
                         };
+                        mapped[eid] = recObj;
+
+                        // Cross-provider dedupe: board event ids can differ (espn vs action).
+                        // Build a fallback map keyed by day_et + away/home names.
+                        const ev = tp[eid]?.event || {};
+                        const k = makeKey(ev?.day_et, ev?.away_team, ev?.home_team);
+                        if (k && !mappedByKey[k]) mappedByKey[k] = recObj;
                     });
+
                     setRowTopPicks(mapped);
+                    setRowTopPicksByKey(mappedByKey);
+
                     const nGames = Object.keys(tp).length;
                     const vals = Object.values(tp);
                     const nWith = vals.filter((x) => x && x.rec).length;
@@ -143,6 +166,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                     }
                 } else {
                     setRowTopPicks({});
+                    setRowTopPicksByKey({});
                     setTopPicksStats({ games: 0, withPick: 0, server: null, errors: [] });
                 }
             } catch (e) { }
@@ -841,8 +865,23 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         }
                                     };
 
+                                    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
+                                    const makeKey = (dayEt, away, home) => {
+                                        const d = String(dayEt || '').slice(0, 10);
+                                        const a = norm(away);
+                                        const h = norm(home);
+                                        if (!d || !a || !h) return null;
+                                        return `${d}|${a}|${h}`;
+                                    };
+
                                     const actionable = getProcessedEdges()
-                                        .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null, meta: rowTopPicks?.[e.id] || null }))
+                                        .map((e) => {
+                                            const direct = rowTopPicks?.[e.id] || null;
+                                            const k = makeKey(e?.day_et, e?.away_team, e?.home_team);
+                                            const fallback = (k && rowTopPicksByKey?.[k]) ? rowTopPicksByKey[k] : null;
+                                            const meta = direct || fallback;
+                                            return { edge: e, top: meta?.rec || null, meta };
+                                        })
                                         .filter(({ edge, top, meta }) => {
                                             if (!top || !meta?.isActionable) return false;
                                             // match selected ET date
@@ -925,8 +964,23 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
                                     const rows = (() => {
                                         // Stored top-picks (core model)
+                                        const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
+                                        const makeKey = (dayEt, away, home) => {
+                                            const d = String(dayEt || '').slice(0, 10);
+                                            const a = norm(away);
+                                            const h = norm(home);
+                                            if (!d || !a || !h) return null;
+                                            return `${d}|${a}|${h}`;
+                                        };
+
                                         return getProcessedEdges()
-                                            .map((e) => ({ edge: e, top: rowTopPicks?.[e.id]?.rec || null, meta: rowTopPicks?.[e.id] || null }))
+                                            .map((e) => {
+                                                const direct = rowTopPicks?.[e.id] || null;
+                                                const k = makeKey(e?.day_et, e?.away_team, e?.home_team);
+                                                const fallback = (k && rowTopPicksByKey?.[k]) ? rowTopPicksByKey[k] : null;
+                                                const meta = direct || fallback;
+                                                return { edge: e, top: meta?.rec || null, meta };
+                                            })
                                             .filter(({ edge, top, meta }) => {
                                                 if (!top) {
                                                     // Allow explicit No-Bet rows to render via a separate list later.
