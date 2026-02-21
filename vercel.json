@@ -27,15 +27,7 @@
         },
         {
             "path": "/api/jobs/build_daily_top_picks",
-            "schedule": "15 7 * * *"
-        },
-        {
-            "path": "/api/jobs/build_daily_top_picks",
-            "schedule": "15 8 * * *"
-        },
-        {
-            "path": "/api/jobs/build_daily_top_picks",
-            "schedule": "15 9 * * *"
+            "schedule": "15 * * * *"
         },
         {
             "path": "/api/jobs/ingest_results/NCAAM",
