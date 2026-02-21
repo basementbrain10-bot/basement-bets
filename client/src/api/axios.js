@@ -58,6 +58,32 @@ api.interceptors.response.use(
         return response;
     },
     (error) => {
+        // Global auth UX: if we get a 403 anywhere, prompt once for Basement password.
+        // Individual pages also handle this, but many components call APIs directly.
+        try {
+            const status = error?.response?.status;
+            if (status === 403 && typeof window !== 'undefined') {
+                const k = 'basement_password_prompted';
+                // Avoid prompt loops in case the password is wrong.
+                const already = (() => {
+                    try { return sessionStorage.getItem(k) === '1'; } catch { return false; }
+                })();
+
+                if (!already) {
+                    try { sessionStorage.setItem(k, '1'); } catch { }
+                    const pass = window.prompt('Authentication failed. Please enter the Basement Password:');
+                    if (pass) {
+                        try { localStorage.setItem('basement_password', pass); } catch { }
+                        window.location.reload();
+                        // Return a never-resolving promise: the page is reloading.
+                        return new Promise(() => { });
+                    }
+                }
+            }
+        } catch {
+            // ignore
+        }
+
         // If server returns 304, Axios may treat it as error depending on config.
         // Try to serve cached payload.
         try {
