@@ -212,6 +212,8 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
 
             // Reliable way to refresh aggregates (tiles, performance summaries, etc.)
             // without risking stale cached stats.
+            // After reload, land back on Actuals → Transactions.
+            try { localStorage.setItem('nav_after_save', 'transactions'); } catch (e) { }
             window.location.reload();
 
             // (below won't run, but keep structure safe if we ever remove reload)
