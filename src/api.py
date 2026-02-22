@@ -4047,3 +4047,88 @@ def get_game_correlation(event_id: str):
         },
         "correlations": correlations
     }
+
+# -----------------------------------------------------------------------------
+# MULTI-AGENT DECISION SYSTEM ENDPOINTS (v1)
+# -----------------------------------------------------------------------------
+from src.agents.settings import AGENTS_ENABLED
+
+@app.get("/api/v1/recommendations_v2")
+def get_recommendations_v2(request: Request, mode: str = "default", days_ahead: int = 3):
+    """
+    Orchestrates the multi-agent pipeline to deliver BetRecommendations.
+    Must be enabled via AGENTS_ENABLED=true or query param mode=agents.
+    """
+    if not AGENTS_ENABLED and mode != "agents":
+        raise HTTPException(status_code=403, detail="Agent Orchestrator is disabled.")
+
+    from src.agents.orchestrator import DecisionOrchestrator
+    from src.agents.event_ops_agent import EventOpsAgent
+    from src.agents.market_data_agent import MarketDataAgent
+    from src.agents.pricing_agent_ncaam import PricingAgentNCAAM
+    from src.agents.edge_ev_agent import EdgeEVAgent
+    from src.agents.risk_manager_agent import RiskManagerAgent
+    from src.agents.bet_builder_agent import BetBuilderAgent
+    from src.agents.journal_agent import JournalAgent
+
+    orchestrator = DecisionOrchestrator(league="NCAAM", model_version="agent_v1")
+    
+    run_payload = orchestrator.run_pipeline(
+        event_ops_agent=EventOpsAgent(),
+        market_data_agent=MarketDataAgent(),
+        pricing_agent=PricingAgentNCAAM(),
+        edge_ev_agent=EdgeEVAgent(),
+        risk_manager_agent=RiskManagerAgent(),
+        bet_builder_agent=BetBuilderAgent(),
+        journal_agent=JournalAgent(),
+        parameters={"days_ahead": days_ahead}
+    )
+    
+    # Payload is automatically structured per Pydantic contracts
+    return run_payload.model_dump()
+
+@app.get("/api/v1/pending_decisions")
+def get_pending_decisions():
+    """Returns decisions staged for review by the orchestrator."""
+    from src.database import get_db_connection, _exec
+    with get_db_connection() as conn:
+        rows = _exec(conn, "SELECT id, run_id, created_at, status, reason, payload_json FROM pending_decisions WHERE status = 'PENDING' ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+@app.post("/api/v1/pending_decisions/{decision_id}/approve")
+def approve_pending_decision(decision_id: int):
+    """Approves a staged model run for ledger recording."""
+    from src.database import get_db_connection, _exec
+    with get_db_connection() as conn:
+        # We don't actively fire off the bet to a book yet (future phase)
+        # We just transition status.
+        _exec(conn, "UPDATE pending_decisions SET status = 'APPROVED' WHERE id = %s", (decision_id,))
+        conn.commit()
+    return {"status": "success", "message": f"Decision {decision_id} approved."}
+
+@app.post("/api/v1/pending_decisions/{decision_id}/reject")
+def reject_pending_decision(decision_id: int):
+    """Rejects a staged model run."""
+    from src.database import get_db_connection, _exec
+    with get_db_connection() as conn:
+        _exec(conn, "UPDATE pending_decisions SET status = 'REJECTED' WHERE id = %s", (decision_id,))
+        conn.commit()
+    return {"status": "success", "message": f"Decision {decision_id} rejected."}
+
+@app.get("/api/v1/performance_reports")
+def get_performance_reports(date: Optional[str] = None):
+    """Nightly auditor results viewing endpoint."""
+    from src.database import get_db_connection, _exec
+    with get_db_connection() as conn:
+        if date:
+            rows = _exec(conn, "SELECT id, run_date, league, summary_json, created_at FROM performance_reports WHERE run_date = %s ORDER BY created_at DESC", (date,)).fetchall()
+        else:
+            rows = _exec(conn, "SELECT id, run_date, league, summary_json, created_at FROM performance_reports ORDER BY created_at DESC LIMIT 30").fetchall()
+            
+        reports = []
+        import json
+        for r in rows:
+            mapped = dict(r)
+            mapped['summary'] = json.loads(r['summary_json'])
+            reports.append(mapped)
+        return reports

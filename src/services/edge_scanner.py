@@ -80,6 +80,34 @@ class EdgeScanner:
                     if res.get('recommendations'):
                         # Flatten for API response (one item per edge)
                         for rec in res['recommendations']:
+                            from src.agents.edge_ev_agent import EdgeEVAgent
+                            from src.agents.contracts import MarketOffer, FairPrice
+                            
+                            # Synthesize offer + fair state to pass strictly to EdgeEVAgent
+                            p_str = -110
+                            offer = MarketOffer(
+                                event_id=res['event_id'], league="NCAAM", market_type=rec['bet_type'], 
+                                side=rec['selection_side'], odds_american=p_str, book="action_network", line=rec.get('line')
+                            )
+                            
+                            # Identify strict model win_prob depending on market and side
+                            debug = res.get('debug', {})
+                            p_fair = 0.5
+                            if rec['bet_type'] == "SPREAD":
+                                p_fair = debug.get('win_prob_spread_home', 0.5) if rec['selection_side'] == "HOME" else debug.get('win_prob_spread_away', 0.5)
+                            else:
+                                p_fair = debug.get('win_prob_total_over', 0.5) if rec['selection_side'] == "OVER" else debug.get('win_prob_total_under', 0.5)
+                                
+                            fair = FairPrice(
+                                event_id=res['event_id'], market_type=rec['bet_type'], side=rec['selection_side'],
+                                p_fair=float(p_fair), confidence=float(rec.get('confidence', 0.5)), 
+                                model_sources=[], rationale=[], fair_line=rec.get('fair_line')
+                            )
+                            
+                            agent = EdgeEVAgent()
+                            evals = agent.execute({"fairs": [fair], "offers": [offer]})
+                            ev_res = evals[0] if evals else None
+                            
                             # Map to API 'edge' format (legacy UI compat)
                             edge_obj = {
                                 "game_id": res['event_id'],
@@ -90,14 +118,14 @@ class EdgeScanner:
                                 "market_type": rec['bet_type'], # SPREAD or TOTAL
                                 "bet_on": rec['selection'], # e.g. 'Duke' or 'OVER'
                                 "line": rec.get('line'), # e.g. -5.5
-                                "price": -110, # Simplified or from rec
+                                "price": p_str,
                                 "market_line": rec.get('market_line'),
                                 "fair_line": rec.get('fair_line'),
-                                "edge": rec.get('edge_points'), # Numeric Points Edge
-                                "ev": rec.get('edge'), # "6.50%" string from analyze or float?
-                                                       # analyze() outputs "6.50%" in recommendations list for UI.
-                                                       # But also has 'ev' key as float in raw.
-                                                       # Let's fix this api contract.
+                                "edge": ev_res.edge_points if ev_res else rec.get('edge_points'),
+                                "ev": ev_res.ev_display if ev_res else rec.get('edge'), 
+                                "ev_pct": ev_res.ev_pct if ev_res else 0.0,
+                                "ev_per_unit": ev_res.ev_per_unit if ev_res else 0.0,
+                                "implied_p": ev_res.implied_p if ev_res else 0.0,
                                 "confidence": rec.get('confidence'),
                                 "start_time": ev['start_time'].isoformat()
                             }
@@ -107,9 +135,9 @@ class EdgeScanner:
                     print(f"[EdgeScanner] Error analyzing {ev['id']}: {e}")
                     continue
                     
-        # Keep top-N by EV (descending). If multiple plays exist, this enforces max plays/day.
+        # Keep top-N by EV (descending). Use the stable strict Pydantic numeric float generated via EdgeEVAgent
         try:
-            edges.sort(key=lambda x: float(x.get('ev') or 0.0), reverse=True)
+            edges.sort(key=lambda x: float(x.get('ev_pct') or 0.0), reverse=True)
         except Exception:
             pass
 

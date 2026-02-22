@@ -45,3 +45,24 @@ To wipe all data and start fresh:
 ```bash
 python3 scripts/db_smoke_test.py
 ```
+
+## Multi-Agent Decision System (AgentOS)
+
+The backend features an additive AgentOS allowing granular rules, human-in-the-loop review queues, and Kelly-optimized EV sorting inside horizontal pipelines.
+
+**Core Agents:**
+- `EventOpsAgent` / `MarketDataAgent`: Generates isolated event & offer states obeying boundaries.
+- `PricingAgent(NCAAM)`: Wraps statistical models matching output to unified `FairPrice` arrays. 
+- `EdgeEVAgent`: Responsible exclusively for strictly-typed float Math (Removes previously unstable sorting by string issues).
+- `RiskManagerAgent`: Correlation haircuts and Kelly fraction scaling.
+- `BetBuilderAgent`: Trims output by daily limits (e.g. `AGENTS_MAX_PLAYS_PER_DAY=5`).
+- `JournalAgent`: **Serverless Safe**. Uses one connection pool max to insert large `decision_runs` and `pending_decisions` blocks simultaneously.
+- `PerformanceAuditorAgent`: Nightly analyzer matching OK decisions to Game Results via `brier` scoring.
+
+**Enable via `.env`:**
+```dotenv
+AGENTS_ENABLED=true
+AGENTS_IDEMPOTENCY_WINDOW_SECONDS=90
+AGENTS_SIZING_MODE=fractional_kelly
+AGENTS_REVIEW_CONFIDENCE_THRESHOLD=0.55
+```
