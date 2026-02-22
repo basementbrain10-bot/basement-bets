@@ -4199,11 +4199,22 @@ def get_council_debate(event_id: str):
         ORDER BY created_at DESC LIMIT 1
         """
         row = _exec(conn, query, (event_id, event_id)).fetchone()
-        
-        if row and row['narrative']:
+
+        # NOTE: depending on driver/cursor settings, `row` may be dict-like or tuple-like.
+        # Handle both to avoid runtime 500s.
+        narrative = None
+        if row is not None:
             try:
-                # Based on the db driver, json might already be parsed, or it's a string
-                narrative = row['narrative']
+                narrative = row.get('narrative')  # type: ignore[attr-defined]
+            except Exception:
+                try:
+                    narrative = row[0]
+                except Exception:
+                    narrative = None
+
+        if narrative:
+            try:
+                # json might already be parsed, or it's a string
                 if isinstance(narrative, str):
                     narrative = json.loads(narrative)
                 return {"status": "success", "data": narrative}
