@@ -402,169 +402,170 @@ export default function Picks() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Yesterday graded results */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-2">
-          <BarChart3 size={18} className="text-emerald-300" />
-          <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Yesterday (graded)</div>
-          <div className="ml-auto flex items-center gap-2">
-            <div className="text-xs text-slate-500">{yesterdayEt}</div>
-            {pendingYesterday > 0 && (
-              <button
-                onClick={async () => { await gradeNow(); await load(); }}
-                disabled={isGrading}
-                className={`px-2 py-1 rounded-lg text-xs font-bold border transition ${isGrading ? 'text-slate-500 border-slate-800 bg-slate-900/40' : 'text-amber-200 border-amber-900/40 bg-amber-900/20 hover:bg-amber-900/30'}`}
-                title="Run grading now"
-              >
-                {isGrading ? 'Grading…' : 'Grade now'}
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-6 text-sm">
-          <div>
-            <div className="text-slate-400 text-xs">Record</div>
-            <div className="text-white font-black">{yRecord.w}-{yRecord.l}-{yRecord.p}</div>
-          </div>
-          <div>
-            <div className="text-slate-400 text-xs">Win rate</div>
-            <div className="text-white font-black">{yRecord.decided ? `${yRecord.winRate.toFixed(1)}%` : '—'}</div>
-          </div>
-          <div>
-            <div className="text-slate-400 text-xs">Graded picks</div>
-            <div className="text-white font-black">{gradedYesterday.length}</div>
-          </div>
-        </div>
-
-        {/* Breakdown by confidence (yesterday only) */}
-        {(() => {
-          const bucket = (h) => {
-            const c = Number(h?.confidence_0_100 ?? h?.confidence ?? 0);
-            if (c >= 80) return 'High';
-            if (c >= 50) return 'Medium';
-            return 'Low';
-          };
-          const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
-          const norm = (r) => (r === 'WIN') ? 'WON' : (r === 'LOSS') ? 'LOST' : r;
-          const rows = (gradedYesterday || []).map((h) => ({ b: bucket(h), r: norm(res(h)) }));
-          const by = { High: { w: 0, l: 0, p: 0 }, Medium: { w: 0, l: 0, p: 0 }, Low: { w: 0, l: 0, p: 0 } };
-          rows.forEach(({ b, r }) => {
-            if (r === 'WON') by[b].w += 1;
-            else if (r === 'LOST') by[b].l += 1;
-            else if (r === 'PUSH') by[b].p += 1;
-          });
-          const tiles = ['High', 'Medium', 'Low'].map((k) => ({ k, ...by[k] }));
-          if (!gradedYesterday || gradedYesterday.length === 0) return null;
-          return (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-              {tiles.map((t) => (
-                <div key={t.k} className="bg-slate-950/20 border border-slate-800 rounded-xl p-4">
-                  <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{t.k} confidence</div>
-                  <div className="mt-1 text-slate-100 font-black text-xl">{t.w}-{t.l}{t.p ? `-${t.p}` : ''}</div>
-                </div>
-              ))}
+        {/* Yesterday graded results */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <BarChart3 size={18} className="text-emerald-300" />
+            <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Yesterday (graded)</div>
+            <div className="ml-auto flex items-center gap-2">
+              <div className="text-xs text-slate-500">{yesterdayEt}</div>
+              {pendingYesterday > 0 && (
+                <button
+                  onClick={async () => { await gradeNow(); await load(); }}
+                  disabled={isGrading}
+                  className={`px-2 py-1 rounded-lg text-xs font-bold border transition ${isGrading ? 'text-slate-500 border-slate-800 bg-slate-900/40' : 'text-amber-200 border-amber-900/40 bg-amber-900/20 hover:bg-amber-900/30'}`}
+                  title="Run grading now"
+                >
+                  {isGrading ? 'Grading…' : 'Grade now'}
+                </button>
+              )}
             </div>
-          );
-        })()}
-        {(() => {
-          const pending = pendingYesterday;
-          if ((yesterdaySlate || []).length === 0) {
-            return <div className="mt-3 text-xs text-slate-500">No recommended picks found for yesterday.</div>;
-          }
-          if (gradedYesterday.length === 0 && pending > 0) {
-            return <div className="mt-3 text-xs text-slate-500">Yesterday has {pending} pick(s) still pending / ungraded. Click “Grade now”.</div>;
-          }
-          if (gradedYesterday.length === 0) {
-            return <div className="mt-3 text-xs text-slate-500">No graded recommended picks found for yesterday yet.</div>;
-          }
-          if (pending > 0) {
-            return <div className="mt-3 text-xs text-slate-500">Also pending: {pending}</div>;
-          }
-          return null;
-        })()}
-
-        {/* Quick list (yesterday slate) */}
-        {(yesterdaySlate || []).length > 0 && (
-          <div className="mt-4 space-y-2">
-            {(() => {
-              // Show the recommendation order as rank (Top-6 by EV/u, same ordering as texts).
-              const getEv = (h) => {
-                const ev = Number(h?.ev_per_unit ?? h?.ev);
-                return Number.isFinite(ev) ? ev : 0;
-              };
-              const rows = (yesterdaySlate || []).slice().sort((a, b) => getEv(b) - getEv(a));
-              return rows.slice(0, 6).map((h, idx) => {
-                const out = String(h.graded_result || h.outcome || h.result || 'PENDING').toUpperCase();
-                const cls = out === 'WON' || out === 'WIN' ? 'text-green-300' : out === 'LOST' || out === 'LOSS' ? 'text-red-300' : out === 'PUSH' ? 'text-slate-300' : 'text-slate-500';
-                return (
-                  <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/20">
-                    <div className="min-w-0">
-                      <div className="text-xs font-black text-slate-100 whitespace-normal break-words leading-snug">
-                        <span className="text-slate-400 mr-2">#{idx + 1}</span>
-                        {h.sport || '—'} • {(h.away_team && h.home_team) ? `${h.away_team} @ ${h.home_team}` : (h.matchup || '—')}
-                      </div>
-                      <div className="text-xs text-slate-400 whitespace-normal break-words leading-snug">{h.market_type || h.bet_type || '—'} • {h.selection || '—'}</div>
-                    </div>
-                    <div className={`text-xs font-mono font-black ${cls}`}>{out}</div>
-                  </div>
-                );
-              });
-            })()}
-            {(yesterdaySlate || []).length > 6 && <div className="text-[11px] text-slate-500">Showing first 6 picks.</div>}
           </div>
-        )}
-      </div>
+          <div className="flex flex-wrap gap-6 text-sm">
+            <div>
+              <div className="text-slate-400 text-xs">Record</div>
+              <div className="text-white font-black">{yRecord.w}-{yRecord.l}-{yRecord.p}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 text-xs">Win rate</div>
+              <div className="text-white font-black">{yRecord.decided ? `${yRecord.winRate.toFixed(1)}%` : '—'}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 text-xs">Graded picks</div>
+              <div className="text-white font-black">{gradedYesterday.length}</div>
+            </div>
+          </div>
 
-      {/* Top 6 recommended: win% by rank */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-        <div className="flex items-end justify-between gap-3 mb-2">
-          <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Top 6 recommended (2026 YTD) — win% by rank</div>
-          <div className="text-[11px] text-slate-500">Avg: {top6RankPerformance?.avg !== null && top6RankPerformance?.avg !== undefined ? `${top6RankPerformance.avg.toFixed(1)}%` : '—'}</div>
-        </div>
-        <div className="h-[220px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 8, right: 34, left: 10, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-              <XAxis type="number" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} interval={0} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-              <YAxis
-                type="category"
-                dataKey="rank"
-                interval={0}
-                width={58}
-                tick={(props) => {
-                  const { x, y, payload } = props;
-                  const label = String(payload?.value || '');
-                  const row = (top6RankPerformance.rows || []).find((r) => String(r.rank) === label);
-                  const v = String(row?.yesterday || '—');
-                  const fill = row?._yFill || '#64748b';
-                  const cx = (x || 0);
-                  const cy = (y || 0);
-                  return (
-                    <g>
-                      <text x={cx} y={cy + 4} textAnchor="start" fontSize={11} fontWeight={900} fill="#e2e8f0">{label}</text>
-                      <rect x={cx + 30} y={cy - 8} rx={6} ry={6} width={22} height={16} fill={fill} opacity={0.20} />
-                      <text x={cx + 41} y={cy + 3.5} textAnchor="middle" fontSize={11} fontWeight={900} fill={fill}>{v}</text>
-                    </g>
-                  );
-                }}
-              />
-              <Tooltip
-                contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
-                labelStyle={{ color: '#e2e8f0' }}
-                formatter={(v, name) => (name === 'Win%' ? [`${Number(v).toFixed(1)}%`, 'Win%'] : [v, name])}
-              />
-              <ReferenceLine x={50} stroke="#94a3b8" strokeDasharray="4 4" />
-              <Bar dataKey="winRate" name="Win%" radius={[6, 6, 6, 6]}>
-                {(top6RankPerformance.rows || []).map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry._fill || '#60a5fa'} />
+          {/* Breakdown by confidence (yesterday only) */}
+          {(() => {
+            const bucket = (h) => {
+              const c = Number(h?.confidence_0_100 ?? h?.confidence ?? 0);
+              if (c >= 80) return 'High';
+              if (c >= 50) return 'Medium';
+              return 'Low';
+            };
+            const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
+            const norm = (r) => (r === 'WIN') ? 'WON' : (r === 'LOSS') ? 'LOST' : r;
+            const rows = (gradedYesterday || []).map((h) => ({ b: bucket(h), r: norm(res(h)) }));
+            const by = { High: { w: 0, l: 0, p: 0 }, Medium: { w: 0, l: 0, p: 0 }, Low: { w: 0, l: 0, p: 0 } };
+            rows.forEach(({ b, r }) => {
+              if (r === 'WON') by[b].w += 1;
+              else if (r === 'LOST') by[b].l += 1;
+              else if (r === 'PUSH') by[b].p += 1;
+            });
+            const tiles = ['High', 'Medium', 'Low'].map((k) => ({ k, ...by[k] }));
+            if (!gradedYesterday || gradedYesterday.length === 0) return null;
+            return (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                {tiles.map((t) => (
+                  <div key={t.k} className="bg-slate-950/20 border border-slate-800 rounded-xl p-4">
+                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{t.k} confidence</div>
+                    <div className="mt-1 text-slate-100 font-black text-xl">{t.w}-{t.l}{t.p ? `-${t.p}` : ''}</div>
+                  </div>
                 ))}
-                <LabelList dataKey="winRate" position="right" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} fill="#94a3b8" fontSize={11} />
-                <LabelList dataKey="n" position="insideRight" formatter={(v) => (v ? `N=${v}` : '')} fill="#0b1220" fontSize={10} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+              </div>
+            );
+          })()}
+          {(() => {
+            const pending = pendingYesterday;
+            if ((yesterdaySlate || []).length === 0) {
+              return <div className="mt-3 text-xs text-slate-500">No recommended picks found for yesterday.</div>;
+            }
+            if (gradedYesterday.length === 0 && pending > 0) {
+              return <div className="mt-3 text-xs text-slate-500">Yesterday has {pending} pick(s) still pending / ungraded. Click “Grade now”.</div>;
+            }
+            if (gradedYesterday.length === 0) {
+              return <div className="mt-3 text-xs text-slate-500">No graded recommended picks found for yesterday yet.</div>;
+            }
+            if (pending > 0) {
+              return <div className="mt-3 text-xs text-slate-500">Also pending: {pending}</div>;
+            }
+            return null;
+          })()}
+
+          {/* Quick list (yesterday slate) */}
+          {(yesterdaySlate || []).length > 0 && (
+            <div className="mt-4 space-y-2">
+              {(() => {
+                // Show the recommendation order as rank (Top-6 by EV/u, same ordering as texts).
+                const getEv = (h) => {
+                  const ev = Number(h?.ev_per_unit ?? h?.ev);
+                  return Number.isFinite(ev) ? ev : 0;
+                };
+                const rows = (yesterdaySlate || []).slice().sort((a, b) => getEv(b) - getEv(a));
+                return rows.slice(0, 6).map((h, idx) => {
+                  const out = String(h.graded_result || h.outcome || h.result || 'PENDING').toUpperCase();
+                  const cls = out === 'WON' || out === 'WIN' ? 'text-green-300' : out === 'LOST' || out === 'LOSS' ? 'text-red-300' : out === 'PUSH' ? 'text-slate-300' : 'text-slate-500';
+                  return (
+                    <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/20">
+                      <div className="min-w-0">
+                        <div className="text-xs font-black text-slate-100 whitespace-normal break-words leading-snug">
+                          <span className="text-slate-400 mr-2">#{idx + 1}</span>
+                          {h.sport || '—'} • {(h.away_team && h.home_team) ? `${h.away_team} @ ${h.home_team}` : (h.matchup || '—')}
+                        </div>
+                        <div className="text-xs text-slate-400 whitespace-normal break-words leading-snug">{h.market_type || h.bet_type || '—'} • {h.selection || '—'}</div>
+                      </div>
+                      <div className={`text-xs font-mono font-black ${cls}`}>{out}</div>
+                    </div>
+                  );
+                });
+              })()}
+              {(yesterdaySlate || []).length > 6 && <div className="text-[11px] text-slate-500">Showing first 6 picks.</div>}
+            </div>
+          )}
         </div>
-      </div>
+
+        {/* Top 6 recommended: win% by rank */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-end justify-between gap-3 mb-2">
+            <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Top 6 recommended (2026 YTD) — win% by rank</div>
+            <div className="text-[11px] text-slate-500">Avg: {top6RankPerformance?.avg !== null && top6RankPerformance?.avg !== undefined ? `${top6RankPerformance.avg.toFixed(1)}%` : '—'}</div>
+          </div>
+          <div className="h-[220px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={top6RankPerformance.rows} layout="vertical" margin={{ top: 8, right: 34, left: 10, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                <XAxis type="number" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} interval={0} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <YAxis
+                  type="category"
+                  dataKey="rank"
+                  interval={0}
+                  width={58}
+                  tick={(props) => {
+                    const { x, y, payload } = props;
+                    // payload.value is already "#1", "#2" etc.
+                    const label = String(payload?.value || '');
+                    const row = (top6RankPerformance.rows || []).find((r) => String(r.rank) === label);
+                    const v = String(row?.yesterday || '—');
+                    const fill = row?._yFill || '#64748b';
+                    const cx = (x || 0);
+                    const cy = (y || 0);
+                    return (
+                      <g>
+                        <text x={cx} y={cy + 4} textAnchor="end" fontSize={11} fontWeight={900} fill="#e2e8f0" transform={`translate(-36,0)`}>{label}</text>
+                        <rect x={cx - 30} y={cy - 8} rx={6} ry={6} width={22} height={16} fill={fill} opacity={0.20} />
+                        <text x={cx - 19} y={cy + 3.5} textAnchor="middle" fontSize={11} fontWeight={900} fill={fill}>{v}</text>
+                      </g>
+                    );
+                  }}
+                />
+                <Tooltip
+                  contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                  formatter={(v, name) => (name === 'Win%' ? [`${Number(v).toFixed(1)}%`, 'Win%'] : [v, name])}
+                />
+                <ReferenceLine x={50} stroke="#94a3b8" strokeDasharray="4 4" />
+                <Bar dataKey="winRate" name="Win%" radius={[6, 6, 6, 6]}>
+                  {(top6RankPerformance.rows || []).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry._fill || '#60a5fa'} />
+                  ))}
+                  <LabelList dataKey="winRate" position="right" formatter={(v) => (v === null || v === undefined ? '' : `${v}%`)} fill="#94a3b8" fontSize={11} />
+                  <LabelList dataKey="n" position="insideRight" formatter={(v) => (v ? `N=${v}` : '')} fill="#0b1220" fontSize={10} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       {/* Existing analytics (kept) */}
