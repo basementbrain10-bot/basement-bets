@@ -75,9 +75,17 @@ class OracleAgent(BaseAgent):
                     model="gemini-2.5-flash",
                     system_prompt=system_prompt,
                     json_mode=True,
-                    max_tokens=2048
+                    max_tokens=8192
                 )
-                council_output = json.loads(response_text)
+                # Strip markdown blocks if present
+                clean_text = response_text.strip()
+                if clean_text.startswith("```json"):
+                    clean_text = clean_text[7:]
+                if clean_text.endswith("```"):
+                    clean_text = clean_text[:-3]
+                clean_text = clean_text.strip()
+                
+                council_output = json.loads(clean_text)
                 results[ev_id] = council_output
             except Exception as e:
                 print(f"[OracleAgent] Synthesis failed for {ev_id}: {e}")
