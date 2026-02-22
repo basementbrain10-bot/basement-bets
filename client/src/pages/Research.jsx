@@ -920,41 +920,8 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         return pickText;
                                     };
 
-                                    return (
-                                        <div className="mb-6 p-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/5">
-                                            <div className="flex items-center justify-between mb-3 gap-3">
-                                                <div>
-                                                    <div className="text-[10px] uppercase tracking-widest text-emerald-300/90 font-black">Today's edges</div>
-                                                    <div className="text-[11px] text-slate-400">Actionable picks for {selectedDate} (ET)</div>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="text-[11px] text-slate-500 font-mono">Top 5 overall (max 5 spread + max 5 O/U)</div>
-                                                </div>
-                                            </div>
-
-                                            {actionable.length ? (
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                    {actionable.slice(0, 10).map(({ edge, top }) => (
-                                                        <div key={edge.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-950/20 border border-slate-800">
-                                                            <div className="min-w-0">
-                                                                <div className="text-xs font-black text-slate-100 whitespace-normal break-words">{edge.away_team} @ {edge.home_team}</div>
-                                                                <div className="text-xs text-slate-400 whitespace-normal break-words">{top.bet_type} • {fmtPick(edge, top)}</div>
-                                                                <div className="text-[11px] text-slate-500 font-mono">{(top.price !== null && top.price !== undefined) ? fmtSigned(top.price, 0) : '—'} • line {top.market_line ?? '—'}</div>
-                                                            </div>
-                                                            <div className="text-right shrink-0">
-                                                                <div className="text-xs font-mono font-black text-emerald-300">{String(top.edge || '—')}</div>
-                                                                <div className="text-[10px] text-slate-500">{top.confidence || '—'}</div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            ) : (
-                                                <div className="text-slate-400 text-sm">
-                                                    No actionable picks are currently stored for this date yet. This should populate automatically from the backend cron pipeline.
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
+                                    // Removed per request: the "Today's edges" tile was duplicative with the main recommended picks.
+                                    return null;
                                 })()}
                             </div>
                         )}
