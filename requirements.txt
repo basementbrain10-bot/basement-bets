@@ -4,8 +4,7 @@ psycopg2-binary
 requests
 python-dotenv
 beautifulsoup4
-supabase
-python-jose[cryptography]
+python-jose
 google-generativeai
 python-dateutil
 
