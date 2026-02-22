@@ -104,7 +104,11 @@ export default function AgentCouncil() {
                                         }`}
                                 >
                                     <div>
-                                        <div className="font-semibold text-sm">{ev.offer.event_id.replace('NCAAB_', '').replace(/_/g, ' ')}</div>
+                                        <div className="font-semibold text-sm">
+                                            {ev.event?.away_team && ev.event?.home_team
+                                                ? `${ev.event.away_team} @ ${ev.event.home_team}`
+                                                : ev.offer.event_id.replace('NCAAB_', '').replace('action:ncaam:', 'Game ')}
+                                        </div>
                                         <div className="text-xs opacity-70 mt-1">{ev.offer.market_type} • {ev.offer.side}</div>
                                     </div>
                                     <ChevronRight size={16} className="opacity-50" />
@@ -112,6 +116,42 @@ export default function AgentCouncil() {
                             ))}
                         </div>
                     )}
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                    <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <Brain className="text-blue-400" /> The Council Members
+                    </h2>
+                    <div className="space-y-4">
+                        <div className="flex gap-3">
+                            <Activity className="text-blue-400 shrink-0 mt-1" size={18} />
+                            <div>
+                                <div className="text-sm font-bold text-slate-200">Stats Agent</div>
+                                <div className="text-xs text-slate-500 leading-tight mt-0.5">Analyzes quantitative Torvik and KenPom efficiency metrics.</div>
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <FileText className="text-orange-400 shrink-0 mt-1" size={18} />
+                            <div>
+                                <div className="text-sm font-bold text-slate-200">News/Injury Agent</div>
+                                <div className="text-xs text-slate-500 leading-tight mt-0.5">Scours the web for roster updates, fatigue, and situational spots.</div>
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <Brain className="text-purple-400 shrink-0 mt-1" size={18} />
+                            <div>
+                                <div className="text-sm font-bold text-slate-200">Memory Agent</div>
+                                <div className="text-xs text-slate-500 leading-tight mt-0.5">Recalls lessons learned from past model failures.</div>
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <Gavel className="text-slate-200 shrink-0 mt-1" size={18} />
+                            <div>
+                                <div className="text-sm font-bold text-slate-200">The Oracle</div>
+                                <div className="text-xs text-slate-500 leading-tight mt-0.5">Synthesizes debate to provide final spread/total adjustments.</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -145,7 +185,9 @@ export default function AgentCouncil() {
                         {/* Debate Header */}
                         <div className="p-6 border-b border-slate-800 bg-slate-900/80">
                             <h2 className="text-2xl font-black text-white">
-                                {selectedEvent.offer.event_id.replace('NCAAB_', '').replace(/_/g, ' ')}
+                                {selectedEvent.event?.away_team && selectedEvent.event?.home_team
+                                    ? `${selectedEvent.event.away_team} @ ${selectedEvent.event.home_team}`
+                                    : selectedEvent.offer.event_id.replace('NCAAB_', '').replace('action:ncaam:', 'Game ')}
                             </h2>
                             <div className="flex gap-4 mt-2 text-sm text-slate-400">
                                 <span><strong className="text-slate-300">Market:</strong> {selectedEvent.offer.market_type}</span>
