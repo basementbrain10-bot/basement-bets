@@ -32,35 +32,67 @@ class ResearchAgent(BaseAgent):
                 resp.raise_for_status()
                 
                 soup = BeautifulSoup(resp.text, 'html.parser')
-                results = soup.find_all('a', class_='result__snippet', limit=5)
-                
-                summaries = []
-                for r in results:
-                    text = r.get_text(strip=True)
-                    if text:
-                        summaries.append(f"- {text}")
-                
-                raw_snippets = "\n".join(summaries)
-                if not raw_snippets:
+
+                # DuckDuckGo HTML results typically include:
+                # - a.result__a (title + href)
+                # - a.result__snippet (snippet text)
+                # We'll build a small citations list for downstream agents.
+                citations = []
+                for res_el in soup.select('.result')[:5]:
+                    a = res_el.select_one('a.result__a')
+                    sn = res_el.select_one('.result__snippet')
+                    if not a:
+                        continue
+                    url = a.get('href')
+                    title = a.get_text(strip=True)
+                    snippet = sn.get_text(strip=True) if sn else ''
+                    if url and title:
+                        citations.append({
+                            'title': title,
+                            'url': url,
+                            'snippet': snippet
+                        })
+
+                raw_snippets = "\n".join([f"- {c['snippet']} ({c['url']})" for c in citations if c.get('snippet')])
+
+                if not citations:
                     final_summary = "No notable breaking news found."
+                    facts = []
                 else:
-                    # NLP Extraction layer to sanitize the raw web noise
+                    # NLP extraction to sanitize web noise AND preserve source URLs.
                     prompt = f"""
-                    You are a strict data extraction tool. Review the following raw web search snippets for the game {ev.away_team} vs {ev.home_team}.
-                    Extract ONLY factual injuries, suspensions, or confirmed lineup changes.
-                    DO NOT invent or assume any information.
-                    If the snippets just contain betting noise, picks, or generic previews, rigidly state "No verifiable roster news found."
-                    
-                    Raw text:
-                    {raw_snippets}
-                    """
-                    clean_res = generate_content(model="gemini-2.5-flash", system_prompt=prompt, max_tokens=150)
-                    final_summary = clean_res.strip()
-                        
+You are a strict information extraction tool.
+
+Task:
+- From the citations below for {ev.away_team} vs {ev.home_team}, extract ONLY verifiable roster/news facts (injuries, suspensions, confirmed lineup changes).
+- Do NOT invent or assume anything.
+- If nothing verifiable exists, return an empty facts list and a summary that says: No verifiable roster news found.
+
+Return VALID JSON with keys:
+- summary: string
+- facts: array of objects, each: {{"type":"injury|suspension|lineup", "team":"", "detail":"", "source_url":""}}
+
+Citations:
+{json.dumps(citations, ensure_ascii=False)}
+"""
+                    clean_res = generate_content(model="gemini-2.5-flash", system_prompt=prompt, max_tokens=350)
+                    try:
+                        parsed = json.loads(clean_res)
+                        final_summary = str(parsed.get('summary') or '').strip() or 'No verifiable roster news found.'
+                        facts = parsed.get('facts') or []
+                        if not isinstance(facts, list):
+                            facts = []
+                    except Exception:
+                        # Fallback: keep the raw text as summary
+                        final_summary = clean_res.strip()
+                        facts = []
+
                 research_results[ev.event_id] = {
                     "query": query,
-                    "articles_found": len(summaries),
-                    "summary": final_summary
+                    "articles_found": len(citations),
+                    "summary": final_summary,
+                    "citations": citations,
+                    "facts": facts,
                 }
             except Exception as e:
                 print(f"[ResearchAgent] Failed to search for {ev.event_id}: {e}")
