@@ -4,7 +4,7 @@ import { Trash, DollarSign, Activity, Pencil, CheckCircle2 } from 'lucide-react'
 import EditBetModal from './EditBetModal';
 import SportAuditorModal from './SportAuditorModal';
 import ManualAddBetModal from './ManualAddBetModal';
-import SevenDayTrendSparkline from './SevenDayTrendSparkline';
+// SevenDayTrendSparkline removed per request.
 
 // Extracted from App.jsx. Keep behavior identical; dependencies are passed as props when needed.
 
@@ -40,26 +40,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
         status: "All"
     });
 
-    const sevenDayData = React.useMemo(() => {
-        const days = [];
-        for (let i = 6; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            days.push(d.toISOString().slice(0, 10));
-        }
-
-        let cumulative = 0;
-        return days.map(day => {
-            const dayProfit = bets
-                .filter(b => b.date.includes(day) && (b.category || '') !== 'Transaction')
-                .reduce((sum, b) => sum + (Number(b.profit) || 0), 0);
-            cumulative += dayProfit;
-            return {
-                name: day.slice(5), // MM-DD
-                profit: cumulative
-            };
-        });
-    }, [bets]);
+    // Removed: 7-day profit trend sparkline
 
     // Bulk selection actions removed (checkbox column removed)
 
@@ -768,9 +749,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                         <div className="text-gray-400 text-sm">
                             Showing <span className="text-white font-bold">{filtered.length}</span> of {bets.length} transactions
                         </div>
-                        {!loading && bets.length > 0 && (
-                            <SevenDayTrendSparkline sevenDayData={sevenDayData} formatCurrency={formatCurrency} />
-                        )}
+                        {/* 7-day trend sparkline removed */}
                     </div>
                     <div className="flex items-center gap-2">
                         <>
