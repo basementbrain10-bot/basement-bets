@@ -1,0 +1,199 @@
+import React, { useState, useEffect } from 'react';
+import api from '../api/axios';
+import { Search, Brain, Gavel, FileText, ChevronRight, Activity, Clock, ShieldAlert } from 'lucide-react';
+
+export default function AgentCouncil() {
+    const [events, setEvents] = useState([]);
+    const [selectedEvent, setSelectedEvent] = useState(null);
+    const [councilData, setCouncilData] = useState(null);
+    const [memories, setMemories] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [loadingCouncil, setLoadingCouncil] = useState(false);
+
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            // Re-using the recommendations endpoint to get the days slate
+            const [slateRes, memRes] = await Promise.all([
+                api.get('/api/v1/ncaab/recommendations'),
+                api.get('/api/v1/council/memories')
+            ]);
+
+            setEvents(slateRes.data.recommendations || []);
+            setMemories(memRes.data.data || []);
+        } catch (err) {
+            console.error("Failed to load council base data", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSelectEvent = async (ev) => {
+        setSelectedEvent(ev);
+        setLoadingCouncil(true);
+        setCouncilData(null);
+        try {
+            const res = await api.get(`/api/v1/council/${ev.offer.event_id}`);
+            if (res.data.status === 'success') {
+                setCouncilData(res.data.data);
+            } else {
+                setCouncilData({ error: res.data.message });
+            }
+        } catch (err) {
+            setCouncilData({ error: 'Failed to find a debate for this event. Ensure the Orchestrator has run.' });
+        } finally {
+            setLoadingCouncil(false);
+        }
+    };
+
+    // Agent Avatar Mapping
+    const getAgentIcon = (agentName) => {
+        const name = agentName.toLowerCase();
+        if (name.includes('stat') || name.includes('quant')) return <Activity className="text-blue-400" />;
+        if (name.includes('news') || name.includes('injury')) return <FileText className="text-orange-400" />;
+        if (name.includes('memory') || name.includes('rag')) return <Brain className="text-purple-400" />;
+        return <Search className="text-slate-400" />;
+    };
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-64 text-slate-400 animate-pulse">
+                Summoning the Council...
+            </div>
+        );
+    }
+
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 animate-in fade-in duration-500">
+            {/* Left Sidebar: Daily Slate & Global Memories */}
+            <div className="lg:col-span-1 space-y-6">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                    <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <Gavel className="text-blue-500" /> Today's Docket
+                    </h2>
+                    {events.length === 0 ? (
+                        <p className="text-sm text-slate-500 italic">No games on the slate.</p>
+                    ) : (
+                        <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                            {events.map((ev, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => handleSelectEvent(ev)}
+                                    className={`w-full text-left p-3 rounded-lg border transition flex justify-between items-center ${selectedEvent?.offer?.event_id === ev.offer.event_id
+                                            ? 'bg-blue-900/40 border-blue-500/50 text-blue-100'
+                                            : 'bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-800'
+                                        }`}
+                                >
+                                    <div>
+                                        <div className="font-semibold text-sm">{ev.offer.event_id.replace('NCAAB_', '').replace(/_/g, ' ')}</div>
+                                        <div className="text-xs opacity-70 mt-1">{ev.offer.market_type} • {ev.offer.side}</div>
+                                    </div>
+                                    <ChevronRight size={16} className="opacity-50" />
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                    <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <Brain className="text-purple-400" /> Recent Post-Mortems
+                    </h2>
+                    {memories.length === 0 ? (
+                        <p className="text-sm text-slate-500 italic">No memories yet. The system learns after games complete.</p>
+                    ) : (
+                        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                            {memories.map((m, idx) => (
+                                <div key={idx} className="p-3 bg-slate-800/40 rounded-lg border border-slate-700/50 text-sm">
+                                    <div className="text-xs font-bold text-purple-400 mb-1">{m.team_a} vs {m.team_b}</div>
+                                    <div className="text-slate-300 italic">"{m.lesson}"</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Main Content: The Debate */}
+            <div className="lg:col-span-3">
+                {!selectedEvent ? (
+                    <div className="h-full min-h-[400px] flex flex-col justify-center items-center border border-slate-800 border-dashed rounded-xl bg-slate-900/20 text-slate-500">
+                        <Gavel size={48} className="mb-4 opacity-50 text-blue-500" />
+                        <p>Select a game from the docket to view the Council's debate.</p>
+                    </div>
+                ) : (
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl flex flex-col h-full min-h-[600px] overflow-hidden">
+                        {/* Debate Header */}
+                        <div className="p-6 border-b border-slate-800 bg-slate-900/80">
+                            <h2 className="text-2xl font-black text-white">
+                                {selectedEvent.offer.event_id.replace('NCAAB_', '').replace(/_/g, ' ')}
+                            </h2>
+                            <div className="flex gap-4 mt-2 text-sm text-slate-400">
+                                <span><strong className="text-slate-300">Market:</strong> {selectedEvent.offer.market_type}</span>
+                                <span><strong className="text-slate-300">Target Side:</strong> {selectedEvent.offer.side}</span>
+                                <span><strong className="text-slate-300">Line:</strong> {selectedEvent.offer.line} ({selectedEvent.offer.odds_american})</span>
+                            </div>
+                        </div>
+
+                        {/* Debate Body */}
+                        <div className="p-6 flex-1 bg-slate-950 overflow-y-auto">
+                            {loadingCouncil ? (
+                                <div className="flex flex-col justify-center items-center h-64 text-blue-500 animate-pulse">
+                                    <Clock className="animate-spin mb-4" size={32} />
+                                    <p className="text-slate-400">The Council is convening...</p>
+                                </div>
+                            ) : councilData?.error ? (
+                                <div className="p-6 bg-red-900/20 border border-red-900/50 rounded-xl text-center">
+                                    <ShieldAlert className="mx-auto text-red-500 mb-2" size={32} />
+                                    <p className="text-red-400 font-semibold">{councilData.error}</p>
+                                    <p className="text-xs text-red-500/70 mt-2">The orchestrator must run `mode=agents` to generate debates.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {/* The Debate Transcript */}
+                                    <div className="space-y-6">
+                                        {councilData?.debate?.map((msg, idx) => (
+                                            <div key={idx} className="flex gap-4">
+                                                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 shrink-0">
+                                                    {getAgentIcon(msg.agent)}
+                                                </div>
+                                                <div className="flex-1 bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-sm p-4">
+                                                    <div className="font-bold text-sm text-slate-300 mb-1">{msg.agent}</div>
+                                                    <div className="text-slate-400 text-sm leading-relaxed whitespace-pre-wrap">{msg.message}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* The Oracle's Verdict */}
+                                    <div className="mt-8">
+                                        <div className="relative">
+                                            <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl blur opacity-30"></div>
+                                            <div className="relative bg-slate-900 border border-blue-500/30 rounded-xl p-6 shadow-2xl">
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <div className="bg-blue-500 p-2 rounded-lg">
+                                                        <Gavel className="text-white" size={20} />
+                                                    </div>
+                                                    <h3 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 uppercase tracking-widest">
+                                                        The Oracle's Verdict
+                                                    </h3>
+                                                </div>
+                                                <p className="text-lg text-slate-200 leading-relaxed font-serif italic">
+                                                    "{councilData?.oracle_verdict}"
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}

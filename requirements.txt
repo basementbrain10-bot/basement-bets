@@ -4,14 +4,11 @@ psycopg2-binary
 requests
 python-dotenv
 beautifulsoup4
-lxml
-html5lib
-supabase
-python-jose[cryptography]
-openai
+python-jose
+google-generativeai
 python-dateutil
 
-# NOTE: keep Vercel serverless bundle small.
-# Selenium + undetected-chromedriver are used for local ingestion only.
-# Install them via requirements-worker.txt (or your local venv) instead.
-
+# NOTE: keep Vercel serverless bundle small (< 250MB).
+# lxml, numpy, pandas, scikit-learn, scipy are TOO LARGE for Vercel.
+# Only use pure python or small libs for deployment.
+# Historical data/ is excluded via .vercelignore.
