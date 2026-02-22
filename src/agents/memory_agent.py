@@ -1,6 +1,7 @@
 import os
 import json
-import numpy as np
+import json
+import math
 from typing import Any, Dict, List, Optional
 import google.generativeai as genai
 
@@ -35,8 +36,8 @@ class MemoryAgent(BaseAgent):
                 retrieved_memories[ev.event_id] = []
             return retrieved_memories
 
-        # Create embedding matrix once
-        memory_embeddings = np.array([m['embedding'] for m in all_memories])
+        # No need for matrix creation in pure python
+        # We will iterate through all_memories directly
         
         for ev in events:
             query = f"Lessons learned betting on {ev.away_team} vs {ev.home_team} tight matchups"
@@ -47,20 +48,26 @@ class MemoryAgent(BaseAgent):
                     content=query,
                     task_type="RETRIEVAL_QUERY"
                 )
-                query_embedding = np.array(res['embedding'])
+                # We can use the raw list directly for pure python dot product
+                target_emb = res['embedding']
                 
-                # 2. Compute cosine similarities (dot product since embeddings are normalized)
-                similarities = np.dot(memory_embeddings, query_embedding)
+                # 2. Compute cosine similarities (dot product)
+                # Embeddings are normalized by Gemini, so dot product = cosine similarity
+                scored_memories = []
+                for mem in all_memories:
+                    emb = mem['embedding']
+                    # Pure python dot product
+                    dot_product = sum(a * b for a, b in zip(emb, target_emb))
+                    scored_memories.append((dot_product, mem))
                 
-                # 3. Get top 3 most relevant memories (if sim > 0.4 threshold)
-                top_indices = np.argsort(similarities)[::-1]
+                # 3. Sort by similarity descending
+                scored_memories.sort(key=lambda x: x[0], reverse=True)
                 
                 relevant_lessons = []
-                for idx in top_indices[:3]:
-                    if similarities[idx] > 0.4:
-                        mem = all_memories[idx]
+                for similarity, mem in scored_memories[:3]:
+                    if similarity > 0.4:
                         relevant_lessons.append({
-                            "similarity": round(float(similarities[idx]), 3),
+                            "similarity": round(float(similarity), 3),
                             "teams": f"{mem['team_a']} vs {mem['team_b']}",
                             "lesson": mem['lesson'],
                             "date": mem['timestamp']

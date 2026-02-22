@@ -5,16 +5,13 @@ requests
 python-dotenv
 beautifulsoup4
 lxml
-html5lib
 supabase
 python-jose[cryptography]
 google-generativeai
 python-dateutil
-numpy
 duckduckgo-search
-scikit-learn
 
-# NOTE: keep Vercel serverless bundle small.
-# Selenium + undetected-chromedriver are used for local ingestion only.
-# Install them via requirements-worker.txt (or your local venv) instead.
-
+# NOTE: keep Vercel serverless bundle small (< 500MB).
+# numpy, pandas, scikit-learn, scipy are TOO LARGE for Vercel.
+# Only use pure python or small libs for deployment.
+# Install heavy libs via requirements-worker.txt for local/worker use only.
