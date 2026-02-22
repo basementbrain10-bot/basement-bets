@@ -17,11 +17,17 @@ export default function AgentCouncil() {
     const loadData = async () => {
         setLoading(true);
         try {
-            // Re-using the recommendations endpoint to get the days slate
-            const [slateRes, memRes] = await Promise.all([
-                api.get('/api/ncaam/top-picks', { params: { limit_games: 200 } }),
-                api.get('/api/v1/council/memories')
-            ]);
+            // Re-using the recommendations endpoint to get the days slate.
+            // IMPORTANT: load docket even if council memories fail (auth / empty DB / etc.).
+            const slateRes = await api.get('/api/ncaam/top-picks', { params: { limit_games: 200 } });
+
+            let memRes = null;
+            try {
+                memRes = await api.get('/api/v1/council/memories');
+            } catch (e) {
+                // Keep the docket usable even if memories are unavailable.
+                memRes = null;
+            }
 
             const topPicks = slateRes.data.picks || {};
             const allEvents = Object.keys(topPicks)
@@ -39,7 +45,7 @@ export default function AgentCouncil() {
                 });
 
             setEvents(allEvents);
-            setMemories(memRes.data.data || []);
+            setMemories(memRes?.data?.data || []);
         } catch (err) {
             console.error("Failed to load council base data", err);
         } finally {
