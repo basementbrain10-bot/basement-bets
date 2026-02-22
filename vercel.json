@@ -40,6 +40,10 @@
         {
             "path": "/api/jobs/grade_predictions",
             "schedule": "0 8 * * *"
+        },
+        {
+            "path": "/api/jobs/run_council_today",
+            "schedule": "0 9 * * *"
         }
     ]
 }

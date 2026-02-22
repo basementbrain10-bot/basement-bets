@@ -408,6 +408,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
         """
         On-demand analysis for one game.
         """
+        council_verdict = self._get_council_verdict(event_id)
+        
         # 1. Load Event (Use context if provided, else DB)
         event = event_context
         if not event:
@@ -586,6 +588,24 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         mu_spread_final = mu_market_spread + (w_base * diff_torvik) + (self.W_SCHED * diff_sched) + (self.W_KENPOM * diff_kenpom) + luck_adjustment
         
+        # --- Feature: Agent Council Qualitative Adjustment ---
+        council_adjustment_spread = 0.0
+        council_adjustment_total = 0.0
+        if council_verdict:
+            verdict_text = council_verdict.get('oracle_verdict', '').lower()
+            # Basic parsing of the oracle's lean (e.g., "lean towards BYU", "Iowa State -2.5")
+            if event['home_team'].lower() in verdict_text and ("lean" in verdict_text or "favor" in verdict_text):
+                council_adjustment_spread = -1.0  # -1 point in favor of Home team
+            elif event['away_team'].lower() in verdict_text and ("lean" in verdict_text or "favor" in verdict_text):
+                council_adjustment_spread = 1.0   # +1 point in favor of Away team
+                
+            if "under" in verdict_text and "lean" in verdict_text:
+                council_adjustment_total = -1.5
+            elif "over" in verdict_text and "lean" in verdict_text:
+                council_adjustment_total = 1.5
+
+        mu_spread_final += council_adjustment_spread
+        
         # Apply Caps
         if abs(mu_spread_final - mu_market_spread) > self.CAP_SPREAD:
              mu_spread_final = mu_market_spread + (self.CAP_SPREAD * math.copysign(1, mu_spread_final - mu_market_spread))
@@ -622,6 +642,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         mu_total_final = mu_market_total + (w_base * (mu_torvik_total - mu_market_total)) + (self.W_KENPOM * (mu_kenpom_total - mu_market_total))
         mu_total_final += kp_player_total_adj
+        mu_total_final += council_adjustment_total
         
         if abs(mu_total_final - mu_market_total) > self.CAP_TOTAL:
              mu_total_final = mu_market_total + (self.CAP_TOTAL * math.copysign(1, mu_total_final - mu_market_total))
@@ -2199,3 +2220,28 @@ class NCAAMMarketFirstModelV2(BaseModel):
         with get_db_connection() as conn:
             rows = _exec(conn, query, {"eid": event_id}).fetchall()
             return [dict(r) for r in rows]
+
+    def _get_council_verdict(self, event_id: str) -> Optional[Dict]:
+        """
+        Fetches the latest Agent Council debate and Oracle prediction for a specific game
+        from the decision_runs table to use as a qualitative modifier.
+        """
+        try:
+            with get_db_connection() as conn:
+                query = """
+                SELECT council_narrative->%(eid)s AS narrative
+                FROM decision_runs
+                WHERE council_narrative->>%(eid)s IS NOT NULL
+                ORDER BY created_at DESC LIMIT 1
+                """
+                row = _exec(conn, query, {"eid": event_id}).fetchone()
+                if row and row[0]:
+                    narrative = row[0]
+                    import json
+                    if isinstance(narrative, str):
+                        narrative = json.loads(narrative)
+                    return narrative
+        except Exception as e:
+            import traceback
+            print(f"[MODEL] Failed to fetch council verdict for {event_id}:\n{traceback.format_exc()}")
+        return None

@@ -53,6 +53,12 @@ class OracleAgent(BaseAgent):
             Your job is to simulate a brief round-table debate between the Stats Agent, the News Agent, and the Memory Agent.
             Then, as The Oracle, provide a final synthesized prediction.
             
+            CRITICAL EVALUATION INSTRUCTIONS:
+            When formulating your debate and final verdict, you MUST explicitly evaluate:
+            - Spread & Moneyline (ML)
+            - Game Totals (Over/Under)
+            - Key Player Stats/Matchups that could dictate the game script
+            
             OUTPUT FORMAT MUST BE VALID JSON with exactly these keys:
             {{
                 "debate": [

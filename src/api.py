@@ -3696,6 +3696,43 @@ async def trigger_build_daily_top_picks(
         print(f"[JOB ERROR] build_daily_top_picks failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.api_route("/api/jobs/run_council_today", methods=["GET", "POST"])
+async def trigger_run_council_today(
+    request: Request,
+    date: Optional[str] = None,
+    authorized: bool = Depends(verify_cron_secret),
+):
+    """Cron/manual: Runs the Agent Council on today's actionable top picks.
+    
+    This invokes the Oracle Agent, Memory Agent, and Research Agent on games where
+    the quantitative model found an edge, stores the qualitative debate to decision_runs,
+    and then re-runs the Top Picks builder to apply the qualitative adjustments.
+    """
+    try:
+        from src.scripts.run_council_today import main as run_council
+        
+        # Override sys.argv briefly to pass the date to the script
+        import sys
+        old_argv = sys.argv[:]
+        
+        try:
+            sys.argv = ['run_council_today.py']
+            if date:
+                sys.argv.append(date)
+            
+            run_council()
+            
+        finally:
+            sys.argv = old_argv
+
+        return {
+            "status": "success",
+            "message": "Agent Council completed successfully."
+        }
+    except Exception as e:
+        print(f"[JOB ERROR] run_council_today failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
     """Cron/manual: grade model_predictions using local game_results.
 
