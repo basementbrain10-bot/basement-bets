@@ -4070,6 +4070,9 @@ def get_recommendations_v2(request: Request, mode: str = "default", days_ahead: 
     from src.agents.risk_manager_agent import RiskManagerAgent
     from src.agents.bet_builder_agent import BetBuilderAgent
     from src.agents.journal_agent import JournalAgent
+    from src.agents.research_agent import ResearchAgent
+    from src.agents.memory_agent import MemoryAgent
+    from src.agents.oracle_agent import OracleAgent
 
     orchestrator = DecisionOrchestrator(league="NCAAM", model_version="agent_v1")
     
@@ -4080,6 +4083,9 @@ def get_recommendations_v2(request: Request, mode: str = "default", days_ahead: 
         edge_ev_agent=EdgeEVAgent(),
         risk_manager_agent=RiskManagerAgent(),
         bet_builder_agent=BetBuilderAgent(),
+        research_agent=ResearchAgent(),
+        memory_agent=MemoryAgent(),
+        oracle_agent=OracleAgent(),
         journal_agent=JournalAgent(),
         parameters={"days_ahead": days_ahead}
     )
@@ -4132,3 +4138,40 @@ def get_performance_reports(date: Optional[str] = None):
             mapped['summary'] = json.loads(r['summary_json'])
             reports.append(mapped)
         return reports
+
+@app.get("/api/v1/council/{event_id}")
+def get_council_debate(event_id: str):
+    """Fetches the latest Agent Council debate and Oracle prediction for a specific game."""
+    from src.database import get_db_connection, _exec
+    import json
+    with get_db_connection() as conn:
+        # Search the latest decision run that includes narrative for this event.
+        # Since council_narrative is a JSON object keyed by event_id, we can check if that key exists.
+        query = """
+        SELECT council_narrative->%s AS narrative
+        FROM decision_runs
+        WHERE council_narrative ? %s
+        ORDER BY created_at DESC LIMIT 1
+        """
+        row = _exec(conn, query, (event_id, event_id)).fetchone()
+        
+        if row and row['narrative']:
+            try:
+                # Based on the db driver, json might already be parsed, or it's a string
+                narrative = row['narrative']
+                if isinstance(narrative, str):
+                    narrative = json.loads(narrative)
+                return {"status": "success", "data": narrative}
+            except Exception as e:
+                return {"status": "error", "message": f"Failed to parse narrative: {e}"}
+                
+        return {"status": "error", "message": "No council debate found for this event."}
+
+@app.get("/api/v1/council/memories")
+def get_agent_memories(limit: int = 10):
+    """Fetches recent lessons learned by the agents for display in the UI."""
+    from src.database import get_db_connection, _exec
+    with get_db_connection() as conn:
+        rows = _exec(conn, "SELECT id, team_a, team_b, context, lesson, timestamp FROM agent_memories ORDER BY timestamp DESC LIMIT %s", (limit,)).fetchall()
+        return {"status": "success", "data": [dict(r) for r in rows]}
+

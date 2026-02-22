@@ -8,8 +8,11 @@ lxml
 html5lib
 supabase
 python-jose[cryptography]
-openai
+google-generativeai
 python-dateutil
+numpy
+duckduckgo-search
+scikit-learn
 
 # NOTE: keep Vercel serverless bundle small.
 # Selenium + undetected-chromedriver are used for local ingestion only.

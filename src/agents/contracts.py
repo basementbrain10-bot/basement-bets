@@ -89,3 +89,4 @@ class DecisionRun(BaseModel):
     notes: List[str]
     errors: List[AgentError]
     model_version: str
+    council_narrative: Optional[Dict[str, Any]] = None

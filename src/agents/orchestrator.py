@@ -48,6 +48,9 @@ class DecisionOrchestrator:
         edge_ev_agent,
         risk_manager_agent,
         bet_builder_agent,
+        research_agent,
+        memory_agent,
+        oracle_agent,
         journal_agent,
         parameters: Dict[str, Any]
     ) -> DecisionRun:
@@ -112,6 +115,38 @@ class DecisionOrchestrator:
                     status = "STAGED_FOR_REVIEW"
                     break
 
+        # G. The Agent Council (Research & RAG)
+        # We only run the council on the specific events that made it through as recommendations
+        # to save API costs and LLM tokens. Or we can do it for all events. Let's do it for recommended matches.
+        recommended_event_ids = {r.offer.event_id for r in final_picks} if final_picks else set()
+        target_events = [ev for ev in events if ev.event_id in recommended_event_ids]
+        
+        council_narrative = {}
+        if target_events:
+            research, err = research_agent.run({"events": target_events})
+            if err: errors.append(err)
+            
+            memories, err = memory_agent.run({"events": target_events})
+            if err: errors.append(err)
+            
+            # Map edges by event_id for the oracle
+            edges_by_ev = {}
+            if edges:
+                for e in edges:
+                    ev_id = e.offer.event_id
+                    if ev_id not in edges_by_ev:
+                        edges_by_ev[ev_id] = []
+                    edges_by_ev[ev_id].append(f"{e.offer.market_type} {e.offer.side} {e.offer.line} ({e.ev_display})")
+                    
+            oracle_outputs, err = oracle_agent.run({
+                "events": target_events,
+                "edges": {k: ", ".join(v) for k, v in edges_by_ev.items()},
+                "research": research,
+                "memories": memories
+            })
+            if err: errors.append(err)
+            council_narrative = oracle_outputs
+
         # 3. Formulate the final DecisionRun contract
         decision_run = DecisionRun(
             run_id=run_id,
@@ -124,7 +159,8 @@ class DecisionOrchestrator:
             rejected_offers=[], # Collect rejections actively in agents later
             notes=["Completed orchestrator pipeline."],
             errors=errors,
-            model_version=self.model_version
+            model_version=self.model_version,
+            council_narrative=council_narrative
         )
         
         # 4. Journaling (Guarded single DB transaction)

@@ -8,9 +8,38 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ZAxis,
 } from 'recharts';
+
+const CustomTooltip = ({ active, payload }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-2xl backdrop-blur-md">
+        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 border-b border-slate-800 pb-1">
+          {data.betType} • {data.sport}
+        </div>
+        <div className="space-y-1.5 min-w-[140px]">
+          <div className="flex justify-between items-center">
+            <span className="text-slate-400 text-[11px]">Total Bets</span>
+            <span className="text-white font-bold text-xs">{data.n}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-slate-400 text-[11px]">Win Rate</span>
+            <span className="text-green-400 font-bold text-xs">{data.winPct}%</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-slate-400 text-[11px]">ROI</span>
+            <span className={`font-bold text-xs ${data.roiPct >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+              {data.roiPct}%
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
 export default function Bankroll({ financials, bets, formatCurrency }) {
   const [expandedBook, setExpandedBook] = useState(null);
@@ -197,28 +226,9 @@ export default function Bankroll({ financials, bets, formatCurrency }) {
                 tick={{ fill: '#94a3b8', fontSize: 11 }}
                 tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
               />
-              <ZAxis type="number" dataKey="n" range={[50, 240]} name="# Bets" />
-              <Tooltip
-                cursor={{ strokeDasharray: '3 3' }}
-                contentStyle={{ background: '#0b1220', border: '1px solid #334155', borderRadius: 8 }}
-                labelStyle={{ color: '#e2e8f0' }}
-                labelFormatter={(_, payload) => {
-                  try {
-                    const p = payload?.[0]?.payload;
-                    if (!p) return '';
-                    return `${p.betType || 'Unknown'} • ${p.sport || 'Unknown'}`;
-                  } catch (e) {
-                    return '';
-                  }
-                }}
-                formatter={(v, name) => {
-                  if (name === 'Win%') return [`${Number(v).toFixed(1)}%`, 'Win%'];
-                  if (name === 'ROI%') return [`${Number(v).toFixed(1)}%`, 'ROI%'];
-                  if (name === '# Bets') return [v, '# Bets'];
-                  return [v, name];
-                }}
-              />
-              <Scatter name="(Sport × Bet Type)" data={performanceByTypeAndSport} fill="#a78bfa" />
+              <ZAxis type="number" dataKey="n" range={[60, 1000]} name="# Bets" />
+              <Tooltip content={<CustomTooltip />} />
+              <Scatter name="(Sport × Bet Type)" data={performanceByTypeAndSport} fill="#a78bfa" fillOpacity={0.6} stroke="#a78bfa" strokeWidth={1} />
             </ScatterChart>
           </ResponsiveContainer>
         </div>

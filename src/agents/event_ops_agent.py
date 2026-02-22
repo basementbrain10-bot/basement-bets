@@ -16,7 +16,7 @@ class EventOpsAgent(BaseAgent):
         days_ahead = int(params.get("days_ahead", 3))
         
         query = """
-        SELECT id, home_team, away_team, start_time, league, neutral_site
+        SELECT id, home_team, away_team, start_time, league
         FROM events
         WHERE league = %s 
           AND start_time BETWEEN NOW() AND NOW() + INTERVAL '%s days'

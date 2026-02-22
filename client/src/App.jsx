@@ -9,6 +9,7 @@ import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, Act
 import Research from './pages/Research';
 import Picks from './pages/Picks';
 import Bankroll from './pages/Bankroll';
+import AgentCouncil from './pages/AgentCouncil';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 import TransactionView from './components/TransactionView';
 import ManualAddBetModal from './components/ManualAddBetModal';
@@ -457,6 +458,14 @@ function App() {
                                     <span className="hidden sm:inline">Bankroll</span>
                                     <span className="sm:hidden">Bankroll</span>
                                 </button>
+                                <button
+                                    onClick={() => setPage('council')}
+                                    className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${page === 'council' ? 'bg-blue-900/40 text-blue-100 shadow-sm ring-1 ring-blue-500/50' : 'text-blue-400/70 hover:text-blue-200 hover:bg-blue-900/20'}`}
+                                >
+                                    <Search size={18} />
+                                    <span className="hidden sm:inline">Agent Council</span>
+                                    <span className="sm:hidden">Council</span>
+                                </button>
                             </div>
 
                             <button
@@ -569,6 +578,8 @@ function App() {
                         <Picks />
                     ) : page === 'bankroll' ? (
                         <Bankroll financials={financials} bets={bets} formatCurrency={formatCurrency} />
+                    ) : page === 'council' ? (
+                        <AgentCouncil />
                     ) : (
                         <>
                             {actualsTab === 'transactions' ? (
@@ -758,7 +769,7 @@ function PerformanceView({ timeSeries, inPlaySeries, financials, periodStats, ed
 
             {/* Sportsbook financials moved to Transactions tab */}
 
-{/* Drawdown tiles removed (keep Performance tab focused on betting performance + curves) */}
+            {/* Drawdown tiles removed (keep Performance tab focused on betting performance + curves) */}
 
             {/* Betting performance windows (settled bets) */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl backdrop-blur-sm">
