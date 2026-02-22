@@ -62,6 +62,7 @@ class RiskManagerAgent(BaseAgent):
                 ev_pct=e.ev_pct,
                 ev_per_unit=e.ev_per_unit,
                 implied_p=e.implied_p,
+                p_fair=e.fair.p_fair,
                 edge_points=e.edge_points,
                 risk_flags=e.flags,
                 rationale=e.rationale,
