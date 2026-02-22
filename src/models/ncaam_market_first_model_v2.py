@@ -633,7 +633,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         tempo_factor = math.sqrt(game_tempo / 68.0)
         
         base_sigma_spread = 10.5
-        base_sigma_total = 15.0
+        base_sigma_total = 13.5  # Adjusted from 15.0 for accuracy
         
         
         sigma_spread = (base_sigma_spread * tempo_factor) + 0.1 * abs(diff_torvik)
@@ -1309,6 +1309,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
         # some bets so we can learn/improve.
         override_ev = float(os.getenv('PUBLISH_OVERRIDE_MIN_EV', '0.06'))  # 6%
         override_edge = float(os.getenv('PUBLISH_OVERRIDE_MIN_EDGE_PTS', '2.0'))
+        
+        # Totals have wider variances; applying an identical EV constraint effectively bans them 
+        if market == 'TOTAL':
+            override_ev = float(os.getenv('PUBLISH_OVERRIDE_MIN_EV_TOTAL', '0.03'))  # 3%
+            override_edge = float(os.getenv('PUBLISH_OVERRIDE_MIN_EDGE_PTS_TOTAL', '1.5'))
+
         override_ok = (ev >= override_ev) and (edge_pts >= override_edge) and (n >= min_n)
 
         if lb < 0.0 and not override_ok:
