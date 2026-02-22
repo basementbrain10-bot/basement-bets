@@ -24,21 +24,21 @@ export default function AgentCouncil() {
             ]);
 
             const topPicks = slateRes.data.picks || {};
-            const actionableEvents = Object.keys(topPicks)
-                .filter(eid => topPicks[eid] && topPicks[eid].is_actionable === true && topPicks[eid].rec)
+            const allEvents = Object.keys(topPicks)
+                .filter(eid => topPicks[eid] && topPicks[eid].event)
                 .map(eid => {
                     const data = topPicks[eid];
                     return {
                         offer: {
                             event_id: eid,
-                            market_type: data.rec.bet_type || 'Unknown',
-                            side: data.rec.selection || 'Unknown Side',
+                            market_type: data.rec ? data.rec.bet_type : 'Analysis Pending',
+                            side: data.rec ? data.rec.selection : '',
                         },
                         ...data
                     };
                 });
 
-            setEvents(actionableEvents);
+            setEvents(allEvents);
             setMemories(memRes.data.data || []);
         } catch (err) {
             console.error("Failed to load council base data", err);
@@ -109,7 +109,11 @@ export default function AgentCouncil() {
                                                 ? `${ev.event.away_team} @ ${ev.event.home_team}`
                                                 : ev.offer.event_id.replace('NCAAB_', '').replace('action:ncaam:', 'Game ')}
                                         </div>
-                                        <div className="text-xs opacity-70 mt-1">{ev.offer.market_type} • {ev.offer.side}</div>
+                                        {ev.rec ? (
+                                            <div className="text-xs opacity-70 mt-1">{ev.offer.market_type} • {ev.offer.side}</div>
+                                        ) : (
+                                            <div className="text-xs opacity-70 mt-1 italic text-slate-500">Awaiting Model Edge</div>
+                                        )}
                                     </div>
                                     <ChevronRight size={16} className="opacity-50" />
                                 </button>
