@@ -1,9 +1,8 @@
 import os
 import json
-import json
 import math
 from typing import Any, Dict, List, Optional
-import google.generativeai as genai
+from src.utils.gemini_rest import embed_content
 
 from src.agents.base import BaseAgent
 from src.agents.contracts import EventContext
@@ -15,7 +14,7 @@ class MemoryAgent(BaseAgent):
     Queries the 'agent_memories' table via cosine similarity on embeddings.
     """
     def __init__(self):
-        genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+        pass
 
     def execute(self, context: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
         """
@@ -43,13 +42,11 @@ class MemoryAgent(BaseAgent):
             query = f"Lessons learned betting on {ev.away_team} vs {ev.home_team} tight matchups"
             try:
                 # 1. Embed the target query
-                res = genai.embed_content(
+                target_emb = embed_content(
                     model="models/gemini-embedding-001",
                     content=query,
                     task_type="RETRIEVAL_QUERY"
                 )
-                # We can use the raw list directly for pure python dot product
-                target_emb = res['embedding']
                 
                 # 2. Compute cosine similarities (dot product)
                 # Embeddings are normalized by Gemini, so dot product = cosine similarity

@@ -2,18 +2,18 @@ import os
 import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List
-import google.generativeai as genai
+from src.utils.gemini_rest import generate_content, embed_content
 from src.agents.base import BaseAgent
+from src.agents.contracts import EventContext
 from src.database import get_db_connection, _exec
 
 class PostMortemAgent(BaseAgent):
     """
-    Evaluates completed games where the Oracle made a prediction.
-    Generates a 'lesson learned' and saves it to the agent_memories table.
+    Runs after games complete. Analyzes the Oracle's prediction vs reality
+    and saves a 'lesson learned' back into the vector memory table.
     """
     def __init__(self):
-        genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        pass
 
     def execute(self, context: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
         """
@@ -37,32 +37,26 @@ class PostMortemAgent(BaseAgent):
                 if row:
                     continue
 
-                # 1. Generate Lesson using LLM
-                prompt = f"""
-                You are a sports betting analyst reviewing a past game.
-                Matchup: {team_a} vs {team_b}
-                Oracle Prediction: {prediction}
-                Actual Outcome: {actual_result}
-                
-                Write a concise, 2-3 sentence 'lesson learned' from this outcome. 
-                Focus on betting logic, team archetypes, or why the prediction succeeded or failed.
-                """
+                # 1. Ask Gemini to reflect
+                reflection_payload = f"Matchup: {team_a} vs {team_b}, Oracle Prediction: {prediction}, Actual Outcome: {actual_result}"
+                full_prompt = f"Analyze this sports betting prediction vs exactly what happened. What went right or wrong? Keep it to 2 sentences.\n\n{reflection_payload}"
                 
                 try:
-                    response = self.model.generate_content(
-                        prompt,
-                        generation_config=genai.GenerationConfig(max_output_tokens=150)
+                    response_text = generate_content(
+                        model="gemini-2.5-flash",
+                        system_prompt=full_prompt,
+                        max_tokens=250
                     )
-                    lesson = response.text.strip()
+                    lesson = response_text.strip()
                     
                     # 2. Get Embedding for the lesson
-                    embed_res = genai.embed_content(
+                    embed_res = embed_content(
                         model="models/gemini-embedding-001",
                         title="Reflection",
                         task_type="RETRIEVAL_DOCUMENT",
                         content=lesson
                     )
-                    embedding = embed_res['embedding']
+                    embedding_vector = embed_res
                     
                     # 3. Save to memory DB
                     insert_query = """

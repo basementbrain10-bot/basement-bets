@@ -1,7 +1,7 @@
 import os
 import json
 from typing import Any, Dict, List
-import google.generativeai as genai
+from src.utils.gemini_rest import generate_content
 from src.agents.base import BaseAgent
 from src.agents.contracts import EventContext, MarketOffer, FairPrice
 
@@ -11,8 +11,7 @@ class OracleAgent(BaseAgent):
     into a structured debate and final prediction decision.
     """
     def __init__(self):
-        genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        pass
 
     def execute(self, context: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
         """
@@ -66,15 +65,13 @@ class OracleAgent(BaseAgent):
             """
             
             try:
-                response = self.model.generate_content(
-                    system_prompt,
-                    generation_config=genai.GenerationConfig(
-                        response_mime_type="application/json",
-                        temperature=0.7,
-                        max_output_tokens=2048
-                    )
+                response_text = generate_content(
+                    model="gemini-2.5-flash",
+                    system_prompt=system_prompt,
+                    json_mode=True,
+                    max_tokens=2048
                 )
-                council_output = json.loads(response.text)
+                council_output = json.loads(response_text)
                 results[ev_id] = council_output
             except Exception as e:
                 print(f"[OracleAgent] Synthesis failed for {ev_id}: {e}")
