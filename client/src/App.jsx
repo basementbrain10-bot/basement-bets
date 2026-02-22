@@ -104,9 +104,9 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
-    const [page, setPage] = useState('today'); // today | model | actuals | bankroll
-    // Actuals sub-tab (combined Performance + Transactions)
-    const [actualsTab, setActualsTab] = useState('performance'); // performance | transactions
+    const [page, setPage] = useState('today'); // today | model | actuals | council
+    // Actuals sub-tabs
+    const [actualsTab, setActualsTab] = useState('transactions'); // transactions | performance | bankroll
 
     const [stats, setStats] = useState(null);
     const [bets, setBets] = useState([]);
@@ -215,7 +215,9 @@ function App() {
             } else if (nav === 'today') {
                 setPage('today');
             } else if (nav === 'bankroll') {
-                setPage('bankroll');
+                // Back-compat: bankroll is now a sub-tab within Actuals.
+                setPage('actuals');
+                setActualsTab('bankroll');
             }
             if (nav) localStorage.removeItem('nav_after_save');
         } catch (e) { }
@@ -450,14 +452,7 @@ function App() {
                                     <span className="hidden sm:inline">Actuals</span>
                                     <span className="sm:hidden">Actuals</span>
                                 </button>
-                                <button
-                                    onClick={() => setPage('bankroll')}
-                                    className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${page === 'bankroll' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
-                                >
-                                    <DollarSign size={18} />
-                                    <span className="hidden sm:inline">Bankroll</span>
-                                    <span className="sm:hidden">Bankroll</span>
-                                </button>
+                                {/* Bankroll moved under Actuals */}
                                 <button
                                     onClick={() => setPage('council')}
                                     className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${page === 'council' ? 'bg-blue-900/40 text-blue-100 shadow-sm ring-1 ring-blue-500/50' : 'text-blue-400/70 hover:text-blue-200 hover:bg-blue-900/20'}`}
@@ -490,16 +485,22 @@ function App() {
                         <div className="mb-6 flex justify-end">
                             <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
                                 <button
+                                    onClick={() => setActualsTab('transactions')}
+                                    className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${actualsTab === 'transactions' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                >
+                                    Transactions
+                                </button>
+                                <button
                                     onClick={() => setActualsTab('performance')}
                                     className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${actualsTab === 'performance' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                                 >
                                     Performance
                                 </button>
                                 <button
-                                    onClick={() => setActualsTab('transactions')}
-                                    className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${actualsTab === 'transactions' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                    onClick={() => setActualsTab('bankroll')}
+                                    className={`px-3 py-2 rounded-xl text-sm font-semibold transition ${actualsTab === 'bankroll' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                                 >
-                                    Transactions
+                                    Bankroll
                                 </button>
                             </div>
                         </div>
@@ -576,8 +577,6 @@ function App() {
                         />
                     ) : page === 'model' ? (
                         <Picks />
-                    ) : page === 'bankroll' ? (
-                        <Bankroll financials={financials} bets={bets} formatCurrency={formatCurrency} />
                     ) : page === 'council' ? (
                         <AgentCouncil />
                     ) : (
@@ -594,6 +593,8 @@ function App() {
                                     showOpenBets={false}
                                     showFinancials={false}
                                 />
+                            ) : actualsTab === 'bankroll' ? (
+                                <Bankroll financials={financials} bets={bets} formatCurrency={formatCurrency} />
                             ) : (
                                 <PerformanceView
                                     timeSeries={timeSeries}
