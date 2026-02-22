@@ -1,0 +1,31 @@
+# Exclude heavy data and local artifacts from Vercel deployment
+data/
+data/raw/
+data/snapshots/
+*.parquet
+*.json
+!vercel.json
+!package.json
+!package-lock.json
+!requirements.txt
+
+# Local debug files
+debug_dk.html
+debug_dk.txt
+debug.log
+bets_check.json
+backtest_output.json
+torvik_scraped.json
+
+# Local scripts
+scripts/test_council.py
+scripts/run_council_live.py
+
+# Directories
+docs/
+tests/
+tools/
+.git/
+.github/
+node_modules/
+client/node_modules/

@@ -4,14 +4,13 @@ psycopg2-binary
 requests
 python-dotenv
 beautifulsoup4
-lxml
 supabase
 python-jose[cryptography]
 google-generativeai
 python-dateutil
 duckduckgo-search
 
-# NOTE: keep Vercel serverless bundle small (< 500MB).
-# numpy, pandas, scikit-learn, scipy are TOO LARGE for Vercel.
+# NOTE: keep Vercel serverless bundle small (< 250MB).
+# lxml, numpy, pandas, scikit-learn, scipy are TOO LARGE for Vercel.
 # Only use pure python or small libs for deployment.
-# Install heavy libs via requirements-worker.txt for local/worker use only.
+# Historical data/ is excluded via .vercelignore.
