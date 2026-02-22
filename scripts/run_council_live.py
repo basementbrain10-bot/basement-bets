@@ -15,9 +15,9 @@ from src.services.kenpom_client import KenPomClient
 from src.services.torvik_projection import TorvikProjectionService
 
 # ── Config ──────────────────────────────────────────────
-AWAY_TEAM = "Kentucky"
-HOME_TEAM = "Auburn"
-EVENT_ID  = "NCAAB_Kentucky_at_Auburn_20260221"
+AWAY_TEAM = "BYU"
+HOME_TEAM = "Iowa State"
+EVENT_ID  = "NCAAB_BYU_at_Iowa_State_20260221"
 ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")
 
 # ── 1. Fetch Real Stats & Rankings ──────────────────────
@@ -55,12 +55,12 @@ try:
     resp = requests.get(odds_url, params=params, timeout=10)
     games = resp.json()
 
-    # Find the Auburn/Kentucky game
+    # Find the target game
     target = None
     for g in games:
-        teams_lower = [t.lower() for t in g.get("home_team", "").split()] + \
-                      [t.lower() for t in g.get("away_team", "").split()]
-        if "auburn" in teams_lower or "kentucky" in teams_lower:
+        teams_lower = [t.lower() for t in g.get("home_team", "").lower().split()] + \
+                      [t.lower() for t in g.get("away_team", "").lower().split()]
+        if AWAY_TEAM.lower() in teams_lower or HOME_TEAM.lower() in teams_lower:
             target = g
             break
 

@@ -19,7 +19,7 @@ export default function AgentCouncil() {
         try {
             // Re-using the recommendations endpoint to get the days slate
             const [slateRes, memRes] = await Promise.all([
-                api.get('/api/v1/ncaab/recommendations'),
+                api.get('/api/edge/ncaab/recommendations'),
                 api.get('/api/v1/council/memories')
             ]);
 
@@ -84,8 +84,8 @@ export default function AgentCouncil() {
                                     key={idx}
                                     onClick={() => handleSelectEvent(ev)}
                                     className={`w-full text-left p-3 rounded-lg border transition flex justify-between items-center ${selectedEvent?.offer?.event_id === ev.offer.event_id
-                                            ? 'bg-blue-900/40 border-blue-500/50 text-blue-100'
-                                            : 'bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-800'
+                                        ? 'bg-blue-900/40 border-blue-500/50 text-blue-100'
+                                        : 'bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-800'
                                         }`}
                                 >
                                     <div>
