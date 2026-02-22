@@ -69,8 +69,9 @@ export default function AgentCouncil() {
     const getAgentIcon = (agentName) => {
         const name = agentName.toLowerCase();
         if (name.includes('stat') || name.includes('quant')) return <Activity className="text-blue-400" />;
-        if (name.includes('news') || name.includes('injury')) return <FileText className="text-orange-400" />;
+        if (name.includes('news') || name.includes('injury') || name.includes('qualitative')) return <FileText className="text-orange-400" />;
         if (name.includes('memory') || name.includes('rag')) return <Brain className="text-purple-400" />;
+        if (name.includes('executive') || name.includes('summary')) return <Gavel className="text-violet-400" />;
         return <Search className="text-slate-400" />;
     };
 

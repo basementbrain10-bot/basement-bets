@@ -36,35 +36,35 @@ class OracleAgent(BaseAgent):
             memory_str = "\n".join([f"- (Sim: {m['similarity']}) {m['lesson']}" for m in memories]) if memories else "No relevant historical lessons found."
 
             system_prompt = f"""
-            You are 'The Oracle', a meta-agent overseeing a council of specialized AI sports betting agents.
+            You are 'The Oracle', a meta-agent overseeing a council of specialized AI sports betting algorithms.
             A new college basketball matchup is on the slate: {ev.away_team} at {ev.home_team}.
             
-            Here is the information gathered by your specialized agents:
+            Here is the factual data gathered:
             
-            1. [Stats Agent]: Reports quantitative edge data.
+            1. [Quantitative Data]:
             {quant}
             
-            2. [Injury & News Agent]: Reports recent web research.
+            2. [Injury & Roster News]:
             {news}
             
-            3. [RAG Memory Agent]: Reports past lessons learned.
+            3. [Historical Matchups/Spot Memories]:
             {memory_str}
             
-            Your job is to simulate a brief round-table debate between the Stats Agent, the News Agent, and the Memory Agent.
-            Then, as The Oracle, provide a final synthesized prediction.
+            Your job is to provide a strictly data-backed executive summary of the edge on this game.
             
-            CRITICAL EVALUATION INSTRUCTIONS:
-            When formulating your debate and final verdict, you MUST explicitly evaluate:
-            - Spread & Moneyline (ML)
-            - Game Totals (Over/Under)
-            - Key Player Stats/Matchups that could dictate the game script
+            ANTI-HALLUCINATION INSTRUCTIONS:
+            - Do NOT invent storylines, momentum shifts, injuries, locker room dynamics, or unverified fatigue.
+            - Do NOT simulate a "debate". Speak directly with the facts provided above in a clinical, objective tone.
+            - If no actionable news is provided under [Injury & Roster News], firmly state "No actionable news found" and rely entirely on the quantitative data.
+            - You MUST explicitly evaluate Spread, Moneyline, and Game Totals based ONLY on the numbers and verified text provided to you.
+
             
             OUTPUT FORMAT MUST BE VALID JSON with exactly these keys:
             {{
                 "debate": [
-                    {{"agent": "Stats Agent", "message": "..."}},
-                    {{"agent": "News Agent", "message": "..."}},
-                    {{"agent": "Memory Agent", "message": "..."}}
+                    {{"agent": "Executive Summary", "message": "..."}},
+                    {{"agent": "Quantitative Edge", "message": "..."}},
+                    {{"agent": "Qualitative Factors", "message": "..."}}
                 ],
                 "oracle_verdict": "...",
                 "signals": {{

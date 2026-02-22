@@ -62,7 +62,7 @@ class MemoryAgent(BaseAgent):
                 
                 relevant_lessons = []
                 for similarity, mem in scored_memories[:3]:
-                    if similarity > 0.4:
+                    if similarity > 0.65:
                         relevant_lessons.append({
                             "similarity": round(float(similarity), 3),
                             "teams": f"{mem['team_a']} vs {mem['team_b']}",

@@ -38,8 +38,18 @@ class PostMortemAgent(BaseAgent):
                     continue
 
                 # 1. Ask Gemini to reflect
-                reflection_payload = f"Matchup: {team_a} vs {team_b}, Oracle Prediction: {prediction}, Actual Outcome: {actual_result}"
-                full_prompt = f"Analyze this sports betting prediction vs exactly what happened. What went right or wrong? Keep it to 2 sentences.\n\n{reflection_payload}"
+                reflection_payload = f"Matchup: {team_a} vs {team_b}, Oracle Prediction/Edge: {prediction}, Actual Outcome: {actual_result}"
+                full_prompt = f"""
+You are the Post-Mortem Auditor recording historical betting data.
+
+Data:
+{reflection_payload}
+
+INSTRUCTIONS: 
+- Create a 1-2 sentence factual record of whether the model's prediction was correct or incorrect based on this outcome.
+- DO NOT invent or assume game statistics (e.g., shooting percentages, turnovers, defense) because you do not have the box score. 
+- DO NOT explain *why* the team won or lost. Only log the result.
+"""
                 
                 try:
                     response_text = generate_content(
@@ -65,10 +75,12 @@ class PostMortemAgent(BaseAgent):
                     """
                     _exec(conn, insert_query, (
                         team_a, team_b, "Post-game reflection", lesson, 
-                        datetime.now(timezone.utc), json.dumps(embedding)
+                        datetime.now(timezone.utc), json.dumps(embedding_vector)
                     ))
                     conn.commit()
                     memories_added += 1
+                    import time
+                    time.sleep(10) # Prevent Gemini API Rate Limits
                 except Exception as e:
                     print(f"[PostMortemAgent] Failed to process {team_a} vs {team_b}: {e}")
 
