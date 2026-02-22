@@ -82,7 +82,8 @@ class PerformanceAuditorAgent(BaseAgent):
                                     actual_outcome = 0.0
 
                         if actual_outcome is not None:
-                            pred_p = float(r.get("implied_p", 0.5))
+                            # Prefer model probability (p_fair) when available; fallback to implied odds prob.
+                            pred_p = float(r.get("p_fair") or r.get("implied_p") or 0.5)
                             brier = (pred_p - actual_outcome) ** 2
                             brier_components.append(brier)
                             graded_recs += 1
