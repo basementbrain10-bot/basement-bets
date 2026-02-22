@@ -1,6 +1,7 @@
 import json
+import requests
+from bs4 import BeautifulSoup
 from typing import Any, Dict, List
-from duckduckgo_search import DDGS
 from src.agents.base import BaseAgent
 from src.agents.contracts import EventContext
 
@@ -14,32 +15,41 @@ class ResearchAgent(BaseAgent):
         if not events:
             return {}
 
-        results = {}
+        research_results = {}
         
-        # In a real heavy-load scenario we'd be careful with rate limits for DDG,
-        # but for small daily slates (max 25 plays), this is fine.
-        with DDGS() as ddgs:
-            for ev in events:
-                query = f"{ev.away_team} vs {ev.home_team} basketball news injuries 2026"
-                try:
-                    # Fetch top 5 news results for better coverage
-                    search_results = list(ddgs.text(query, max_results=5))
-                    
-                    summaries = []
-                    for r in search_results:
-                        summaries.append(f"- {r.get('title', '')}: {r.get('body', '')}")
+        # DDG HTML search URL
+        search_url = "https://html.duckduckgo.com/html/"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) width/1920",
+        }
+        
+        for ev in events:
+            query = f"{ev.away_team} vs {ev.home_team} basketball news injuries 2026"
+            try:
+                # Fetch top news results via HTML
+                resp = requests.post(search_url, data={"q": query}, headers=headers, timeout=10)
+                resp.raise_for_status()
+                
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                results = soup.find_all('a', class_='result__snippet', limit=5)
+                
+                summaries = []
+                for r in results:
+                    text = r.get_text(strip=True)
+                    if text:
+                        summaries.append(f"- {text}")
                         
-                    results[ev.event_id] = {
-                        "query": query,
-                        "articles_found": len(search_results),
-                        "summary": "\n".join(summaries) if summaries else "No notable breaking news found."
-                    }
-                except Exception as e:
-                    print(f"[ResearchAgent] Failed to search for {ev.event_id}: {e}")
-                    results[ev.event_id] = {
-                        "query": query,
-                        "articles_found": 0,
-                        "summary": f"Search failed: {str(e)}"
-                    }
+                research_results[ev.event_id] = {
+                    "query": query,
+                    "articles_found": len(summaries),
+                    "summary": "\n".join(summaries) if summaries else "No notable breaking news found."
+                }
+            except Exception as e:
+                print(f"[ResearchAgent] Failed to search for {ev.event_id}: {e}")
+                research_results[ev.event_id] = {
+                    "query": query,
+                    "articles_found": 0,
+                    "summary": f"Search failed: {str(e)}"
+                }
 
-        return results
+        return research_results

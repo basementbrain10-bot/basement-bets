@@ -8,7 +8,6 @@ supabase
 python-jose[cryptography]
 google-generativeai
 python-dateutil
-duckduckgo-search
 
 # NOTE: keep Vercel serverless bundle small (< 250MB).
 # lxml, numpy, pandas, scikit-learn, scipy are TOO LARGE for Vercel.
