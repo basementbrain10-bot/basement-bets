@@ -589,22 +589,24 @@ class NCAAMMarketFirstModelV2(BaseModel):
         mu_spread_final = mu_market_spread + (w_base * diff_torvik) + (self.W_SCHED * diff_sched) + (self.W_KENPOM * diff_kenpom) + luck_adjustment
         
         # --- Feature: Agent Council Qualitative Adjustment ---
+        # Explanations-only mode: we still fetch and persist council narratives for UI,
+        # but we DO NOT let them change model outputs yet.
         council_adjustment_spread = 0.0
         council_adjustment_total = 0.0
         if council_verdict:
             verdict_text = council_verdict.get('oracle_verdict', '').lower()
-            # Basic parsing of the oracle's lean (e.g., "lean towards BYU", "Iowa State -2.5")
+            # Preserve the previous parsing so we can log/inspect intended adjustments,
+            # but do not apply them to mu_spread_final / mu_total_final.
             if event['home_team'].lower() in verdict_text and ("lean" in verdict_text or "favor" in verdict_text):
-                council_adjustment_spread = -1.0  # -1 point in favor of Home team
+                council_adjustment_spread = -1.0
             elif event['away_team'].lower() in verdict_text and ("lean" in verdict_text or "favor" in verdict_text):
-                council_adjustment_spread = 1.0   # +1 point in favor of Away team
-                
+                council_adjustment_spread = 1.0
             if "under" in verdict_text and "lean" in verdict_text:
                 council_adjustment_total = -1.5
             elif "over" in verdict_text and "lean" in verdict_text:
                 council_adjustment_total = 1.5
 
-        mu_spread_final += council_adjustment_spread
+        # NOTE: Do not apply council_adjustment_spread here.
         
         # Apply Caps
         if abs(mu_spread_final - mu_market_spread) > self.CAP_SPREAD:
@@ -642,7 +644,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         mu_total_final = mu_market_total + (w_base * (mu_torvik_total - mu_market_total)) + (self.W_KENPOM * (mu_kenpom_total - mu_market_total))
         mu_total_final += kp_player_total_adj
-        mu_total_final += council_adjustment_total
+        # NOTE: Explanations-only mode: do not apply council_adjustment_total.
         
         if abs(mu_total_final - mu_market_total) > self.CAP_TOTAL:
              mu_total_final = mu_market_total + (self.CAP_TOTAL * math.copysign(1, mu_total_final - mu_market_total))

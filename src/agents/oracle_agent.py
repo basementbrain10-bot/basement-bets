@@ -66,8 +66,27 @@ class OracleAgent(BaseAgent):
                     {{"agent": "News Agent", "message": "..."}},
                     {{"agent": "Memory Agent", "message": "..."}}
                 ],
-                "oracle_verdict": "..."
+                "oracle_verdict": "...",
+                "signals": {{
+                    "confidence": 0.0,
+                    "market_lean": {{
+                        "spread": {{"side": "HOME|AWAY|NONE", "points": 0.0, "reason": ""}},
+                        "total": {{"side": "OVER|UNDER|NONE", "points": 0.0, "reason": ""}},
+                        "moneyline": {{"side": "HOME|AWAY|NONE", "reason": ""}}
+                    }},
+                    "key_factors": ["..."],
+                    "data_points": [
+                        {{"type": "injury|rotation|travel|fatigue|matchup|pace|referee|motivation|other", "team": "", "detail": "", "source_url": ""}}
+                    ],
+                    "recommended_followups": ["..."],
+                    "red_flags": ["..."],
+                    "sources": ["https://..."]
+                }}
             }}
+
+            Notes:
+            - This is EXPLANATIONS-ONLY mode. Do NOT override the quantitative model; focus on structuring evidence.
+            - Put any URLs you used in signals.sources (and per-item source_url when applicable).
             """
             
             try:
