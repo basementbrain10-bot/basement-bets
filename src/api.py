@@ -81,6 +81,12 @@ async def check_access_key(request: Request, call_next):
             "/api/ncaam/top-picks",
             "/api/data-health",
         }
+
+        # Agent Council UI endpoints should be readable without a password.
+        # The docket should not break just because memories/debates are missing.
+        if request.url.path.startswith("/api/v1/council"):
+            return await call_next(request)
+
         if request.url.path in public_paths:
             return await call_next(request)
 
