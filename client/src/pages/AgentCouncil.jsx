@@ -19,11 +19,26 @@ export default function AgentCouncil() {
         try {
             // Re-using the recommendations endpoint to get the days slate
             const [slateRes, memRes] = await Promise.all([
-                api.get('/api/edge/ncaab/recommendations'),
+                api.get('/api/ncaam/top-picks', { params: { limit_games: 200 } }),
                 api.get('/api/v1/council/memories')
             ]);
 
-            setEvents(slateRes.data.recommendations || []);
+            const topPicks = slateRes.data.picks || {};
+            const actionableEvents = Object.keys(topPicks)
+                .filter(eid => topPicks[eid] && topPicks[eid].is_actionable === true && topPicks[eid].rec)
+                .map(eid => {
+                    const data = topPicks[eid];
+                    return {
+                        offer: {
+                            event_id: eid,
+                            market_type: data.rec.bet_type || 'Unknown',
+                            side: data.rec.selection || 'Unknown Side',
+                        },
+                        ...data
+                    };
+                });
+
+            setEvents(actionableEvents);
             setMemories(memRes.data.data || []);
         } catch (err) {
             console.error("Failed to load council base data", err);

@@ -2555,6 +2555,8 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
                 'no_pick_samples': [],
                 'picks': picks,
             }
+            from fastapi.encoders import jsonable_encoder
+            data = jsonable_encoder(data)
             etag = _make_etag(data)
             inm = request.headers.get('if-none-match')
             if inm and inm.strip() == etag:
