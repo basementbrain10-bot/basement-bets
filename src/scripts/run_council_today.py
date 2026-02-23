@@ -28,14 +28,13 @@ def main():
             
     print(f"[{dt.now().isoformat()}] run_council_today for {date_et}")
     
-    # 1. Fetch Actionable Top Picks for the Date
     q = """
     SELECT d.event_id, d.rec_json, e.home_team, e.away_team
     FROM daily_top_picks d
     JOIN events e ON d.event_id = e.id
     WHERE d.date_et = %(d)s 
       AND d.league = 'NCAAM'
-      AND d.is_actionable = TRUE
+      AND d.rec_json IS NOT NULL
     """
     with get_db_connection() as conn:
         picks = _exec(conn, q, {"d": date_et}).fetchall()
