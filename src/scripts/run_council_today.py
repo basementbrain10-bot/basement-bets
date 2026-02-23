@@ -127,6 +127,39 @@ def main():
         )
         
         journal_agent.run({"decision_run": decision_run, "action": "persist"})
+
+        # Persist structured council signals separately for offline analysis/training.
+        try:
+            with get_db_connection() as conn:
+                for ev in batch_events:
+                    ev_id = ev.event_id
+                    nar = (oracle_out or {}).get(ev_id) or {}
+                    signals = nar.get('signals') if isinstance(nar, dict) else None
+                    if not signals:
+                        continue
+                    sources = None
+                    try:
+                        sources = signals.get('sources') if isinstance(signals, dict) else None
+                    except Exception:
+                        sources = None
+                    _exec(conn, """
+                        INSERT INTO council_signals (run_id, event_id, league, signals_json, sources)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (run_id, event_id) DO UPDATE SET
+                          signals_json = EXCLUDED.signals_json,
+                          sources = EXCLUDED.sources,
+                          created_at = NOW()
+                    """, (
+                        run_id,
+                        ev_id,
+                        'NCAAM',
+                        json.dumps(signals),
+                        json.dumps(sources) if sources is not None else None,
+                    ))
+                conn.commit()
+        except Exception as e:
+            print(f"[run_council_today] Warning: failed to persist council_signals: {e}")
+
         print(f"Persisted council debate for {len(batch_events)} games.")
         
     print("Council analysis complete. Re-running build_daily_top_picks.py to apply the qualitative adjustments (Oracle verdicts)...")

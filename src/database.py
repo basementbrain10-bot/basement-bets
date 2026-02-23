@@ -128,6 +128,8 @@ def release_advisory_lock(conn, key_str: str):
 # SCHEMA INITIALIZATION (Safe / Idempotent)
 # ----------------------------------------------------------------------------
 
+from src.database_council_signals import init_council_signals_db
+
 def init_db():
     print("[DB] Initializing Database (Postgres Only)...")
     init_events_db()
@@ -143,6 +145,7 @@ def init_db():
     init_jobs_db()
     init_performance_objects() # Phase 14/15
     init_ncaam_net_rankings_db()
+    init_council_signals_db()
 
     # Explicitly init bets last as it depends on others conceptually (not foreign key wise mostly)
     init_bets_db()
