@@ -8,7 +8,8 @@ on:
         required: false
         default: ""
   schedule:
-    # 15:05 UTC ~ 10:05 ET (standard). Adjust as needed.
+    # 15:05 UTC ~ 10:05 ET (Health Check). 
+    # The primary runs now occur hourly via ncaam_jobs.yml
     - cron: "5 15 * * *"
 
 jobs:
