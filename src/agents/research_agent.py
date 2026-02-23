@@ -24,19 +24,14 @@ class ResearchAgent(BaseAgent):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) width/1920",
         }
         
+        batch_citations = {}
         for ev in events:
             query = f"{ev.away_team} vs {ev.home_team} basketball news injuries 2026"
             try:
-                # Fetch top news results via HTML
                 resp = requests.post(search_url, data={"q": query}, headers=headers, timeout=10)
                 resp.raise_for_status()
-                
                 soup = BeautifulSoup(resp.text, 'html.parser')
 
-                # DuckDuckGo HTML results typically include:
-                # - a.result__a (title + href)
-                # - a.result__snippet (snippet text)
-                # We'll build a small citations list for downstream agents.
                 citations = []
                 for res_el in soup.select('.result')[:5]:
                     a = res_el.select_one('a.result__a')
@@ -52,47 +47,13 @@ class ResearchAgent(BaseAgent):
                             'url': url,
                             'snippet': snippet
                         })
-
-                raw_snippets = "\n".join([f"- {c['snippet']} ({c['url']})" for c in citations if c.get('snippet')])
-
-                if not citations:
-                    final_summary = "No notable breaking news found."
-                    facts = []
-                else:
-                    # NLP extraction to sanitize web noise AND preserve source URLs.
-                    prompt = f"""
-You are a strict information extraction tool.
-
-Task:
-- From the citations below for {ev.away_team} vs {ev.home_team}, extract ONLY verifiable roster/news facts (injuries, suspensions, confirmed lineup changes).
-- Do NOT invent or assume anything.
-- If nothing verifiable exists, return an empty facts list and a summary that says: No verifiable roster news found.
-
-Return VALID JSON with keys:
-- summary: string
-- facts: array of objects, each: {{"type":"injury|suspension|lineup", "team":"", "detail":"", "source_url":""}}
-
-Citations:
-{json.dumps(citations, ensure_ascii=False)}
-"""
-                    clean_res = generate_content(model="gemini-2.5-flash", system_prompt=prompt, max_tokens=350)
-                    try:
-                        parsed = json.loads(clean_res)
-                        final_summary = str(parsed.get('summary') or '').strip() or 'No verifiable roster news found.'
-                        facts = parsed.get('facts') or []
-                        if not isinstance(facts, list):
-                            facts = []
-                    except Exception:
-                        # Fallback: keep the raw text as summary
-                        final_summary = clean_res.strip()
-                        facts = []
-
+                batch_citations[ev.event_id] = citations
                 research_results[ev.event_id] = {
                     "query": query,
                     "articles_found": len(citations),
-                    "summary": final_summary,
+                    "summary": "No notable breaking news found.",
                     "citations": citations,
-                    "facts": facts,
+                    "facts": []
                 }
             except Exception as e:
                 print(f"[ResearchAgent] Failed to search for {ev.event_id}: {e}")
@@ -101,5 +62,50 @@ Citations:
                     "articles_found": 0,
                     "summary": f"Search failed: {str(e)}"
                 }
+
+        # 2. Batch extraction via LLM
+        games_with_news = {eid: citations for eid, citations in batch_citations.items() if citations}
+        
+        if games_with_news:
+            prompt = f"""
+You are a strict information extraction tool. You are evaluating news citations for {len(games_with_news)} college basketball matchups.
+
+Matchups and Citations (keyed by event_id):
+{json.dumps(games_with_news, ensure_ascii=False)}
+
+Task:
+- For each matchup, extract ONLY verifiable roster/news facts (injuries, suspensions, confirmed lineup changes).
+- Do NOT invent or assume anything.
+- If nothing verifiable exists for a matchup, return an empty facts list and a summary that says: No verifiable roster news found.
+
+Return VALID JSON:
+A dictionary where keys are the exact event_id strings.
+Example:
+{{
+    "event_id_1": {{
+        "summary": "string",
+        "facts": [
+            {{"type":"injury|suspension|lineup", "team":"", "detail":"", "source_url":""}}
+        ]
+    }}
+}}
+            """
+            try:
+                clean_res = generate_content(model="gemini-2.5-flash", system_prompt=prompt, json_mode=True, max_tokens=1500)
+                clean_text = clean_res.strip()
+                if clean_text.startswith("```json"):
+                    clean_text = clean_text[7:]
+                if clean_text.endswith("```"):
+                    clean_text = clean_text[:-3]
+                
+                parsed = json.loads(clean_text.strip())
+                for eid, res in parsed.items():
+                    if eid in research_results:
+                        research_results[eid]["summary"] = str(res.get('summary') or '').strip() or 'No verifiable roster news found.'
+                        research_results[eid]["facts"] = res.get('facts') or []
+            except Exception as e:
+                print(f"[ResearchAgent] Failed batch extraction: {e}")
+                for eid in games_with_news:
+                    research_results[eid]["summary"] += f" (Extraction failed: {str(e)})"
 
         return research_results

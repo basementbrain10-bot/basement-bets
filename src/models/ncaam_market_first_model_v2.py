@@ -594,19 +594,26 @@ class NCAAMMarketFirstModelV2(BaseModel):
         council_adjustment_spread = 0.0
         council_adjustment_total = 0.0
         if council_verdict:
-            verdict_text = council_verdict.get('oracle_verdict', '').lower()
-            # Preserve the previous parsing so we can log/inspect intended adjustments,
-            # but do not apply them to mu_spread_final / mu_total_final.
-            if event['home_team'].lower() in verdict_text and ("lean" in verdict_text or "favor" in verdict_text):
-                council_adjustment_spread = -1.0
-            elif event['away_team'].lower() in verdict_text and ("lean" in verdict_text or "favor" in verdict_text):
-                council_adjustment_spread = 1.0
-            if "under" in verdict_text and "lean" in verdict_text:
-                council_adjustment_total = -1.5
-            elif "over" in verdict_text and "lean" in verdict_text:
-                council_adjustment_total = 1.5
+            # New Structured Parsing (Phase 4)
+            signals = council_verdict.get('signals', {})
+            leans = signals.get('market_lean', {})
+            
+            # 1. Spread Adjustment
+            spread_lean = leans.get('spread', {})
+            if spread_lean.get('side') == 'HOME':
+                council_adjustment_spread = -abs(float(spread_lean.get('points', 1.0)))
+            elif spread_lean.get('side') == 'AWAY':
+                council_adjustment_spread = abs(float(spread_lean.get('points', 1.0)))
+            
+            # 2. Total Adjustment
+            total_lean = leans.get('total', {})
+            if total_lean.get('side') == 'OVER':
+                council_adjustment_total = abs(float(total_lean.get('points', 1.5)))
+            elif total_lean.get('side') == 'UNDER':
+                council_adjustment_total = -abs(float(total_lean.get('points', 1.5)))
 
-        # NOTE: Do not apply council_adjustment_spread here.
+        # Apply council_adjustment_spread
+        mu_spread_final += council_adjustment_spread
         
         # Apply Caps
         if abs(mu_spread_final - mu_market_spread) > self.CAP_SPREAD:
@@ -644,7 +651,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         mu_total_final = mu_market_total + (w_base * (mu_torvik_total - mu_market_total)) + (self.W_KENPOM * (mu_kenpom_total - mu_market_total))
         mu_total_final += kp_player_total_adj
-        # NOTE: Explanations-only mode: do not apply council_adjustment_total.
+        mu_total_final += council_adjustment_total
         
         if abs(mu_total_final - mu_market_total) > self.CAP_TOTAL:
              mu_total_final = mu_market_total + (self.CAP_TOTAL * math.copysign(1, mu_total_final - mu_market_total))
@@ -810,6 +817,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "tempo_torvik": game_tempo,
             "tempo_kenpom": kp_tempo if 'kp_tempo' in locals() else None,
             "tempo_gap": kp_tempo_gap if 'kp_tempo_gap' in locals() else None,
+            "council_adj_spread": council_adjustment_spread,
+            "council_adj_total": council_adjustment_total,
         }
         
         # 8. Narrative (UI MATCH)
@@ -2106,6 +2115,16 @@ class NCAAMMarketFirstModelV2(BaseModel):
             else:
                 # Still matchup-specific: we looked and found none
                 risks.append("No meaningful injury/rotation news detected (risk: late scratches)")
+
+        # === Agent Council Adjustments (Phase 4) ===
+        council_adj_spread = debug_info.get('council_adj_spread', 0.0)
+        council_adj_total = debug_info.get('council_adj_total', 0.0)
+        if council_adj_spread != 0.0:
+            side_label = "Home" if council_adj_spread < 0 else "Away"
+            key_factors.append(f"Agent Council: Added {abs(council_adj_spread):.1f} pts to {side_label} based on qualitative synthesis.")
+        if council_adj_total != 0.0:
+            side_label = "Over" if council_adj_total > 0 else "Under"
+            key_factors.append(f"Agent Council: Adjusted total by {council_adj_total:+.1f} pts ({side_label} lean).")
 
         # Market movement risk (if any)
         if line_move is not None and abs(line_move) >= 1.0:
