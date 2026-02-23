@@ -57,7 +57,32 @@ def main():
         """, (date_et, int(args.limit))).fetchall()
 
     if not rows:
+        # Add basic diagnostics so we know whether we evaluated the slate or skipped due to missing data.
+        with get_db_connection() as conn:
+            stats = _exec(conn, """
+              SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN is_actionable THEN 1 ELSE 0 END) as actionable,
+                SUM(CASE WHEN reason ILIKE '%Market Data Waiting%' OR reason ILIKE '%No Line%' THEN 1 ELSE 0 END) as no_line,
+                SUM(CASE WHEN reason ILIKE '%Torvik%' AND (reason ILIKE '%unavailable%' OR reason ILIKE '%no data%') THEN 1 ELSE 0 END) as missing_torvik,
+                SUM(CASE WHEN reason ILIKE '%No bet%' OR reason ILIKE '%Pass%' THEN 1 ELSE 0 END) as no_bet,
+                SUM(CASE WHEN reason ILIKE '%error%' THEN 1 ELSE 0 END) as errors
+              FROM daily_top_picks
+              WHERE date_et=%s AND league='NCAAM'
+            """, (date_et,)).fetchone()
+
+        total = int(stats['total'] or 0) if stats else 0
         print(f"No bets for {date_et} (no edges passed gates)")
+        if total:
+            print("Diagnostics (daily_top_picks):")
+            print(f"- total_events: {total}")
+            print(f"- actionable: {int(stats['actionable'] or 0)}")
+            print(f"- no_line: {int(stats['no_line'] or 0)}")
+            print(f"- missing_torvik: {int(stats['missing_torvik'] or 0)}")
+            print(f"- no_bet: {int(stats['no_bet'] or 0)}")
+            print(f"- errors: {int(stats['errors'] or 0)}")
+        else:
+            print("Diagnostics: daily_top_picks table has 0 rows for this date (ingestion/build job may not have run).")
         return
 
     print(f"Top {min(len(rows), int(args.limit))} Plays {date_et} • Sorted by EV%")

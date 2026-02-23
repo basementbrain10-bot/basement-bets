@@ -166,16 +166,49 @@ def main():
     ok = 0
     err = 0
 
+    # Diagnostics: track why games are producing no picks (data vs gates).
+    diag = {
+        'total_events': 0,
+        'actionable': 0,
+        'no_line': 0,
+        'missing_torvik': 0,
+        'no_bet': 0,
+        'errors': 0,
+        'other_reasons': {},
+    }
+
     # Batch DB writes to reduce Neon egress: single connection + single commit.
     with get_db_connection() as conn:
         for eid in event_ids:
+            diag['total_events'] += 1
             try:
                 # Use strict gates for cached picks so we don't surface negative/no-edge plays.
                 res = model.analyze(eid, relax_gates=False, persist=False)
+
+                # Diagnose outcome
+                try:
+                    rec0 = (res.get('recommendations') or [None])[0] if isinstance(res, dict) else None
+                    if rec0:
+                        diag['actionable'] += 1
+                    else:
+                        reason = (res.get('block_reason') or res.get('headline') or res.get('recommendation') or res.get('error') or 'No bet') if isinstance(res, dict) else 'No bet'
+                        rlow = str(reason).lower()
+                        if 'market data waiting' in rlow or 'no line' in rlow:
+                            diag['no_line'] += 1
+                        elif 'torvik' in rlow and ('unavailable' in rlow or 'no data' in rlow):
+                            diag['missing_torvik'] += 1
+                        elif 'no bet' in rlow or 'pass' in rlow:
+                            diag['no_bet'] += 1
+                        else:
+                            diag['other_reasons'][str(reason)] = int(diag['other_reasons'].get(str(reason), 0)) + 1
+                except Exception:
+                    pass
+
                 upsert_pick(date_et, eid, res if isinstance(res, dict) else {}, conn=conn)
                 ok += 1
             except Exception as e:
                 err += 1
+                diag['errors'] += 1
                 # still upsert a no-bet row with error reason
                 try:
                     upsert_pick(date_et, eid, {"recommendations": [], "error": str(e), "model_version": getattr(model, 'VERSION', None), "block_reason": str(e)}, conn=conn)
@@ -185,6 +218,23 @@ def main():
         conn.commit()
 
     print(f"done ok={ok} err={err}")
+
+    # Print a compact diagnostic summary (helps distinguish 'market efficient' vs 'data missing').
+    try:
+        print("diagnostics:")
+        print(f"- total_events: {diag['total_events']}")
+        print(f"- actionable: {diag['actionable']}")
+        print(f"- no_line: {diag['no_line']}")
+        print(f"- missing_torvik: {diag['missing_torvik']}")
+        print(f"- no_bet: {diag['no_bet']}")
+        print(f"- errors: {diag['errors']}")
+        if diag.get('other_reasons'):
+            # show top 5 other reasons
+            items = sorted(diag['other_reasons'].items(), key=lambda kv: kv[1], reverse=True)[:5]
+            for k, v in items:
+                print(f"- other: {v} × {k}")
+    except Exception:
+        pass
 
 
 if __name__ == '__main__':
