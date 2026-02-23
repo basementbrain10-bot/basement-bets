@@ -3,9 +3,15 @@ import requests
 import time
 
 def generate_content(model: str, system_prompt: str, json_mode: bool = False, max_tokens: int = 1024, retries: int = 5) -> str:
-    # Use pro model if it's the default flash model, since user requested paid tier
-    if model == "gemini-2.5-flash" and os.getenv("USE_PRO_TIER", "true").lower() == "true":
-        model = "gemini-2.5-pro"
+    # API Version / Model standardization
+    # Note: Gemini 1.5 Flash is often aliases to 2.5 Flash in some docs, 
+    # but the API endpoint usually prefers 'gemini-1.5-flash'.
+    if model == "gemini-2.5-flash": 
+        model = "gemini-1.5-flash"
+    
+    # Use pro model if requested and not disabled
+    if model == "gemini-1.5-flash" and os.getenv("USE_PRO_TIER", "true").lower() == "true" and os.getenv("DISABLE_PRO_TIER", "false").lower() != "true":
+        model = "gemini-1.5-pro"
         
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
@@ -29,9 +35,19 @@ def generate_content(model: str, system_prompt: str, json_mode: bool = False, ma
     for attempt in range(retries):
         try:
             resp = requests.post(url, json=payload, timeout=60)
-            if resp.status_code == 429: # Too Many Requests
+            
+            # 429: Too Many Requests / Quota Exceeded
+            if resp.status_code == 429:
+                # Check if it's a quota exhaustion (RPD) vs rate limit (RPM)
+                error_body = resp.json() if resp.text else {}
+                msg = str(error_body.get('error', {}).get('message', '')).lower()
+                
+                if "quota" in msg or "daily" in msg:
+                    # Daily quota exhausted, retrying won't help today
+                    raise RuntimeError(f"GEMINI_QUOTA_EXHAUSTED: {msg}")
+                
                 if attempt < retries - 1:
-                    time.sleep(15 * (2 ** attempt)) # 15s, 30s, 60s, 120s...
+                    time.sleep(30 * (2 ** attempt)) # Increased backoff for low RPM tiers
                     continue
             
             resp.raise_for_status()
@@ -39,8 +55,8 @@ def generate_content(model: str, system_prompt: str, json_mode: bool = False, ma
             return data["candidates"][0]["content"]["parts"][0]["text"]
             
         except requests.exceptions.RequestException as e:
-            # Retry on 5xx errors or 429
-            if attempt < retries - 1 and (getattr(e.response, 'status_code', 500) >= 500 or getattr(e.response, 'status_code', 200) == 429):
+            # Retry on 5xx errors
+            if attempt < retries - 1 and getattr(e.response, 'status_code', 200) >= 500:
                 time.sleep(15 * (2 ** attempt))
                 continue
             raise e

@@ -27,7 +27,12 @@ class OracleAgent(BaseAgent):
         for ev in events:
             ev_id = ev.event_id
             quant = quantitative_edges.get(ev_id, "No quantitative edge data available.")
-            news = research_data.get(ev_id, {}).get("summary", "No news found.")
+            
+            # RAW RESEARCH HANDLE
+            research = research_data.get(ev_id, {})
+            citations = research.get("citations", [])
+            cite_str = json.dumps(citations) if citations else "No news snippets available."
+            
             memories = memory_data.get(ev_id, [])
             memory_str = "\n".join([f"- (Sim: {m['similarity']}) {m['lesson']}" for m in memories]) if memories else "No relevant historical lessons found."
             
@@ -35,7 +40,7 @@ class OracleAgent(BaseAgent):
                 "event_id": ev_id,
                 "matchup": f"{ev.away_team} at {ev.home_team}",
                 "quantitative_data": quant,
-                "injury_and_roster_news": news,
+                "raw_news_snippets": cite_str,
                 "historical_lessons": memory_str
             })
 
@@ -43,26 +48,28 @@ class OracleAgent(BaseAgent):
         You are 'The Oracle', a meta-agent overseeing a council of specialized AI sports betting algorithms.
         You are evaluating a batch of {len(events)} college basketball matchups.
         
-        Here is the factual data gathered for each matchup:
+        Here is the FACTUAL DATA gathered for each matchup:
         {json.dumps(matchups_data, indent=2)}
         
-        Your job is to provide strictly data-backed executive summaries of the edge for EVERY game in the batch.
+        TASK:
+        1. For EACH matchup, analyze the `raw_news_snippets`. Extract ONLY verifiable roster/news facts (injuries, confirmed lineup changes).
+        2. Combine these facts with the `quantitative_data` and `historical_lessons`.
+        3. Provide strictly data-backed executive summaries and final verdicts.
         
         ANTI-HALLUCINATION INSTRUCTIONS:
-        - Do NOT invent storylines, momentum shifts, injuries, locker room dynamics, or unverified fatigue.
-        - Do NOT simulate a "debate". Speak directly with the facts provided above in a clinical, objective tone.
-        - If no actionable news is provided under [injury_and_roster_news], firmly state "No actionable news found" and rely entirely on the quantitative data.
-        - You MUST explicitly evaluate Spread, Moneyline, and Game Totals based ONLY on the numbers and verified text provided to you.
+        - Do NOT invent storylines or unverified dynamics.
+        - If no actionable news is in the snippets, state "No actionable news found" and rely on the quantitative data.
+        - You MUST explicitly evaluate Spread, Moneyline, and Game Totals.
         
         OUTPUT FORMAT MUST BE VALID JSON:
-        Return a single dictionary where the keys are the exact `event_id` strings, and the values are the evaluation object for that game.
+        Return a single dictionary where keys are the exact `event_id` strings.
         Example:
         {{
             "event_id_1": {{
                 "debate": [
                     {{"agent": "Executive Summary", "message": "..."}},
-                    {{"agent": "Quantitative Edge", "message": "..."}},
-                    {{"agent": "Qualitative Factors", "message": "..."}}
+                    {{"agent": "Research & Roster", "message": "..."}},
+                    {{"agent": "Historical Context", "message": "..."}}
                 ],
                 "oracle_verdict": "...",
                 "signals": {{
@@ -72,22 +79,13 @@ class OracleAgent(BaseAgent):
                         "total": {{"side": "OVER|UNDER|NONE", "points": 0.0, "reason": ""}},
                         "moneyline": {{"side": "HOME|AWAY|NONE", "reason": ""}}
                     }},
-                    "key_factors": ["..."],
                     "data_points": [
-                        {{"type": "injury|rotation|travel|fatigue|matchup|pace|referee|motivation|other", "team": "", "detail": "", "source_url": ""}}
+                        {{"type": "injury|rotation|travel|fatigue|matchup|pace|other", "team": "", "detail": "", "source_url": ""}}
                     ],
-                    "recommended_followups": ["..."],
-                    "red_flags": ["..."],
                     "sources": ["https://..."]
                 }}
-            }},
-            "event_id_2": {{ ... }}
+            }}
         }}
-
-        Notes:
-        - This is EXPLANATIONS-ONLY mode. Do NOT override the quantitative model; focus on structuring evidence.
-        - Put any URLs you used in signals.sources (and per-item source_url when applicable).
-        """
         
         try:
             response_text = generate_content(

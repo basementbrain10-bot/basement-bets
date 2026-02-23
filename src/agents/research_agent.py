@@ -63,49 +63,10 @@ class ResearchAgent(BaseAgent):
                     "summary": f"Search failed: {str(e)}"
                 }
 
-        # 2. Batch extraction via LLM
-        games_with_news = {eid: citations for eid, citations in batch_citations.items() if citations}
+        # 2. RAW RETURN: Skip LLM extraction to save on Rate Limits. 
+        # The OracleAgent will handle the raw snippets in its consolidated prompt.
+        for eid in events_ids := [ev.event_id for ev in events]:
+            if eid in research_results:
+                research_results[eid]["summary"] = f"Found {research_results[eid]['articles_found']} raw search results for analysis."
         
-        if games_with_news:
-            prompt = f"""
-You are a strict information extraction tool. You are evaluating news citations for {len(games_with_news)} college basketball matchups.
-
-Matchups and Citations (keyed by event_id):
-{json.dumps(games_with_news, ensure_ascii=False)}
-
-Task:
-- For each matchup, extract ONLY verifiable roster/news facts (injuries, suspensions, confirmed lineup changes).
-- Do NOT invent or assume anything.
-- If nothing verifiable exists for a matchup, return an empty facts list and a summary that says: No verifiable roster news found.
-
-Return VALID JSON:
-A dictionary where keys are the exact event_id strings.
-Example:
-{{
-    "event_id_1": {{
-        "summary": "string",
-        "facts": [
-            {{"type":"injury|suspension|lineup", "team":"", "detail":"", "source_url":""}}
-        ]
-    }}
-}}
-            """
-            try:
-                clean_res = generate_content(model="gemini-2.5-flash", system_prompt=prompt, json_mode=True, max_tokens=1500)
-                clean_text = clean_res.strip()
-                if clean_text.startswith("```json"):
-                    clean_text = clean_text[7:]
-                if clean_text.endswith("```"):
-                    clean_text = clean_text[:-3]
-                
-                parsed = json.loads(clean_text.strip())
-                for eid, res in parsed.items():
-                    if eid in research_results:
-                        research_results[eid]["summary"] = str(res.get('summary') or '').strip() or 'No verifiable roster news found.'
-                        research_results[eid]["facts"] = res.get('facts') or []
-            except Exception as e:
-                print(f"[ResearchAgent] Failed batch extraction: {e}")
-                for eid in games_with_news:
-                    research_results[eid]["summary"] += f" (Extraction failed: {str(e)})"
-
         return research_results

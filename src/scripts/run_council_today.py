@@ -116,12 +116,14 @@ def main():
         conf = rec.get('confidence', 'Unknown')
         quant_edges[ev_id] = f"Selection: {market_str} | Model EV: {ev_disp} | Confidence: {conf}"
         
+    print(f"Total events constructed: {len(events)}")
     if not events:
         print("No valid events constructed.")
         return
         
     # 3. Check for recently analyzed games (Smart Idempotency)
     # Skip if analyzed within 120 minutes AND the line hasn't changed.
+    print("Checking recently analyzed games...")
     with get_db_connection() as conn:
         recent_map = get_recently_analyzed(conn, [ev.event_id for ev in events])
 
@@ -141,6 +143,7 @@ def main():
         
         recent_info = recent_map.get(eid)
         if not recent_info:
+            print(f"Game {eid} has no recent analysis. Adding to active.")
             active_events.append(ev)
             continue
             
@@ -166,63 +169,71 @@ def main():
             line_moved = True
 
         if age_mins > 120 or line_moved:
+            print(f"Game {eid} needs re-analysis (age: {int(age_mins)}m, line_moved: {line_moved}).")
             active_events.append(ev)
         else:
             print(f"Skipping {eid} (analyzed {int(age_mins)}m ago, line {last_line} -> {current_line})")
 
+    print(f"Active events to run: {len(active_events)}")
     if not active_events:
         print("All candidate games were recently analyzed. Nothing to do.")
         return
 
     # 4. Run the Council Agents
+    print("Initializing Council Agents...")
     research_agent = ResearchAgent()
     memory_agent = MemoryAgent()
     oracle_agent = OracleAgent()
     journal_agent = JournalAgent()
     
-    # Run in batches of 5 to avoid Vercel timeouts if needed
-    for i in range(0, len(active_events), 5):
-        batch_events = active_events[i:i+5]
+    # Run in batches of 30 (Full slate usually falls into 1-2 calls max)
+    batch_size = 30
+    for i in range(0, len(active_events), batch_size):
+        if i > 0:
+            print(f"Waiting 45s for rate limit reset between batches...")
+            time.sleep(45)
+            
+        batch_events = active_events[i:i+batch_size]
         batch_edges = {ev.event_id: quant_edges[ev.event_id] for ev in batch_events}
         
-        print(f"Running Council for batch {i//5 + 1} ({len(batch_events)} games)...")
+        print(f"Running Council for batch {i//batch_size + 1} ({len(batch_events)} games)...")
         
-        research_out, _ = research_agent.run({"events": batch_events})
-        memory_out, _ = memory_agent.run({"events": batch_events})
-        
-        oracle_out, _ = oracle_agent.run({
-            "events": batch_events,
-            "edges": batch_edges,
-            "research": research_out,
-            "memories": memory_out
-        })
-        
-        if not oracle_out:
-            print("Failed to get Oracle output.")
-            continue
-            
-        # 4. Persist to decision_runs via JournalAgent
-        run_id = "DR-COUNCIL-" + dt.now(timezone.utc).strftime('%Y%m%d%H%M%S') + f"-B{i}"
-        
-        decision_run = DecisionRun(
-            run_id=run_id,
-            created_at=dt.now(timezone.utc).isoformat(),
-            league="NCAAM",
-            status="COUNCIL_COMPLETE",
-            inputs_hash=f"council_{date_et}_{i}",
-            offers_count=len(batch_events),
-            recommendations=[],
-            rejected_offers=[],
-            notes=[f"Council run on {len(batch_events)} top picks."],
-            errors=[],
-            model_version="2.1.2-council",
-            council_narrative=oracle_out
-        )
-        
-        journal_agent.run({"decision_run": decision_run, "action": "persist"})
-
-        # Persist structured council signals separately for offline analysis/training.
         try:
+            research_out, _ = research_agent.run({"events": batch_events})
+            memory_out, _ = memory_agent.run({"events": batch_events})
+            
+            oracle_out, _ = oracle_agent.run({
+                "events": batch_events,
+                "edges": batch_edges,
+                "research": research_out,
+                "memories": memory_out
+            })
+            
+            if not oracle_out:
+                print("Failed to get Oracle output for this batch.")
+                continue
+                
+            # 4. Persist to decision_runs via JournalAgent
+            run_id = "DR-COUNCIL-" + dt.now(timezone.utc).strftime('%Y%m%d%H%M%S') + f"-B{i}"
+            
+            decision_run = DecisionRun(
+                run_id=run_id,
+                created_at=dt.now(timezone.utc).isoformat(),
+                league="NCAAM",
+                status="COUNCIL_COMPLETE",
+                inputs_hash=f"council_{date_et}_{i}",
+                offers_count=len(batch_events),
+                recommendations=[],
+                rejected_offers=[],
+                notes=[f"Council run on {len(batch_events)} top picks."],
+                errors=[],
+                model_version="2.1.2-council",
+                council_narrative=oracle_out
+            )
+            
+            journal_agent.run({"decision_run": decision_run, "action": "persist"})
+
+            # Persist structured council signals separately
             with get_db_connection() as conn:
                 for ev in batch_events:
                     ev_id = ev.event_id
@@ -243,17 +254,41 @@ def main():
                           sources = EXCLUDED.sources,
                           created_at = NOW()
                     """, (
-                        run_id,
-                        ev_id,
-                        'NCAAM',
+                        run_id, ev_id, 'NCAAM',
                         json.dumps(signals),
                         json.dumps(sources) if sources is not None else None,
                     ))
                 conn.commit()
+            print(f"Persisted council debate for {len(batch_events)} games.")
+            
+        except RuntimeError as re:
+            if "QUOTA_EXHAUSTED" in str(re):
+                print(f"CRITICAL: Quota exhausted. Aborting run. Details: {re}")
+                # Persist a marker run so the UI knows why debates are missing
+                try:
+                    fail_run = DecisionRun(
+                        run_id="DR-FAIL-" + dt.now(timezone.utc).strftime('%Y%m%d%H%M%S'),
+                        created_at=dt.now(timezone.utc).isoformat(),
+                        league="NCAAM",
+                        status="RATE_LIMITED",
+                        inputs_hash=f"fail_{date_et}_{i}",
+                        offers_count=len(batch_events),
+                        recommendations=[],
+                        rejected_offers=[],
+                        notes=[f"Quota exhausted during batch {i//batch_size + 1}"],
+                        errors=[],
+                        model_version="2.1.2-fail",
+                        council_narrative={ev.event_id: {"oracle_verdict": "Rate Limit Exceeded. Check API Quotas."} for ev in batch_events}
+                    )
+                    journal_agent.run({"decision_run": fail_run, "action": "persist"})
+                except:
+                    pass
+                break
+            print(f"Batch failed with RuntimeError: {re}")
         except Exception as e:
-            print(f"[run_council_today] Warning: failed to persist council_signals: {e}")
-
-        print(f"Persisted council debate for {len(batch_events)} games.")
+            print(f"Batch failed with unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
         
     print("Council analysis complete. Re-running build_daily_top_picks.py to apply the qualitative adjustments (Oracle verdicts)...")
     

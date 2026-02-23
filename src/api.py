@@ -4184,9 +4184,11 @@ def get_performance_reports(date: Optional[str] = None):
             reports.append(mapped)
         return reports
 
-@app.get("/api/v1/council/{event_id}")
-def get_council_debate(event_id: str):
+@app.get("/api/v1/council")
+def get_council_debate(event_id: Optional[str] = None):
     """Fetches the latest Agent Council debate and Oracle prediction for a specific game."""
+    if not event_id:
+        return {"status": "error", "message": "event_id query parameter is required."}
     from src.database import get_db_connection, _exec
     import json
     with get_db_connection() as conn:
@@ -4195,7 +4197,7 @@ def get_council_debate(event_id: str):
         query = """
         SELECT council_narrative->%s AS narrative
         FROM decision_runs
-        WHERE council_narrative ? %s
+        WHERE jsonb_exists(council_narrative, %s)
         ORDER BY created_at DESC LIMIT 1
         """
         row = _exec(conn, query, (event_id, event_id)).fetchone()

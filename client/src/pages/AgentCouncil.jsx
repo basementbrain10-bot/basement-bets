@@ -60,9 +60,15 @@ export default function AgentCouncil() {
         setLoadingCouncil(true);
         setCouncilData(null);
         try {
-            const res = await api.get(`/api/v1/council/${ev.offer.event_id}`);
+            const res = await api.get('/api/v1/council', { params: { event_id: ev.offer.event_id } });
             if (res.data.status === 'success') {
                 setCouncilData(res.data.data);
+            } else if (res.data.message?.includes('Rate Limit') || res.data.data?.oracle_verdict?.includes('Rate Limit')) {
+                setCouncilData({
+                    rate_limited: true,
+                    error: 'Gemini API Rate Limit Exceeded',
+                    verdict: res.data.data?.oracle_verdict || 'The daily API quota has been exhausted. Analysis will resume automatically once the limit resets.'
+                });
             } else {
                 setCouncilData({ error: res.data.message });
             }
@@ -215,6 +221,20 @@ export default function AgentCouncil() {
                                 <div className="flex flex-col justify-center items-center h-64 text-blue-500 animate-pulse">
                                     <Clock className="animate-spin mb-4" size={32} />
                                     <p className="text-slate-400">The Council is convening...</p>
+                                </div>
+                            ) : councilData?.rate_limited ? (
+                                <div className="p-8 bg-blue-900/10 border border-blue-900/40 rounded-2xl text-center max-w-2xl mx-auto mt-12">
+                                    <Clock className="mx-auto text-blue-400 mb-4 opacity-80" size={48} />
+                                    <h3 className="text-xl font-bold text-white mb-2">Council on Standby</h3>
+                                    <p className="text-slate-400 leading-relaxed">
+                                        The daily Gemini API quota is currently exhausted. To ensure accuracy and prevent model degradation, the Council has paused active game analysis.
+                                    </p>
+                                    <div className="mt-6 p-4 bg-slate-900/80 rounded-xl border border-blue-500/20 text-blue-300 font-serif italic italic">
+                                        "{councilData.verdict}"
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-6">
+                                        The orchestrator will automatically resume analysis as soon as your API tier resets.
+                                    </p>
                                 </div>
                             ) : councilData?.error ? (
                                 <div className="p-6 bg-red-900/20 border border-red-900/50 rounded-xl text-center">
