@@ -146,28 +146,28 @@ export default function AgentCouncil() {
                             <Activity className="text-blue-400 shrink-0 mt-1" size={18} />
                             <div>
                                 <div className="text-sm font-bold text-slate-200">Stats Agent</div>
-                                <div className="text-xs text-slate-500 leading-tight mt-0.5">Analyzes quantitative Torvik and KenPom efficiency metrics.</div>
+                                <div className="text-xs text-slate-500 leading-tight mt-0.5 break-words">Analyzes quantitative Torvik and KenPom efficiency metrics.</div>
                             </div>
                         </div>
                         <div className="flex gap-3">
                             <FileText className="text-orange-400 shrink-0 mt-1" size={18} />
                             <div>
                                 <div className="text-sm font-bold text-slate-200">News/Injury Agent</div>
-                                <div className="text-xs text-slate-500 leading-tight mt-0.5">Scours the web for roster updates, fatigue, and situational spots.</div>
+                                <div className="text-xs text-slate-500 leading-tight mt-0.5 break-words">Scours the web for roster updates, fatigue, and situational spots.</div>
                             </div>
                         </div>
                         <div className="flex gap-3">
                             <Brain className="text-purple-400 shrink-0 mt-1" size={18} />
                             <div>
                                 <div className="text-sm font-bold text-slate-200">Memory Agent</div>
-                                <div className="text-xs text-slate-500 leading-tight mt-0.5">Recalls lessons learned from past model failures.</div>
+                                <div className="text-xs text-slate-500 leading-tight mt-0.5 break-words">Recalls lessons learned from past model failures.</div>
                             </div>
                         </div>
                         <div className="flex gap-3">
                             <Gavel className="text-slate-200 shrink-0 mt-1" size={18} />
                             <div>
                                 <div className="text-sm font-bold text-slate-200">The Oracle</div>
-                                <div className="text-xs text-slate-500 leading-tight mt-0.5">Synthesizes debate to provide final spread/total adjustments.</div>
+                                <div className="text-xs text-slate-500 leading-tight mt-0.5 break-words">Synthesizes debate to provide final spread/total adjustments.</div>
                             </div>
                         </div>
                     </div>
@@ -182,9 +182,9 @@ export default function AgentCouncil() {
                     ) : (
                         <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                             {memories.map((m, idx) => (
-                                <div key={idx} className="p-3 bg-slate-800/40 rounded-lg border border-slate-700/50 text-sm">
+                                <div key={idx} className="p-3 bg-slate-800/40 rounded-lg border border-slate-700/50 text-sm break-words">
                                     <div className="text-xs font-bold text-purple-400 mb-1">{m.team_a} vs {m.team_b}</div>
-                                    <div className="text-slate-300 italic">"{m.lesson}"</div>
+                                    <div className="text-slate-300 italic whitespace-normal">"{m.lesson}"</div>
                                 </div>
                             ))}
                         </div>
