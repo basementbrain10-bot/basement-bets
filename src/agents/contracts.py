@@ -70,7 +70,13 @@ class BetRecommendation(BaseModel):
     expected_value: StrictFloat
     ev_pct: StrictFloat
     ev_per_unit: StrictFloat
+
+    # Probabilities
+    # - implied_p: implied from offered odds
+    # - p_fair: model-estimated win probability (used for auditing/calibration)
     implied_p: StrictFloat
+    p_fair: Optional[StrictFloat] = None
+
     edge_points: StrictFloat
     risk_flags: List[str]
     rationale: List[str]
