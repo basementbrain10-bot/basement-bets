@@ -60,13 +60,16 @@ class JournalAgent(BaseAgent):
         
         # 1. Main Run Ledger
         queries.append("""
-            INSERT INTO decision_runs (run_id, created_at, league, status, inputs_hash, payload_json, model_version)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO decision_runs (run_id, created_at, league, status, inputs_hash, payload_json, model_version, council_narrative)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (run_id) DO NOTHING
         """)
+        
+        cn_json = json.dumps(decision.council_narrative) if decision.council_narrative else None
+        
         params.append((
             decision.run_id, decision.created_at, decision.league, 
-            decision.status, decision.inputs_hash, payload_str, decision.model_version
+            decision.status, decision.inputs_hash, payload_str, decision.model_version, cn_json
         ))
 
         # 2. Extract specific recommendations
