@@ -15,16 +15,14 @@ class PostMortemAgent(BaseAgent):
     def __init__(self):
         pass
 
-    def execute(self, context: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
-        """
-        Runs post-game analysis and embedding generation.
-        """
         results_list = context.get('completed_games', []) # List of dicts with outcome details
         if not results_list:
             return {"status": "No games to analyze"}
 
         memories_added = 0
         with get_db_connection() as conn:
+            unreviewed = {}
+            unreviewed_raw = {}
             for game in results_list:
                 team_a = game.get('away_team')
                 team_b = game.get('home_team')
@@ -36,22 +34,33 @@ class PostMortemAgent(BaseAgent):
                 row = _exec(conn, exists_query, (team_a, team_b)).fetchone()
                 if row:
                     continue
+                
+                key = f"{team_a} vs {team_b}"
+                unreviewed[key] = f"Oracle Prediction/Edge: {prediction}, Actual Outcome: {actual_result}"
+                unreviewed_raw[key] = game
 
-                # 1. Ask Gemini to reflect (structured)
-                reflection_payload = f"Matchup: {team_a} vs {team_b}, Oracle Prediction/Edge: {prediction}, Actual Outcome: {actual_result}"
-                full_prompt = f"""
+            if not unreviewed:
+                return {"status": "success", "memories_generated": 0}
+
+            full_prompt = f"""
 You are the Post-Mortem Auditor for a sports betting system.
+You are evaluating {len(unreviewed)} completed college basketball matchups.
 
-Data:
-{reflection_payload}
+Data (keyed by matchup):
+{json.dumps(unreviewed, ensure_ascii=False, indent=2)}
 
-Return VALID JSON with exactly these keys:
+Task:
+For EACH matchup, reflect on the prediction vs actual outcome.
+
+Return VALID JSON where keys are the exact matchup strings, and values are objects with these keys:
 {{
-  "result": "correct|incorrect|unknown",
-  "lesson": "1-2 sentences, factual; no made-up stats",
-  "missed_signal": "" ,
-  "followup_check": "" ,
-  "tags": ["injury","market_move","tempo","matchup","variance","data_gap","other"]
+  "matchup_key": {{
+      "result": "correct|incorrect|unknown",
+      "lesson": "1-2 sentences, factual; no made-up stats",
+      "missed_signal": "" ,
+      "followup_check": "" ,
+      "tags": ["injury","market_move","tempo","matchup","variance","data_gap","other"]
+  }}
 }}
 
 Rules:
@@ -59,33 +68,37 @@ Rules:
 - If the outcome is ambiguous, set result=unknown.
 """
 
-                try:
-                    response_text = generate_content(
-                        model="gemini-2.5-flash",
-                        system_prompt=full_prompt,
-                        json_mode=True,
-                        max_tokens=400
-                    )
-                    # Store the structured JSON as the lesson payload for retrieval.
-                    lesson_obj = None
-                    try:
-                        lesson_obj = json.loads(response_text)
-                    except Exception:
-                        lesson_obj = None
+            try:
+                response_text = generate_content(
+                    model="gemini-2.5-flash",
+                    system_prompt=full_prompt,
+                    json_mode=True,
+                    max_tokens=4000
+                )
+                clean_text = response_text.strip()
+                if clean_text.startswith("```json"):
+                    clean_text = clean_text[7:]
+                if clean_text.endswith("```"):
+                    clean_text = clean_text[:-3]
 
-                    if isinstance(lesson_obj, dict) and lesson_obj.get('lesson'):
-                        lesson = json.dumps(lesson_obj, ensure_ascii=False)
-                    else:
-                        lesson = response_text.strip()
+                parsed_lessons = json.loads(clean_text.strip())
+
+                for key, lesson_obj in parsed_lessons.items():
+                    if key not in unreviewed_raw:
+                        continue
                     
-                    # 2. Get Embedding for the lesson
+                    team_a = unreviewed_raw[key].get('away_team')
+                    team_b = unreviewed_raw[key].get('home_team')
+                    
+                    lesson_str = json.dumps(lesson_obj, ensure_ascii=False)
+                    
+                    # 2. Get Embedding for the lesson (cheap/fast)
                     embed_res = embed_content(
                         model="models/gemini-embedding-001",
                         title="Reflection",
                         task_type="RETRIEVAL_DOCUMENT",
-                        content=lesson
+                        content=lesson_str
                     )
-                    embedding_vector = embed_res
                     
                     # 3. Save to memory DB
                     insert_query = """
@@ -93,18 +106,13 @@ Rules:
                         VALUES (%s, %s, %s, %s, %s, %s)
                     """
                     _exec(conn, insert_query, (
-                        team_a, team_b, "Post-game reflection", lesson, 
-                        datetime.now(timezone.utc), json.dumps(embedding_vector)
+                        team_a, team_b, "Post-game reflection", lesson_str, 
+                        datetime.now(timezone.utc), json.dumps(embed_res)
                     ))
                     conn.commit()
                     memories_added += 1
 
-                    # Gentle rate-limit backoff (configurable)
-                    import time
-                    sleep_s = float(os.getenv('POST_MORTEM_SLEEP_SECONDS', '2'))
-                    if sleep_s > 0:
-                        time.sleep(sleep_s)
-                except Exception as e:
-                    print(f"[PostMortemAgent] Failed to process {team_a} vs {team_b}: {e}")
+            except Exception as e:
+                print(f"[PostMortemAgent] Failed to process batch: {e}")
 
         return {"status": "success", "memories_generated": memories_added}

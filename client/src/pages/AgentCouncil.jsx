@@ -37,8 +37,10 @@ export default function AgentCouncil() {
                     return {
                         offer: {
                             event_id: eid,
-                            market_type: data.rec ? data.rec.bet_type : 'Analysis Pending',
-                            side: data.rec ? data.rec.selection : '',
+                            market_type: data.rec ? (data.rec.bet_type || data.rec.market_type || 'Unknown') : 'Analysis Pending',
+                            side: data.rec ? (data.rec.selection || 'Unknown Side') : '',
+                            line: data.rec ? (data.rec.market_line || data.rec.line || '') : '',
+                            odds_american: data.rec ? (data.rec.price || data.rec.odds_american || '') : ''
                         },
                         ...data
                     };
