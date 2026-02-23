@@ -7,10 +7,6 @@ on:
         description: "Optional ET date (YYYY-MM-DD). Leave blank for server default."
         required: false
         default: ""
-  schedule:
-    # 15:05 UTC ~ 10:05 ET (Health Check). 
-    # The primary runs now occur hourly via ncaam_jobs.yml
-    - cron: "5 15 * * *"
 
 jobs:
   run_council_today:
