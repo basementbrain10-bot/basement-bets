@@ -14,6 +14,46 @@ from src.agents.memory_agent import MemoryAgent
 from src.agents.oracle_agent import OracleAgent
 from src.agents.journal_agent import JournalAgent
 
+def get_recently_analyzed(conn, event_ids):
+    """
+    Returns a dict mapping event_id to (last_analyzed_at, analyzed_line)
+    leveraging the council_narrative JSONB column.
+    """
+    if not event_ids:
+        return {}
+    
+    # We look for runs in the last 24 hours to be safe, though we only care about the last 2.
+    q = """
+    SELECT created_at, council_narrative 
+    FROM decision_runs 
+    WHERE created_at > NOW() - INTERVAL '24 hours'
+      AND council_narrative IS NOT NULL
+    ORDER BY created_at DESC
+    """
+    cur = _exec(conn, q)
+    recent = {}
+    for row in cur.fetchall():
+        nar = row['council_narrative']
+        if isinstance(nar, str):
+            try:
+                nar = json.loads(nar)
+            except:
+                continue
+        if not isinstance(nar, dict):
+            continue
+        
+        for eid in event_ids:
+            if eid in nar and eid not in recent:
+                line = None
+                game_data = nar[eid]
+                if isinstance(game_data, dict):
+                    sig = game_data.get('signals', {})
+                    if isinstance(sig, dict):
+                        line = sig.get('market_line')
+                
+                recent[eid] = (row['created_at'], line)
+    return recent
+
 def main():
     date_et = None
     if len(sys.argv) > 1:
@@ -80,15 +120,69 @@ def main():
         print("No valid events constructed.")
         return
         
-    # 3. Run the Council Agents
+    # 3. Check for recently analyzed games (Smart Idempotency)
+    # Skip if analyzed within 120 minutes AND the line hasn't changed.
+    with get_db_connection() as conn:
+        recent_map = get_recently_analyzed(conn, [ev.event_id for ev in events])
+
+    active_events = []
+    line_map = {} # Store current line per event_id for comparison
+    
+    for pick in picks:
+        eid = pick['event_id']
+        rec = pick['rec_json']
+        if isinstance(rec, str): rec = json.loads(rec)
+        current_line = rec.get('market_line') if rec else None
+        line_map[eid] = current_line
+
+    for ev in events:
+        eid = ev.event_id
+        current_line = line_map.get(eid)
+        
+        recent_info = recent_map.get(eid)
+        if not recent_info:
+            active_events.append(ev)
+            continue
+            
+        last_time, last_line = recent_info
+        # last_time is likely a datetime object from psycopg2
+        if last_time.tzinfo is None:
+            last_time = last_time.replace(tzinfo=timezone.utc)
+            
+        age_mins = (dt.now(timezone.utc) - last_time).total_seconds() / 60
+        
+        # Criteria for re-running:
+        # 1. Age > 120 minutes
+        # 2. OR Market Line has shifted (comparing as strings/floats)
+        line_moved = False
+        if current_line is not None and last_line is not None:
+            try:
+                if abs(float(current_line) - float(last_line)) >= 0.1:
+                    line_moved = True
+            except:
+                if str(current_line) != str(last_line):
+                    line_moved = True
+        elif current_line != last_line:
+            line_moved = True
+
+        if age_mins > 120 or line_moved:
+            active_events.append(ev)
+        else:
+            print(f"Skipping {eid} (analyzed {int(age_mins)}m ago, line {last_line} -> {current_line})")
+
+    if not active_events:
+        print("All candidate games were recently analyzed. Nothing to do.")
+        return
+
+    # 4. Run the Council Agents
     research_agent = ResearchAgent()
     memory_agent = MemoryAgent()
     oracle_agent = OracleAgent()
     journal_agent = JournalAgent()
     
     # Run in batches of 5 to avoid Vercel timeouts if needed
-    for i in range(0, len(events), 5):
-        batch_events = events[i:i+5]
+    for i in range(0, len(active_events), 5):
+        batch_events = active_events[i:i+5]
         batch_edges = {ev.event_id: quant_edges[ev.event_id] for ev in batch_events}
         
         print(f"Running Council for batch {i//5 + 1} ({len(batch_events)} games)...")
