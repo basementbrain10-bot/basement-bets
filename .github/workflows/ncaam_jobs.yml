@@ -92,3 +92,16 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python3 src/scripts/grade_predictions.py
+
+      - name: Trigger Agent Council
+        env:
+          BASEMENT_BETS_URL: ${{ secrets.BASEMENT_BETS_URL }}
+          BASEMENT_CRON_SECRET: ${{ secrets.BASEMENT_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          url="${BASEMENT_BETS_URL%/}/api/jobs/run_council_today"
+          echo "Triggering Agent Council: ${url}"
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${BASEMENT_CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            --fail "${url}"
