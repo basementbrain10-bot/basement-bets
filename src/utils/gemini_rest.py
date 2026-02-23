@@ -6,18 +6,18 @@ def generate_content(model: str, system_prompt: str, json_mode: bool = False, ma
     # API Version / Model standardization
     # Note: Gemini 1.5 Flash is often aliases to 2.5 Flash in some docs, 
     # but the API endpoint usually prefers 'gemini-1.5-flash'.
-    if model == "gemini-2.5-flash": 
-        model = "gemini-1.5-flash"
+    if model == "gemini-2.5-flash" or model == "gemini-2.0-flash": 
+        model = "gemini-1.5-flash-latest"
     
     # Use pro model if requested and not disabled
-    if model == "gemini-1.5-flash" and os.getenv("USE_PRO_TIER", "true").lower() == "true" and os.getenv("DISABLE_PRO_TIER", "false").lower() != "true":
-        model = "gemini-1.5-pro"
+    if model.startswith("gemini-1.5-flash") and os.getenv("USE_PRO_TIER", "true").lower() == "true" and os.getenv("DISABLE_PRO_TIER", "false").lower() != "true":
+        model = "gemini-1.5-pro-latest"
         
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
         raise ValueError("GEMINI_API_KEY not set")
         
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={api_key}"
     
     payload = {
         "contents": [{

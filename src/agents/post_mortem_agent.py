@@ -15,6 +15,7 @@ class PostMortemAgent(BaseAgent):
     def __init__(self):
         pass
 
+    def execute(self, context: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
         results_list = context.get('completed_games', []) # List of dicts with outcome details
         if not results_list:
             return {"status": "No games to analyze"}
@@ -70,7 +71,7 @@ Rules:
 
             try:
                 response_text = generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-2.0-flash", # Use 2.0 flash
                     system_prompt=full_prompt,
                     json_mode=True,
                     max_tokens=4000
@@ -90,14 +91,22 @@ Rules:
                     team_a = unreviewed_raw[key].get('away_team')
                     team_b = unreviewed_raw[key].get('home_team')
                     
-                    lesson_str = json.dumps(lesson_obj, ensure_ascii=False)
+                    # Store the clean lesson text directly for the UI
+                    lesson_text = ""
+                    if isinstance(lesson_obj, dict):
+                        lesson_text = lesson_obj.get('lesson', str(lesson_obj))
+                    else:
+                        lesson_text = str(lesson_obj)
+                        
+                    # Keep the full metadata in context field just in case
+                    full_context_json = json.dumps(lesson_obj, ensure_ascii=False)
                     
                     # 2. Get Embedding for the lesson (cheap/fast)
                     embed_res = embed_content(
                         model="models/gemini-embedding-001",
                         title="Reflection",
                         task_type="RETRIEVAL_DOCUMENT",
-                        content=lesson_str
+                        content=lesson_text
                     )
                     
                     # 3. Save to memory DB
@@ -106,7 +115,7 @@ Rules:
                         VALUES (%s, %s, %s, %s, %s, %s)
                     """
                     _exec(conn, insert_query, (
-                        team_a, team_b, "Post-game reflection", lesson_str, 
+                        team_a, team_b, full_context_json, lesson_text, 
                         datetime.now(timezone.utc), json.dumps(embed_res)
                     ))
                     conn.commit()

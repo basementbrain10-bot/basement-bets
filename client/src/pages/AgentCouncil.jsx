@@ -184,7 +184,19 @@ export default function AgentCouncil() {
                             {memories.map((m, idx) => (
                                 <div key={idx} className="p-3 bg-slate-800/40 rounded-lg border border-slate-700/50 text-sm break-words">
                                     <div className="text-xs font-bold text-purple-400 mb-1">{m.team_a} vs {m.team_b}</div>
-                                    <div className="text-slate-300 italic whitespace-normal">"{m.lesson}"</div>
+                                    <div className="text-slate-300 italic whitespace-pre-wrap">
+                                        "{(() => {
+                                            try {
+                                                if (m.lesson && (m.lesson.startsWith('{') || m.lesson.startsWith('['))) {
+                                                    const parsed = JSON.parse(m.lesson);
+                                                    return parsed.lesson || JSON.stringify(parsed, null, 2);
+                                                }
+                                                return m.lesson;
+                                            } catch (e) {
+                                                return m.lesson;
+                                            }
+                                        })()}"
+                                    </div>
                                 </div>
                             ))}
                         </div>
