@@ -37,27 +37,46 @@ class PostMortemAgent(BaseAgent):
                 if row:
                     continue
 
-                # 1. Ask Gemini to reflect
+                # 1. Ask Gemini to reflect (structured)
                 reflection_payload = f"Matchup: {team_a} vs {team_b}, Oracle Prediction/Edge: {prediction}, Actual Outcome: {actual_result}"
                 full_prompt = f"""
-You are the Post-Mortem Auditor recording historical betting data.
+You are the Post-Mortem Auditor for a sports betting system.
 
 Data:
 {reflection_payload}
 
-INSTRUCTIONS: 
-- Create a 1-2 sentence factual record of whether the model's prediction was correct or incorrect based on this outcome.
-- DO NOT invent or assume game statistics (e.g., shooting percentages, turnovers, defense) because you do not have the box score. 
-- DO NOT explain *why* the team won or lost. Only log the result.
+Return VALID JSON with exactly these keys:
+{{
+  "result": "correct|incorrect|unknown",
+  "lesson": "1-2 sentences, factual; no made-up stats",
+  "missed_signal": "" ,
+  "followup_check": "" ,
+  "tags": ["injury","market_move","tempo","matchup","variance","data_gap","other"]
+}}
+
+Rules:
+- DO NOT invent game stats.
+- If the outcome is ambiguous, set result=unknown.
 """
-                
+
                 try:
                     response_text = generate_content(
                         model="gemini-2.5-flash",
                         system_prompt=full_prompt,
-                        max_tokens=250
+                        json_mode=True,
+                        max_tokens=400
                     )
-                    lesson = response_text.strip()
+                    # Store the structured JSON as the lesson payload for retrieval.
+                    lesson_obj = None
+                    try:
+                        lesson_obj = json.loads(response_text)
+                    except Exception:
+                        lesson_obj = None
+
+                    if isinstance(lesson_obj, dict) and lesson_obj.get('lesson'):
+                        lesson = json.dumps(lesson_obj, ensure_ascii=False)
+                    else:
+                        lesson = response_text.strip()
                     
                     # 2. Get Embedding for the lesson
                     embed_res = embed_content(
@@ -79,8 +98,12 @@ INSTRUCTIONS:
                     ))
                     conn.commit()
                     memories_added += 1
+
+                    # Gentle rate-limit backoff (configurable)
                     import time
-                    time.sleep(10) # Prevent Gemini API Rate Limits
+                    sleep_s = float(os.getenv('POST_MORTEM_SLEEP_SECONDS', '2'))
+                    if sleep_s > 0:
+                        time.sleep(sleep_s)
                 except Exception as e:
                     print(f"[PostMortemAgent] Failed to process {team_a} vs {team_b}: {e}")
 
