@@ -212,6 +212,9 @@ class DraftKingsScraper:
         helper = UserDriver()
         driver = helper.launch(profile_path=profile)
 
+        keep_open_on_auth = str(os.environ.get('DK_KEEP_OPEN_ON_AUTH', '0')).lower() in ('1','true','yes')
+        _skip_close = False
+
         try:
             # 1. Navigate to My Bets (settled) page
             # DK has multiple routes; the query param tends to land directly on the settled view.
@@ -248,6 +251,13 @@ class DraftKingsScraper:
                 )
             )
             if auth_signals:
+                if keep_open_on_auth:
+                    _skip_close = True
+                    raise NeedsHumanAuth(
+                        f"DraftKings login wall detected (url={current_url!r}). "
+                        "Browser left open because DK_KEEP_OPEN_ON_AUTH=1. "
+                        "Please log in manually in that window, then rerun the worker."
+                    )
                 raise NeedsHumanAuth(
                     f"DraftKings login wall detected (url={current_url!r}). "
                     "Please open Chrome with DK_PROFILE_PATH and log in manually, "
@@ -340,5 +350,8 @@ class DraftKingsScraper:
             return body
 
         finally:
-            helper.close()
+            if _skip_close:
+                print("[DK-Auto] Leaving browser open for manual login (DK_KEEP_OPEN_ON_AUTH=1).")
+            else:
+                helper.close()
 
