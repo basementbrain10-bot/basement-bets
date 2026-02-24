@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 
 from src.database import get_admin_db_connection, get_db_connection, _exec
 from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
+from src.agents.data_quality_agent import DataQualityAgent
 
 
 def ensure_table():
@@ -157,6 +158,19 @@ def main():
 
     print(f"[{dt.now().isoformat()}] build_daily_top_picks date_et={date_et} limit_games={limit_games}")
     ensure_table()
+
+    # Pre-flight data quality checks (and optional ingestion) so we don't skip games due to missing data.
+    try:
+        dq = DataQualityAgent()
+        dq_out, _ = dq.run({
+            'league': 'NCAAM',
+            'date_et': date_et,
+            # Keep default thresholds; can be overridden via env by passing values here later.
+            'trigger_ingestion': str(os.getenv('DQ_TRIGGER_INGESTION', '0')).lower() in ('1', 'true', 'yes'),
+        })
+        print(f"data_quality: {json.dumps(dq_out or {}, default=str)}")
+    except Exception as e:
+        print(f"[data_quality] check failed (continuing): {e}")
 
     event_ids = fetch_event_ids_for_date(date_et, limit_games=limit_games)
     print(f"events: {len(event_ids)}")
