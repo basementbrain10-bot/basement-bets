@@ -308,6 +308,63 @@ def init_bets_db():
         conn.commit()
     print("Bets table initialized.")
 
+
+def init_dk_ingest_db() -> None:
+    """
+    Additive schema for the DK automated ingest pipeline.
+    Safe to call multiple times (all statements are idempotent).
+    Does NOT alter or drop any existing tables/columns.
+    """
+    stmts = [
+        # --- book_ingest_runs: one row per scrape attempt ---
+        """
+        CREATE TABLE IF NOT EXISTS book_ingest_runs (
+            id              BIGSERIAL PRIMARY KEY,
+            book            TEXT NOT NULL,
+            account_id      TEXT NULL,
+            run_started_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            run_finished_at TIMESTAMPTZ NULL,
+            status          TEXT NOT NULL,
+            count_parsed    INT NOT NULL DEFAULT 0,
+            inserted        INT NOT NULL DEFAULT 0,
+            updated         INT NOT NULL DEFAULT 0,
+            message         TEXT NULL
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_book_ingest_runs_book_start
+        ON book_ingest_runs (book, run_started_at DESC)
+        """,
+        # --- Extend sync_jobs with DK_INGEST columns (existing rows unaffected) ---
+        "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS job_type TEXT",
+        "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS payload_json JSONB",
+        """
+        CREATE INDEX IF NOT EXISTS idx_sync_jobs_status_created
+        ON sync_jobs (status, requested_at)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_sync_jobs_type_status_created
+        ON sync_jobs (job_type, status, requested_at)
+        """,
+        # --- Safe idempotency index on bets.external_id (may already exist) ---
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_bets_user_provider_external_id
+        ON bets (user_id, provider, external_id)
+        WHERE external_id IS NOT NULL
+        """,
+    ]
+
+    with get_admin_db_connection() as conn:
+        with conn.cursor() as cur:
+            for stmt in stmts:
+                try:
+                    cur.execute(stmt.strip())
+                except Exception as e:
+                    print(f"[DB] init_dk_ingest_db warn: {e}")
+        conn.commit()
+    print("[DB] DK ingest schema initialized.")
+
+
 def init_events_db():
     schema = """
     CREATE TABLE IF NOT EXISTS events (

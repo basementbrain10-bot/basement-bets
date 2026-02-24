@@ -3,9 +3,13 @@ import requests
 import time
 from dotenv import load_dotenv
 
-# Ensure environment variables are loaded, especially for standalone scripts
-load_dotenv()
-load_dotenv('.env.local')
+# Robustly find project root to ensure .env loading works even when run from subdirectories
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.abspath(os.path.join(_current_dir, "../../"))
+
+# Load environment variables from .env in project root
+load_dotenv(os.path.join(_project_root, '.env'))
+load_dotenv(os.path.join(_project_root, '.env.local'))
 
 def generate_content(model: str, system_prompt: str, json_mode: bool = False, max_tokens: int = 1024, retries: int = 5) -> str:
     api_key = os.environ.get('GEMINI_API_KEY')

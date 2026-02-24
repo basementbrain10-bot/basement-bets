@@ -4253,3 +4253,149 @@ def get_agent_memories(limit: int = 10):
         rows = _exec(conn, "SELECT id, team_a, team_b, context, lesson, timestamp FROM agent_memories ORDER BY timestamp DESC LIMIT %s", (limit,)).fetchall()
         return {"status": "success", "data": [dict(r) for r in rows]}
 
+
+def _dk_queue_auth(request: Request) -> bool:
+    """
+    Validate CRON_SECRET for the DK queue endpoint.
+    - Production: REQUIRES Authorization: Bearer <CRON_SECRET> header.
+    - Non-production: also accepts ?token=<CRON_SECRET> query param for local testing.
+    Returns True if authorized, False otherwise.
+    """
+    cron_secret = os.environ.get("CRON_SECRET", "")
+    if not cron_secret:
+        # No secret configured → allow (dev convenience; warn loudly)
+        print("[DK-Queue] WARN: CRON_SECRET not set — endpoint is unprotected!")
+        return True
+
+    # Primary: Authorization: Bearer <secret>
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[len("Bearer "):]
+        if token == cron_secret:
+            return True
+
+    # Fallback (non-production only): ?token=<secret>
+    app_env = os.environ.get("APP_ENV", "local").lower()
+    if app_env not in ("prod", "production"):
+        token_param = request.query_params.get("token", "")
+        if token_param == cron_secret:
+            return True
+
+    return False
+
+
+@app.api_route("/api/jobs/queue_sync/draftkings", methods=["GET", "POST"])
+async def queue_dk_sync_job(request: Request):
+    """
+    Enqueue a DraftKings DK_INGEST job into sync_jobs.
+
+    Vercel Cron calls this with GET at 07:00 UTC.
+    Manual trigger: POST with optional JSON body or GET with ?token= param.
+
+    Security:
+    - Production: requires Authorization: Bearer <CRON_SECRET> header → 401 on failure.
+    - Non-production: also accepts ?token=<CRON_SECRET> for local curl testing.
+
+    No scraping is performed here — only a fast DB insert to enqueue the job.
+    The persistent local worker (scripts/sync_worker.py) does the heavy work.
+    """
+    from src.database import get_db_connection, _exec, init_dk_ingest_db
+    from src.sync_jobs import DEFAULT_USER_ID
+    import json as _json
+    from datetime import datetime, timezone
+
+    # --- Auth gate ---
+    if not _dk_queue_auth(request):
+        raise HTTPException(status_code=401, detail="Unauthorized: valid CRON_SECRET required")
+
+    # Ensure schema exists (idempotent)
+    try:
+        init_dk_ingest_db()
+    except Exception as e:
+        print(f"[DK-Queue] init_dk_ingest_db warn: {e}")
+
+    # Parse optional body (POST) — GET has no body
+    body: dict = {}
+    if request.method == "POST":
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+
+    user_id = str(body.get("user_id") or DEFAULT_USER_ID)
+    account_id = str(body.get("account_id") or "Main")
+    payload = _json.dumps({"book": "DraftKings", "user_id": user_id, "account_id": account_id})
+
+    with get_db_connection() as conn:
+        cur = _exec(
+            conn,
+            """
+            INSERT INTO sync_jobs (user_id, provider, status, requested_at, job_type, payload_json)
+            VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+            RETURNING id
+            """,
+            (user_id, "draftkings", "QUEUED", datetime.now(timezone.utc),
+             "DK_INGEST", payload),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        job_id = int(row["id"])
+
+    print(f"[DK-Queue] Queued DK_INGEST job_id={job_id} user={user_id} method={request.method}")
+    return {"status": "queued", "job_id": job_id}
+
+
+@app.get("/api/ingest/status")
+def dk_ingest_status():
+    """
+    Returns the latest DraftKings book_ingest_runs row and recent DK_INGEST jobs.
+    Distinct from the existing /api/sync/status endpoint.
+    """
+    from src.database import get_db_connection, _exec
+
+    result: dict = {"last_ingest": None, "recent_jobs": []}
+
+    try:
+        with get_db_connection() as conn:
+            cur = _exec(
+                conn,
+                """
+                SELECT id, book, account_id, run_started_at, run_finished_at,
+                       status, count_parsed, inserted, updated, message
+                FROM book_ingest_runs
+                WHERE book = 'DraftKings'
+                ORDER BY run_started_at DESC
+                LIMIT 1
+                """,
+            )
+            row = cur.fetchone()
+            if row:
+                r = dict(row)
+                for k in ("run_started_at", "run_finished_at"):
+                    if r.get(k) and hasattr(r[k], "isoformat"):
+                        r[k] = r[k].isoformat()
+                result["last_ingest"] = r
+
+            cur2 = _exec(
+                conn,
+                """
+                SELECT id, status, job_type, requested_at, started_at, finished_at, error
+                FROM sync_jobs
+                WHERE job_type = 'DK_INGEST'
+                ORDER BY requested_at DESC
+                LIMIT 5
+                """,
+            )
+            jobs = []
+            for r in cur2.fetchall():
+                j = dict(r)
+                for k in ("requested_at", "started_at", "finished_at"):
+                    if j.get(k) and hasattr(j[k], "isoformat"):
+                        j[k] = j[k].isoformat()
+                jobs.append(j)
+            result["recent_jobs"] = jobs
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
