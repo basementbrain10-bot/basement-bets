@@ -274,12 +274,29 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                 api.post('/api/ncaam/analyze', { event_id: game.id }),
                 api.get('/api/ncaam/correlations/game', { params: { event_id: game.id } }).catch(e => ({ data: null }))
             ]);
-            setAnalysisResult(analysisRes.data);
+            // If analyze returns no recommendations but we already have a cached daily_top_picks rec
+            // for this event, fall back so the Details modal still shows *something*.
+            // (This happens when the cached pick was computed earlier, but current market/odds inputs
+            // are missing or have shifted, causing analyze() to gate it out.)
+            const apiData = analysisRes.data;
+            const apiTop = (apiData?.recommendations || [])[0] || null;
+            const cachedTop = (rowTopPicks?.[game.id]?.rec) || null;
+            const merged = (!apiTop && cachedTop)
+                ? {
+                    ...(apiData || {}),
+                    recommendations: [cachedTop],
+                    headline: (apiData?.headline || 'Cached pick (daily_top_picks)')
+                        + ' — live analyze returned no recommendations',
+                    _cached_fallback: true,
+                  }
+                : apiData;
+
+            setAnalysisResult(merged);
             setCorrelationResult(corrRes.data);
 
             // Also surface the top pick back on the board row
             try {
-                const top = (analysisRes.data?.recommendations || [])[0] || null;
+                const top = (merged?.recommendations || [])[0] || null;
                 if (top) {
                     setRowTopPicks(prev => ({
                         ...prev,
