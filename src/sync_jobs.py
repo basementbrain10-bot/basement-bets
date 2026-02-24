@@ -31,7 +31,10 @@ Serverless-safe: called on-demand from API/worker.
       finished_at TIMESTAMPTZ NULL,
       worker_id TEXT NULL,
       error TEXT NULL,
-      meta JSONB NULL
+      meta JSONB NULL,
+      -- additive fields used by the new DK_INGEST pipeline
+      job_type TEXT NULL,
+      payload_json JSONB NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_sync_jobs_user_status_requested
@@ -44,6 +47,18 @@ Serverless-safe: called on-demand from API/worker.
         # psycopg2 doesn't allow multiple statements in one execute by default; split.
         for stmt in [s.strip() for s in ddl.split(';') if s.strip()]:
             _exec(conn, stmt)
+
+        # Non-destructive migrations for existing tables
+        migrations = [
+            "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS job_type TEXT;",
+            "ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS payload_json JSONB;",
+        ]
+        for m in migrations:
+            try:
+                _exec(conn, m)
+            except Exception:
+                pass
+
         conn.commit()
 
 
@@ -94,7 +109,7 @@ def claim_next_job(worker_id: str, provider: Optional[str] = None) -> Optional[d
             UPDATE sync_jobs
             SET status = 'RUNNING', started_at = %s, worker_id = %s
             WHERE id IN (SELECT id FROM next_job)
-            RETURNING id, user_id, provider, status, requested_at, started_at, worker_id, meta;
+            RETURNING id, user_id, provider, status, requested_at, started_at, worker_id, meta, job_type, payload_json;
             """,
             tuple(params + [_now_utc(), worker_id]),
         )
