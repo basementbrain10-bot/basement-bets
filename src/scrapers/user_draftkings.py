@@ -162,7 +162,21 @@ class DraftKingsScraper:
 
             if bet_texts:
                 body_text = "\n\n".join(bet_texts)
-                print(f"Scraped {len(bet_texts)} bet elements; {len(body_text)} chars.")
+
+                # If we landed on an empty-state / marketing view, don't pretend we scraped bets.
+                empty_signals = [
+                    "YOUR PICKS WILL SHOW UP HERE",
+                    "Select picks to then see",
+                    "POPULAR",
+                ]
+                if any(sig.lower() in body_text.lower() for sig in empty_signals):
+                    raise Exception(
+                        "DraftKings returned an empty-state page (no settled bets visible). "
+                        "Check that the account has settled bets, the correct jurisdiction is selected, "
+                        "and the profile is fully logged in."
+                    )
+
+                print(f"[DK-Auto] Extracted {len(bet_texts)} bet elements ({len(body_text)} chars).")
                 return body_text
 
             # Fallback: whole page
@@ -199,11 +213,26 @@ class DraftKingsScraper:
         driver = helper.launch(profile_path=profile)
 
         try:
-            # 1. Navigate to My Bets settled page
-            target_url = "https://sportsbook.draftkings.com/mybets"
-            print(f"[DK-Auto] Navigating to {target_url}")
-            driver.get(target_url)
-            time.sleep(4)
+            # 1. Navigate to My Bets (settled) page
+            # DK has multiple routes; the query param tends to land directly on the settled view.
+            target_urls = [
+                "https://sportsbook.draftkings.com/mybets?category=settled",
+                "https://sportsbook.draftkings.com/my-bets?category=settled",
+                "https://sportsbook.draftkings.com/mybets",
+            ]
+            last_exc = None
+            for target_url in target_urls:
+                try:
+                    print(f"[DK-Auto] Navigating to {target_url}")
+                    driver.get(target_url)
+                    time.sleep(4)
+                    last_exc = None
+                    break
+                except Exception as e:
+                    last_exc = e
+                    continue
+            if last_exc:
+                raise last_exc
 
             # 2. Auth check: detect login wall
             current_url = driver.current_url
@@ -289,6 +318,19 @@ class DraftKingsScraper:
 
             if bet_texts:
                 body = "\n\n".join(bet_texts)
+
+                # Detect empty-state / marketing pages that can be accidentally selected by broad CSS selectors.
+                empty_signals = [
+                    "YOUR PICKS WILL SHOW UP HERE",
+                    "Select picks to then see",
+                ]
+                if any(sig.lower() in body.lower() for sig in empty_signals):
+                    raise Exception(
+                        "DraftKings returned an empty-state page (no settled bets visible). "
+                        "Check that the account has settled bets, the correct jurisdiction is selected, "
+                        "and the profile is fully logged in."
+                    )
+
                 print(f"[DK-Auto] Extracted {len(bet_texts)} bet elements ({len(body)} chars).")
                 return body
 
