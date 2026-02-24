@@ -32,7 +32,7 @@ export default function AgentCouncil() {
 
             const topPicks = slateRes.data.picks || {};
             const allEvents = Object.keys(topPicks)
-                .filter(eid => topPicks[eid] && topPicks[eid].event)
+                .filter(eid => topPicks[eid] && topPicks[eid].event && topPicks[eid].rec)
                 .map(eid => {
                     const data = topPicks[eid];
                     return {
@@ -185,7 +185,12 @@ export default function AgentCouncil() {
                             {memories.map((m, idx) => (
                                 <div key={idx} className="p-3 bg-slate-800/40 rounded-lg border border-slate-700/50 text-sm break-words relative">
                                     <div className="flex justify-between items-start mb-1">
-                                        <div className="text-xs font-bold text-purple-400">{m.team_a} vs {m.team_b}</div>
+                                        <div className="text-xs font-bold text-purple-400">
+                                            {m.team_a} vs {m.team_b}
+                                            <div className="text-[10px] text-slate-500 font-normal mt-0.5">
+                                                {m.timestamp ? new Date(m.timestamp).toLocaleDateString() : 'Historical'}
+                                            </div>
+                                        </div>
                                         {(() => {
                                             let res = "UNKNOWN";
                                             try {
@@ -217,7 +222,7 @@ export default function AgentCouncil() {
                                         "{(() => {
                                             try {
                                                 let displayLesson = m.lesson || "";
-                                                // Strip the [STATUS] tag if present to avoid redundancy
+                                                // ONLY strip the status tag, leave everything else (date, bet, lesson)
                                                 displayLesson = displayLesson.replace(/^\[(WON|LOST|PUSH|VOID|UNKNOWN|CORRECT|INCORRECT)\]\s*/i, '');
 
                                                 if (displayLesson && (displayLesson.startsWith('{') || displayLesson.startsWith('['))) {

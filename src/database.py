@@ -130,6 +130,27 @@ def release_advisory_lock(conn, key_str: str):
 
 from src.database_council_signals import init_council_signals_db
 
+def init_agent_traces_db():
+    drops = ["DROP TABLE IF EXISTS agent_traces CASCADE;"] if _force_reset() else []
+    schema = """
+    CREATE TABLE IF NOT EXISTS agent_traces (
+        id BIGSERIAL PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        agent_name TEXT NOT NULL,
+        task_description TEXT NOT NULL,
+        details JSONB,
+        timestamp TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_traces_run_id ON agent_traces(run_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_traces_agent_name ON agent_traces(agent_name);
+    """
+    with get_admin_db_connection() as conn:
+        with conn.cursor() as cur:
+            for d in drops: cur.execute(d)
+            cur.execute(schema)
+        conn.commit()
+    print("Agent Traces table initialized.")
+
 def init_db():
     print("[DB] Initializing Database (Postgres Only)...")
     init_events_db()
@@ -146,6 +167,7 @@ def init_db():
     init_performance_objects() # Phase 14/15
     init_ncaam_net_rankings_db()
     init_council_signals_db()
+    init_agent_traces_db()
 
     # Explicitly init bets last as it depends on others conceptually (not foreign key wise mostly)
     init_bets_db()
@@ -312,6 +334,7 @@ def init_events_db():
         "ALTER TABLE events ALTER COLUMN start_time TYPE TIMESTAMPTZ USING start_time AT TIME ZONE 'UTC';",
         "ALTER TABLE events ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';",
         "ALTER TABLE events ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';",
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS sport_key TEXT;",
     ]
 
     with get_admin_db_connection() as conn:
@@ -338,15 +361,10 @@ def init_snapshots_db():
         side TEXT,
         line_value REAL,
         price INTEGER,
-        -- as_of: when the odds were captured from the feed
         captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        -- created_at: when the row was inserted (useful for debugging/backfills)
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         snapshot_key TEXT UNIQUE
     );
-    CREATE INDEX IF NOT EXISTS idx_snap_event ON odds_snapshots(event_id);
-    CREATE INDEX IF NOT EXISTS idx_snap_captured ON odds_snapshots(captured_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_snap_created ON odds_snapshots(created_at DESC);
     """
     drops = ["DROP TABLE IF EXISTS odds_snapshots CASCADE;"] if _force_reset() else []
 
@@ -354,14 +372,14 @@ def init_snapshots_db():
     migrations = [
         "ALTER TABLE odds_snapshots ADD COLUMN IF NOT EXISTS snapshot_key TEXT;",
         "CREATE UNIQUE INDEX IF NOT EXISTS ux_odds_snapshots_snapshot_key ON odds_snapshots(snapshot_key);",
-        # Standard timestamps
         "ALTER TABLE odds_snapshots ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();",
         "ALTER TABLE odds_snapshots ALTER COLUMN created_at SET NOT NULL;",
-        # Migrate captured_at to TIMESTAMPTZ NOT NULL
         "ALTER TABLE odds_snapshots ALTER COLUMN captured_at TYPE TIMESTAMPTZ USING captured_at AT TIME ZONE 'UTC';",
         "ALTER TABLE odds_snapshots ALTER COLUMN captured_at SET NOT NULL;",
         "ALTER TABLE odds_snapshots ALTER COLUMN captured_at SET DEFAULT NOW();",
         # Indexes
+        "CREATE INDEX IF NOT EXISTS idx_snap_event ON odds_snapshots(event_id);",
+        "CREATE INDEX IF NOT EXISTS idx_snap_captured ON odds_snapshots(captured_at DESC);",
         "CREATE INDEX IF NOT EXISTS idx_snap_created ON odds_snapshots(created_at DESC);",
     ]
 
@@ -369,10 +387,10 @@ def init_snapshots_db():
         with conn.cursor() as cur:
             for d in drops: cur.execute(d)
             cur.execute(schema)
-            if not drops: # Run migrations if not creating fresh
+            if not drops: 
                 for m in migrations:
                     try: cur.execute(m)
-                    except Exception as e: print(f"[DB] Migration warn: {e}")
+                    except Exception as e: print(f"[DB] Migration warn (snapshots): {e}")
         conn.commit()
     print("Snapshots DB initialized.")
 
@@ -1924,6 +1942,48 @@ def log_ingestion_run(data: dict):
     with get_db_connection() as conn:
         _exec(conn, query, params)
         conn.commit()
+
+def get_job_state(job_name: str) -> dict:
+    """Gets persistence state for a job."""
+    with get_db_connection() as conn:
+        row = _exec(conn, "SELECT state FROM job_state WHERE job_name = :n", {"n": job_name}).fetchone()
+        return dict(row['state']) if row and row['state'] else {}
+
+def set_job_state(job_name: str, state: dict):
+    """Upserts persistence state for a job."""
+    query = """
+    INSERT INTO job_state (job_name, state, updated_at)
+    VALUES (:n, :s, CURRENT_TIMESTAMP)
+    ON CONFLICT (job_name) DO UPDATE SET
+        state = EXCLUDED.state,
+        updated_at = CURRENT_TIMESTAMP
+    """
+    with get_db_connection() as conn:
+        _exec(conn, query, {"n": job_name, "s": psycopg2.extras.Json(state)})
+        conn.commit()
+
+def get_latest_odds_for_diffing(sport_league: str) -> list:
+    """
+    Fetches the latest odds snapshots for a sport/league to use as a baseline for change detection.
+    (Used to replace CSV-based state in fetch_action_odds.py)
+    """
+    # Note: Action Network IDs are typically 6-7 digit strings in this system.
+    # We join with events to filter by league if possible, 
+    # but for pure diffing we can just look at recent snapshots by book='actionnetwork'.
+    query = """
+    SELECT event_id, market_type, side, line_value, price
+    FROM (
+        SELECT event_id, market_type, side, line_value, price,
+               ROW_NUMBER() OVER (PARTITION BY event_id, market_type, side ORDER BY captured_at DESC) as rn
+        FROM odds_snapshots
+        WHERE book = 'actionnetwork'
+          AND captured_at > NOW() - INTERVAL '3 days'
+    ) t
+    WHERE rn = 1
+    """
+    with get_db_connection() as conn:
+        cursor = _exec(conn, query)
+        return [dict(r) for r in cursor.fetchall()]
 
 # ----------------------------------------------------------------------------
 # BETS & LEDGER QUERIES (Required by api.py and analytics.py)
