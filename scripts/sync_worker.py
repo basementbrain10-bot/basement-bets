@@ -20,6 +20,7 @@ import time
 from typing import Optional
 
 from src.sync_jobs import (
+    DEFAULT_USER_ID,
     claim_next_job,
     mark_job_done,
     mark_job_error,
@@ -144,9 +145,18 @@ def _run_dk_ingest_job(job: dict) -> dict:
     """
     Automated DraftKings settled-bets ingest using DraftKingsIngestService.
     Claimed by the local worker when job_type='DK_INGEST'.
+
+    Notes:
+      - Ensures DK ingest schema exists (book_ingest_runs + sync_jobs columns).
     """
     from src.services.dk_ingest_service import DraftKingsIngestService
+    from src.database import init_dk_ingest_db
     import json as _json
+
+    try:
+        init_dk_ingest_db()
+    except Exception as e:
+        print(f"[sync-worker] init_dk_ingest_db warn: {e}")
 
     meta = job.get("meta") or {}
     # payload_json may be a dict already (psycopg2 JSONB) or a JSON string
