@@ -33,6 +33,7 @@ class Config:
         self.OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
         self.BASEMENT_PASSWORD = os.environ.get("BASEMENT_PASSWORD")
         self.CRON_SECRET = os.environ.get("CRON_SECRET")
+        self.GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
         
         # Validation
         self._validate()
@@ -58,6 +59,8 @@ class Config:
                 missing.append("SUPABASE_SERVICE_ROLE_KEY")
             if not self.OPENAI_API_KEY:
                 missing.append("OPENAI_API_KEY")
+            if not self.GEMINI_API_KEY:
+                missing.append("GEMINI_API_KEY")
 
         if missing:
             msg = f"[CRITICAL] Missing required environment variables: {', '.join(missing)}"

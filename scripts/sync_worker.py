@@ -140,6 +140,31 @@ def _run_draftkings_job(job: dict) -> dict:
     return {"bets_fetched": len(parsed), "bets_saved": saved}
 
 
+def _run_dk_ingest_job(job: dict) -> dict:
+    """
+    Automated DraftKings settled-bets ingest using DraftKingsIngestService.
+    Claimed by the local worker when job_type='DK_INGEST'.
+    """
+    from src.services.dk_ingest_service import DraftKingsIngestService
+    import json as _json
+
+    meta = job.get("meta") or {}
+    # payload_json may be a dict already (psycopg2 JSONB) or a JSON string
+    payload_raw = job.get("payload_json") or {}
+    if isinstance(payload_raw, str):
+        try:
+            payload_raw = _json.loads(payload_raw)
+        except Exception:
+            payload_raw = {}
+
+    user_id = str(payload_raw.get("user_id") or job.get("user_id") or DEFAULT_USER_ID)
+    account_id = str(payload_raw.get("account_id") or meta.get("account_id") or "Main")
+
+    svc = DraftKingsIngestService()
+    result = svc.run_draftkings_ingest(user_id=user_id, account_id=account_id)
+    return result
+
+
 def process_one(provider: Optional[str] = None) -> bool:
     wid = _worker_id()
     job = claim_next_job(worker_id=wid, provider=provider)
@@ -150,25 +175,39 @@ def process_one(provider: Optional[str] = None) -> bool:
     prov = job.get("provider")
 
     try:
-        if prov == "fanduel":
+        job_type = job.get("job_type") or ""
+        if job_type == "DK_INGEST":
+            meta = _run_dk_ingest_job(job)
+            mark_job_done(job_id, meta=meta)
+            print(f"[sync-worker] DONE DK_INGEST job={job_id} meta={meta}")
+        elif prov == "fanduel":
             meta = _run_fanduel_job(job)
+            mark_job_done(job_id, meta=meta)
+            print(f"[sync-worker] DONE job={job_id} provider={prov} meta={meta}")
         elif prov == "draftkings":
             meta = _run_draftkings_job(job)
+            mark_job_done(job_id, meta=meta)
+            print(f"[sync-worker] DONE job={job_id} provider={prov} meta={meta}")
         else:
-            raise RuntimeError(f"Unknown provider: {prov}")
-
-        mark_job_done(job_id, meta=meta)
-        print(f"[sync-worker] DONE job={job_id} provider={prov} meta={meta}")
+            raise RuntimeError(f"Unknown provider/job_type: {prov}/{job_type}")
         return True
 
     except Exception as e:
         msg = str(e)
-        if "login timeout" in msg.lower() or "please log in" in msg.lower() or "login required" in msg.lower():
+        needs_auth = (
+            "NeedsHumanAuth" in type(e).__name__
+            or "login timeout" in msg.lower()
+            or "login wall" in msg.lower()
+            or "please log in" in msg.lower()
+            or "login required" in msg.lower()
+            or "needs_auth" in msg.lower()
+        )
+        if needs_auth:
             mark_job_needs_login(job_id, message=msg)
-            print(f"[sync-worker] NEEDS_LOGIN job={job_id} provider={prov} err={msg}")
+            print(f"[sync-worker] NEEDS_LOGIN job={job_id} err={msg}")
         else:
             mark_job_error(job_id, msg)
-            print(f"[sync-worker] ERROR job={job_id} provider={prov} err={msg}")
+            print(f"[sync-worker] ERROR job={job_id} err={msg}")
         return True
 
 
