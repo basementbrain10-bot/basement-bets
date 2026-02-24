@@ -39,11 +39,23 @@ class PricingAgentNCAAM(BaseAgent):
             try:
                 res = self.model.analyze(event_id_str, relax_gates=True, persist=False)
                 if not res or 'error' in res:
+                    self.log_trace(f"Pricing failed for {event_id_str}", {"error": res.get('error')})
                     continue
                     
                 debug = res.get('debug', {})
                 mu_spread_home = debug.get('mu_spread_final')
                 mu_total = debug.get('mu_total_final')
+                
+                # Log the quantitative data points used
+                self.log_trace(f"Pulled model metrics for {ev_context.away_team} vs {ev_context.home_team}", {
+                    "adj_oe_home": debug.get('home_adj_oe'),
+                    "adj_de_home": debug.get('home_adj_de'),
+                    "adj_oe_away": debug.get('away_adj_oe'),
+                    "adj_de_away": debug.get('away_adj_de'),
+                    "tempo": debug.get('mu_tempo'),
+                    "proj_spread_home": mu_spread_home,
+                    "proj_total": mu_total
+                })
                 
                 # We need win probs per side
                 spread_win_prob_home = debug.get('win_prob_spread_home')

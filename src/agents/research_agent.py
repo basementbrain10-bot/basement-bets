@@ -27,6 +27,7 @@ class ResearchAgent(BaseAgent):
         batch_citations = {}
         for ev in events:
             query = f"{ev.away_team} vs {ev.home_team} basketball news injuries 2026"
+            self.log_trace(f"Searching DuckDuckGo for {ev.away_team} vs {ev.home_team}", {"query": query})
             try:
                 resp = requests.post(search_url, data={"q": query}, headers=headers, timeout=10)
                 resp.raise_for_status()
@@ -47,6 +48,8 @@ class ResearchAgent(BaseAgent):
                             'url': url,
                             'snippet': snippet
                         })
+                        self.log_trace(f"Found search result: {title}", {"url": url})
+
                 batch_citations[ev.event_id] = citations
                 research_results[ev.event_id] = {
                     "query": query,

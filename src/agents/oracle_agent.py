@@ -88,8 +88,9 @@ class OracleAgent(BaseAgent):
         }}
         
         try:
+            self.log_trace(f"Synthesizing debate for {len(events)} matchups", {"event_ids": [ev.event_id for ev in events]})
             response_text = generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash", # Use 2.0 flash
                 system_prompt=system_prompt,
                 json_mode=True,
                 max_tokens=8192
@@ -107,11 +108,16 @@ class OracleAgent(BaseAgent):
             for ev in events:
                 if ev.event_id in council_output:
                     results[ev.event_id] = council_output[ev.event_id]
+                    self.log_trace(f"Oracle verdict generated for {ev.away_team} at {ev.home_team}", {
+                        "verdict": results[ev.event_id].get('oracle_verdict'),
+                        "confidence": results[ev.event_id].get('signals', {}).get('confidence')
+                    })
                 else:
                     results[ev.event_id] = {
                         "debate": [{"agent": "System", "message": "Oracle omitted this event in batch response."}],
                         "oracle_verdict": "Omitted from batch."
                     }
+                    self.log_trace(f"Oracle omitted event: {ev.event_id}")
                     
         except Exception as e:
             print(f"[OracleAgent] Synthesis failed for batch: {e}")

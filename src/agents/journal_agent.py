@@ -102,7 +102,21 @@ class JournalAgent(BaseAgent):
                 payload_str, "Flagged for manual review by Orchestrator", expires
             ))
 
-        # 4. SINGLE Pool Connection Block
+        # 4. Agent Traces
+        if hasattr(decision, 'agent_traces') and decision.agent_traces:
+            trace_sql = """
+                INSERT INTO agent_traces (run_id, agent_name, task_description, details, timestamp)
+                VALUES (%s, %s, %s, %s, %s)
+            """
+            for t in decision.agent_traces:
+                queries.append(trace_sql)
+                params.append((
+                    decision.run_id, t.agent_name, t.task_description,
+                    json.dumps(t.details) if t.details else None,
+                    t.timestamp or datetime.datetime.now(datetime.timezone.utc).isoformat()
+                ))
+
+        # 5. SINGLE Pool Connection Block
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 for q, p in zip(queries, params):

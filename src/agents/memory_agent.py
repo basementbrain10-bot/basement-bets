@@ -40,6 +40,7 @@ class MemoryAgent(BaseAgent):
         
         for ev in events:
             query = f"Lessons learned betting on {ev.away_team} vs {ev.home_team} tight matchups"
+            self.log_trace(f"Performing RAG retrieval for {ev.away_team} vs {ev.home_team}", {"query": query})
             try:
                 # 1. Embed the target query
                 target_emb = embed_content(
@@ -49,11 +50,9 @@ class MemoryAgent(BaseAgent):
                 )
                 
                 # 2. Compute cosine similarities (dot product)
-                # Embeddings are normalized by Gemini, so dot product = cosine similarity
                 scored_memories = []
                 for mem in all_memories:
                     emb = mem['embedding']
-                    # Pure python dot product
                     dot_product = sum(a * b for a, b in zip(emb, target_emb))
                     scored_memories.append((dot_product, mem))
                 
@@ -63,6 +62,10 @@ class MemoryAgent(BaseAgent):
                 relevant_lessons = []
                 for similarity, mem in scored_memories[:3]:
                     if similarity > 0.65:
+                        self.log_trace(f"Retrieved relevant memory ({round(float(similarity), 3)})", {
+                            "source_matchup": f"{mem['team_a']} vs {mem['team_b']}",
+                            "lesson": mem['lesson']
+                        })
                         relevant_lessons.append({
                             "similarity": round(float(similarity), 3),
                             "teams": f"{mem['team_a']} vs {mem['team_b']}",
@@ -73,6 +76,7 @@ class MemoryAgent(BaseAgent):
                 retrieved_memories[ev.event_id] = relevant_lessons
 
             except Exception as e:
+                self.log_trace(f"RAG retrieval failed for {ev.event_id}", {"error": str(e)})
                 print(f"[MemoryAgent] Error retrieving memories for {ev.event_id}: {e}")
                 retrieved_memories[ev.event_id] = []
 

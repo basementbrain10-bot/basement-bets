@@ -68,38 +68,46 @@ class DecisionOrchestrator:
         if err:
             errors.append(err)
 
+        traces = []
+        
+        # Helper to process agent outputs and accumulate traces
+        def _exec_agent(agent, params):
+            res, err = agent.run(params)
+            traces.extend(agent.get_traces())
+            return res, err
+
         # 1. Pipeline Agents
         # Note: If any agent returns an error tuple, capturing and aborting gracefully.
         
         # A. Event Contexts (cap to AGENTS_MAX_EVENTS_PER_RUN inside agent wrapper)
-        events, err = event_ops_agent.run({"league": self.league, "params": parameters})
+        events, err = _exec_agent(event_ops_agent, {"league": self.league, "params": parameters})
         if err:
-            return self._fail_fast(run_id, inputs_hash, errors + [err])
+            return self._fail_fast(run_id, inputs_hash, errors + [err], traces)
             
         # B. Offers
-        offers, err = market_data_agent.run({"events": events})
+        offers, err = _exec_agent(market_data_agent, {"events": events})
         if err:
-            return self._fail_fast(run_id, inputs_hash, errors + [err])
+            return self._fail_fast(run_id, inputs_hash, errors + [err], traces)
             
         # C. Pricing 
-        fairs, err = pricing_agent.run({"offers": offers, "events": events})
+        fairs, err = _exec_agent(pricing_agent, {"offers": offers, "events": events})
         if err:
-            return self._fail_fast(run_id, inputs_hash, errors + [err])
+            return self._fail_fast(run_id, inputs_hash, errors + [err], traces)
             
         # D. Edge & EV Computation
-        edges, err = edge_ev_agent.run({"fairs": fairs, "offers": offers})
+        edges, err = _exec_agent(edge_ev_agent, {"fairs": fairs, "offers": offers})
         if err:
-            return self._fail_fast(run_id, inputs_hash, errors + [err])
+            return self._fail_fast(run_id, inputs_hash, errors + [err], traces)
             
         # E. Risk Sizing & Constraints
-        recommendations, err = risk_manager_agent.run({"edges": edges})
+        recommendations, err = _exec_agent(risk_manager_agent, {"edges": edges})
         if err:
-            return self._fail_fast(run_id, inputs_hash, errors + [err])
+            return self._fail_fast(run_id, inputs_hash, errors + [err], traces)
             
         # F. Bet Builder Formatting
-        final_picks, err = bet_builder_agent.run({"recommendations": recommendations})
+        final_picks, err = _exec_agent(bet_builder_agent, {"recommendations": recommendations})
         if err:
-            return self._fail_fast(run_id, inputs_hash, errors + [err])
+            return self._fail_fast(run_id, inputs_hash, errors + [err], traces)
             
         # 2. Hard Gates & Status Formatting
         status = "OK"
@@ -123,10 +131,10 @@ class DecisionOrchestrator:
         
         council_narrative = {}
         if target_events:
-            research, err = research_agent.run({"events": target_events})
+            research, err = _exec_agent(research_agent, {"events": target_events})
             if err: errors.append(err)
             
-            memories, err = memory_agent.run({"events": target_events})
+            memories, err = _exec_agent(memory_agent, {"events": target_events})
             if err: errors.append(err)
             
             # Map edges by event_id for the oracle
@@ -138,7 +146,7 @@ class DecisionOrchestrator:
                         edges_by_ev[ev_id] = []
                     edges_by_ev[ev_id].append(f"{e.offer.market_type} {e.offer.side} {e.offer.line} ({e.ev_display})")
                     
-            oracle_outputs, err = oracle_agent.run({
+            oracle_outputs, err = _exec_agent(oracle_agent, {
                 "events": target_events,
                 "edges": {k: ", ".join(v) for k, v in edges_by_ev.items()},
                 "research": research,
@@ -160,7 +168,8 @@ class DecisionOrchestrator:
             notes=["Completed orchestrator pipeline."],
             errors=errors,
             model_version=self.model_version,
-            council_narrative=council_narrative
+            council_narrative=council_narrative,
+            agent_traces=traces
         )
         
         # 4. Journaling (Guarded single DB transaction)

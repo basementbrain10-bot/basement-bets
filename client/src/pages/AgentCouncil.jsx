@@ -9,6 +9,7 @@ export default function AgentCouncil() {
     const [memories, setMemories] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadingCouncil, setLoadingCouncil] = useState(false);
+    const [activeTab, setActiveTab] = useState('debate');
 
     useEffect(() => {
         loadData();
@@ -182,16 +183,48 @@ export default function AgentCouncil() {
                     ) : (
                         <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                             {memories.map((m, idx) => (
-                                <div key={idx} className="p-3 bg-slate-800/40 rounded-lg border border-slate-700/50 text-sm break-words">
-                                    <div className="text-xs font-bold text-purple-400 mb-1">{m.team_a} vs {m.team_b}</div>
+                                <div key={idx} className="p-3 bg-slate-800/40 rounded-lg border border-slate-700/50 text-sm break-words relative">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <div className="text-xs font-bold text-purple-400">{m.team_a} vs {m.team_b}</div>
+                                        {(() => {
+                                            let res = "UNKNOWN";
+                                            try {
+                                                if (m.context && m.context.startsWith('{')) {
+                                                    const parsed = JSON.parse(m.context);
+                                                    res = parsed.result || "UNKNOWN";
+                                                } else if (m.lesson && m.lesson.includes('[WON]')) res = "WON";
+                                                else if (m.lesson && m.lesson.includes('[LOST]')) res = "LOST";
+                                                else if (m.lesson && m.lesson.includes('[PUSH]')) res = "PUSH";
+                                                else if (m.lesson && m.lesson.includes('[VOID]')) res = "VOID";
+                                            } catch (e) { }
+
+                                            const colors = {
+                                                "WON": "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+                                                "LOST": "bg-rose-500/20 text-rose-400 border-rose-500/30",
+                                                "PUSH": "bg-amber-500/20 text-amber-400 border-amber-500/30",
+                                                "VOID": "bg-slate-500/20 text-slate-400 border-slate-500/30",
+                                                "UNKNOWN": "bg-slate-700/50 text-slate-400 border-slate-600/50"
+                                            };
+
+                                            return (
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded border font-bold uppercase ${colors[res] || colors.UNKNOWN}`}>
+                                                    {res}
+                                                </span>
+                                            );
+                                        })()}
+                                    </div>
                                     <div className="text-slate-300 italic whitespace-pre-wrap">
                                         "{(() => {
                                             try {
-                                                if (m.lesson && (m.lesson.startsWith('{') || m.lesson.startsWith('['))) {
-                                                    const parsed = JSON.parse(m.lesson);
+                                                let displayLesson = m.lesson || "";
+                                                // Strip the [STATUS] tag if present to avoid redundancy
+                                                displayLesson = displayLesson.replace(/^\[(WON|LOST|PUSH|VOID|UNKNOWN|CORRECT|INCORRECT)\]\s*/i, '');
+
+                                                if (displayLesson && (displayLesson.startsWith('{') || displayLesson.startsWith('['))) {
+                                                    const parsed = JSON.parse(displayLesson);
                                                     return parsed.lesson || JSON.stringify(parsed, null, 2);
                                                 }
-                                                return m.lesson;
+                                                return displayLesson;
                                             } catch (e) {
                                                 return m.lesson;
                                             }
@@ -215,15 +248,33 @@ export default function AgentCouncil() {
                     <div className="bg-slate-900 border border-slate-800 rounded-xl flex flex-col h-full min-h-[600px] overflow-hidden">
                         {/* Debate Header */}
                         <div className="p-6 border-b border-slate-800 bg-slate-900/80">
-                            <h2 className="text-2xl font-black text-white">
-                                {selectedEvent.event?.away_team && selectedEvent.event?.home_team
-                                    ? `${selectedEvent.event.away_team} @ ${selectedEvent.event.home_team}`
-                                    : selectedEvent.offer.event_id.replace('NCAAB_', '').replace('action:ncaam:', 'Game ')}
-                            </h2>
-                            <div className="flex gap-4 mt-2 text-sm text-slate-400">
-                                <span><strong className="text-slate-300">Market:</strong> {selectedEvent.offer.market_type}</span>
-                                <span><strong className="text-slate-300">Target Side:</strong> {selectedEvent.offer.side}</span>
-                                <span><strong className="text-slate-300">Line:</strong> {selectedEvent.offer.line} ({selectedEvent.offer.odds_american})</span>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h2 className="text-2xl font-black text-white">
+                                        {selectedEvent.event?.away_team && selectedEvent.event?.home_team
+                                            ? `${selectedEvent.event.away_team} @ ${selectedEvent.event.home_team}`
+                                            : selectedEvent.offer.event_id.replace('NCAAB_', '').replace('action:ncaam:', 'Game ')}
+                                    </h2>
+                                    <div className="flex gap-4 mt-2 text-sm text-slate-400">
+                                        <span><strong className="text-slate-300">Market:</strong> {selectedEvent.offer.market_type}</span>
+                                        <span><strong className="text-slate-300">Target Side:</strong> {selectedEvent.offer.side}</span>
+                                        <span><strong className="text-slate-300">Line:</strong> {selectedEvent.offer.line}</span>
+                                    </div>
+                                </div>
+                                <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
+                                    <button
+                                        onClick={() => setActiveTab('debate')}
+                                        className={`px-4 py-1.5 rounded-md text-xs font-bold transition ${activeTab === 'debate' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                                    >
+                                        DEBATE
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('activity')}
+                                        className={`px-4 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-2 ${activeTab === 'activity' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                                    >
+                                        ACTIVITY LOG {councilData?.traces?.length > 0 && <span className="bg-slate-900/50 px-1 rounded text-[10px]">{councilData.traces.length}</span>}
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -241,12 +292,9 @@ export default function AgentCouncil() {
                                     <p className="text-slate-400 leading-relaxed">
                                         The daily Gemini API quota is currently exhausted. To ensure accuracy and prevent model degradation, the Council has paused active game analysis.
                                     </p>
-                                    <div className="mt-6 p-4 bg-slate-900/80 rounded-xl border border-blue-500/20 text-blue-300 font-serif italic italic">
+                                    <div className="mt-6 p-4 bg-slate-900/80 rounded-xl border border-blue-500/20 text-blue-300 font-serif italic">
                                         "{councilData.verdict}"
                                     </div>
-                                    <p className="text-xs text-slate-500 mt-6">
-                                        The orchestrator will automatically resume analysis as soon as your API tier resets.
-                                    </p>
                                 </div>
                             ) : councilData?.error ? (
                                 <div className="p-6 bg-red-900/20 border border-red-900/50 rounded-xl text-center">
@@ -254,11 +302,11 @@ export default function AgentCouncil() {
                                     <p className="text-red-400 font-semibold">{councilData.error}</p>
                                     <p className="text-xs text-red-500/70 mt-2">The orchestrator must run `mode=agents` to generate debates.</p>
                                 </div>
-                            ) : (
+                            ) : activeTab === 'debate' ? (
                                 <div className="space-y-6">
                                     {/* The Debate Transcript */}
                                     <div className="space-y-6">
-                                        {councilData?.debate?.map((msg, idx) => (
+                                        {(councilData?.narrative?.debate || councilData?.debate)?.map((msg, idx) => (
                                             <div key={idx} className="flex gap-4">
                                                 <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 shrink-0">
                                                     {getAgentIcon(msg.agent)}
@@ -285,11 +333,53 @@ export default function AgentCouncil() {
                                                     </h3>
                                                 </div>
                                                 <p className="text-lg text-slate-200 leading-relaxed font-serif italic">
-                                                    "{councilData?.oracle_verdict}"
+                                                    "{councilData?.narrative?.oracle_verdict || councilData?.oracle_verdict}"
                                                 </p>
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {councilData?.traces?.length === 0 ? (
+                                        <div className="text-center py-12 text-slate-500">
+                                            No granular activity logs found for this run.
+                                        </div>
+                                    ) : (
+                                        <div className="relative pl-8 space-y-6 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800">
+                                            {councilData.traces.map((t, idx) => (
+                                                <div key={idx} className="relative">
+                                                    <div className="absolute -left-[31px] top-1 w-6 h-6 rounded-full bg-slate-950 border-2 border-slate-800 flex items-center justify-center z-10">
+                                                        <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+                                                    </div>
+                                                    <div className="bg-slate-900/50 border border-slate-800/50 rounded-xl p-4">
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <div>
+                                                                <span className="text-[10px] font-black text-blue-500 uppercase tracking-tighter mr-2">{t.agent_name}</span>
+                                                                <span className="text-sm font-bold text-slate-200">{t.task_description}</span>
+                                                            </div>
+                                                            <span className="text-[10px] text-slate-500 font-mono">
+                                                                {new Date(t.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                                            </span>
+                                                        </div>
+                                                        {t.details && (
+                                                            <div className="mt-2 text-xs text-slate-400 bg-slate-950/50 p-3 rounded-lg border border-slate-800/30 overflow-x-auto">
+                                                                {t.details.url ? (
+                                                                    <a href={t.details.url} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline flex items-center gap-1">
+                                                                        <Search size={12} /> {t.details.url}
+                                                                    </a>
+                                                                ) : (
+                                                                    <pre className="whitespace-pre-wrap font-mono text-[11px] text-slate-500">
+                                                                        {JSON.stringify(t.details, null, 2)}
+                                                                    </pre>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

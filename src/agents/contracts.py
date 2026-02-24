@@ -82,6 +82,13 @@ class BetRecommendation(BaseModel):
     rationale: List[str]
     correlation_group: Optional[str] = None
 
+class AgentTrace(BaseModel):
+    model_config = ConfigDict(strict=True)
+    agent_name: str
+    task_description: str
+    details: Optional[Dict[str, Any]] = None
+    timestamp: Optional[str] = None
+
 class DecisionRun(BaseModel):
     model_config = ConfigDict(strict=True)
     run_id: str
@@ -96,3 +103,4 @@ class DecisionRun(BaseModel):
     errors: List[AgentError]
     model_version: str
     council_narrative: Optional[Dict[str, Any]] = None
+    agent_traces: List[AgentTrace] = []

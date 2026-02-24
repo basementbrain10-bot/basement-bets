@@ -4195,33 +4195,52 @@ def get_council_debate(event_id: Optional[str] = None):
         # Search the latest decision run that includes narrative for this event.
         # Since council_narrative is a JSON object keyed by event_id, we can check if that key exists.
         query = """
-        SELECT council_narrative->%s AS narrative
+        SELECT run_id, council_narrative->%s AS narrative
         FROM decision_runs
         WHERE jsonb_exists(council_narrative, %s)
         ORDER BY created_at DESC LIMIT 1
         """
         row = _exec(conn, query, (event_id, event_id)).fetchone()
 
-        # NOTE: depending on driver/cursor settings, `row` may be dict-like or tuple-like.
-        # Handle both to avoid runtime 500s.
+        run_id = None
         narrative = None
         if row is not None:
             try:
-                narrative = row.get('narrative')  # type: ignore[attr-defined]
+                run_id = row.get('run_id')
+                narrative = row.get('narrative')
             except Exception:
                 try:
-                    narrative = row[0]
+                    run_id = row[0]
+                    narrative = row[1]
                 except Exception:
-                    narrative = None
+                    pass
 
         if narrative:
             try:
-                # json might already be parsed, or it's a string
                 if isinstance(narrative, str):
                     narrative = json.loads(narrative)
-                return {"status": "success", "data": narrative}
+                
+                # Fetch traces for this run
+                traces = []
+                if run_id:
+                    trace_query = "SELECT agent_name, task_description, details, timestamp FROM agent_traces WHERE run_id = %s ORDER BY timestamp ASC"
+                    trace_rows = _exec(conn, trace_query, (run_id,)).fetchall()
+                    for t in trace_rows:
+                        item = dict(t)
+                        if item.get('details') and isinstance(item['details'], str):
+                            item['details'] = json.loads(item['details'])
+                        item['timestamp'] = item['timestamp'].isoformat() if hasattr(item['timestamp'], 'isoformat') else str(item['timestamp'])
+                        traces.append(item)
+                
+                return {
+                    "status": "success", 
+                    "data": {
+                        "narrative": narrative,
+                        "traces": traces
+                    }
+                }
             except Exception as e:
-                return {"status": "error", "message": f"Failed to parse narrative: {e}"}
+                return {"status": "error", "message": f"Failed to parse council data: {e}"}
                 
         return {"status": "error", "message": "No council debate found for this event."}
 
