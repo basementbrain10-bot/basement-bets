@@ -219,9 +219,12 @@ class DraftKingsScraper:
             # 1. Navigate to My Bets (settled) page
             # DK has multiple routes; the query param tends to land directly on the settled view.
             target_urls = [
+                # Prefer the canonical My Bets route first (user reports this works reliably)
+                "https://sportsbook.draftkings.com/mybets",
+                "https://sportsbook.draftkings.com/my-bets",
+                # Some builds support category param; keep as fallback
                 "https://sportsbook.draftkings.com/mybets?category=settled",
                 "https://sportsbook.draftkings.com/my-bets?category=settled",
-                "https://sportsbook.draftkings.com/mybets",
             ]
             last_exc = None
             for target_url in target_urls:
@@ -238,31 +241,51 @@ class DraftKingsScraper:
                 raise last_exc
 
             # 2. Auth check: detect login wall
-            current_url = driver.current_url
-            page_src = driver.page_source
-            auth_signals = (
-                "log-in" in current_url.lower()
-                or "client-login" in current_url.lower()
-                or driver.find_elements(By.CSS_SELECTOR, "input[type='password']")
-                or (
-                    "BALANCE" not in page_src
-                    and "My Bets" not in page_src
-                    and "Settled" not in page_src
-                )
-            )
-            if auth_signals:
-                if keep_open_on_auth:
-                    _skip_close = True
+            # If login is required, optionally wait for the operator to complete login
+            # in the opened browser (interactive), then continue.
+            wait_login_s = int(os.environ.get("DK_WAIT_FOR_LOGIN_SECONDS", "300"))
+
+            def _is_login_wall() -> bool:
+                try:
+                    current_url = (driver.current_url or "").lower()
+                    page_src = (driver.page_source or "")
+                    # URL signals
+                    if any(x in current_url for x in ("log-in", "client-login", "/auth/login", "myaccount.draftkings.com/auth")):
+                        return True
+                    # DOM signals
+                    if driver.find_elements(By.CSS_SELECTOR, "input[type='password']"):
+                        return True
+                    # Text signals
+                    if "to continue to draftkings" in page_src.lower():
+                        return True
+                    if "remember my email" in page_src.lower() and "password" in page_src.lower() and "log in" in page_src:
+                        return True
+                    return False
+                except Exception:
+                    return False
+
+            if _is_login_wall():
+                print("[DK-Auto] Login required — please complete login in the opened browser window...")
+                import time as _time
+                start = _time.time()
+                while _time.time() - start < wait_login_s:
+                    _time.sleep(3)
+                    if not _is_login_wall():
+                        print("[DK-Auto] Login appears complete. Continuing...")
+                        break
+
+                if _is_login_wall():
+                    if keep_open_on_auth:
+                        _skip_close = True
+                        raise NeedsHumanAuth(
+                            f"DraftKings login wall detected (url={driver.current_url!r}). "
+                            "Browser left open because DK_KEEP_OPEN_ON_AUTH=1. "
+                            "Please log in manually in that window, then rerun the worker."
+                        )
                     raise NeedsHumanAuth(
-                        f"DraftKings login wall detected (url={current_url!r}). "
-                        "Browser left open because DK_KEEP_OPEN_ON_AUTH=1. "
-                        "Please log in manually in that window, then rerun the worker."
+                        f"DraftKings login wall detected (url={driver.current_url!r}). "
+                        "Please open Chrome with DK_PROFILE_PATH and log in manually, then retry."
                     )
-                raise NeedsHumanAuth(
-                    f"DraftKings login wall detected (url={current_url!r}). "
-                    "Please open Chrome with DK_PROFILE_PATH and log in manually, "
-                    "then retry the worker."
-                )
 
             # 3. Click 'Settled' tab with resilient selectors
             settled_selectors = [
@@ -305,21 +328,39 @@ class DraftKingsScraper:
                 last_h = new_h
 
             # 5. Extract bet card text
+            # Prefer scoping to the main content area so we don't accidentally scrape
+            # sidebar marketing/empty-state text.
+            root = None
+            try:
+                root = driver.find_element(By.TAG_NAME, "main")
+            except Exception:
+                root = driver
+
             bet_texts = []
             card_selectors = [
                 "[data-testid*='bet']",
                 "[data-test-id*='bet']",
                 "[class*='bet-card']",
                 "[class*='BetCard']",
-                "[class*='sportsbook-mybets']",
+                "[class*='mybets']",
                 "[class*='my-bets']",
             ]
+
             for sel in card_selectors:
                 try:
-                    for el in driver.find_elements(By.CSS_SELECTOR, sel):
+                    elements = root.find_elements(By.CSS_SELECTOR, sel) if hasattr(root, 'find_elements') else driver.find_elements(By.CSS_SELECTOR, sel)
+                    for el in elements:
                         try:
                             t = (el.text or "").strip()
-                            if t and len(t) > 40:
+                            if not t or len(t) <= 60:
+                                continue
+
+                            tl = t.lower()
+                            # Heuristic: real settled bet cards almost always contain an outcome word
+                            # and a currency amount. This avoids grabbing nav/marketing blocks.
+                            outcome = any(x in tl for x in ("won", "lost", "void", "push", "cashed"))
+                            money = ("$" in t) or ("usd" in tl)
+                            if outcome and money:
                                 bet_texts.append(t)
                         except Exception:
                             pass
@@ -328,20 +369,7 @@ class DraftKingsScraper:
 
             if bet_texts:
                 body = "\n\n".join(bet_texts)
-
-                # Detect empty-state / marketing pages that can be accidentally selected by broad CSS selectors.
-                empty_signals = [
-                    "YOUR PICKS WILL SHOW UP HERE",
-                    "Select picks to then see",
-                ]
-                if any(sig.lower() in body.lower() for sig in empty_signals):
-                    raise Exception(
-                        "DraftKings returned an empty-state page (no settled bets visible). "
-                        "Check that the account has settled bets, the correct jurisdiction is selected, "
-                        "and the profile is fully logged in."
-                    )
-
-                print(f"[DK-Auto] Extracted {len(bet_texts)} bet elements ({len(body)} chars).")
+                print(f"[DK-Auto] Extracted {len(bet_texts)} bet-card candidates ({len(body)} chars).")
                 return body
 
             # Fallback: raw body text
