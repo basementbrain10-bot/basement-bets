@@ -11,6 +11,9 @@ class ResearchAgent(BaseAgent):
     Performs real-time web research for an event to find breaking news,
     injuries, or lineup changes.
     """
+    def __init__(self):
+        super().__init__()
+
     def execute(self, context: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
         events: List[EventContext] = context.get("events", [])
         if not events:
@@ -68,7 +71,8 @@ class ResearchAgent(BaseAgent):
 
         # 2. RAW RETURN: Skip LLM extraction to save on Rate Limits. 
         # The OracleAgent will handle the raw snippets in its consolidated prompt.
-        for eid in events_ids := [ev.event_id for ev in events]:
+        event_ids = [ev.event_id for ev in events]
+        for eid in event_ids:
             if eid in research_results:
                 research_results[eid]["summary"] = f"Found {research_results[eid]['articles_found']} raw search results for analysis."
         

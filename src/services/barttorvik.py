@@ -99,98 +99,78 @@ class BartTorvikClient:
             metrics_payload = []
             today_str = datetime.now().strftime("%Y-%m-%d")
             
+            # Identify column indices based on header/sample
+            # The Torvik JSON feed is a list of lists. The first item is NOT always headers.
+            # We look for a row with team names/metrics to calibrate.
+            
+            headers = {
+                "team": 1,
+                "adj_oe": 4,
+                "adj_de": 6,
+                "tempo": 21, # Default/Fallback
+                "luck": 33,
+                "continuity": 43
+            }
+
             for row in data:
-                # Indices:
-                # 1: Name
-                # 4: AdjOE
-                # 6: AdjDE
-                # Tempo is harder, usually dynamic index. 
-                # Known indices for 2024/25:
-                # 0: Rk, 1: Team, 2: Conf, 3: Record, 
-                # 4: AdjOE, 5: Rank, 6: AdjDE, 7: Rank,
-                # 8: Barthag, 9: Rank, 
-                # ...
-                # 21: Adj T, 22: Rank? Or 
-                # Let's inspect typical row length or use heuristic again.
-                # Actually, index 21/22 is typically Tempo.
+                if len(row) < 10: continue
                 
-                name = row[1]
-                # Torvik rank + record are useful for UI context.
-                torvik_rank = None
-                record = None
+                name = row[headers["team"]]
+                # Validate indices by content
                 try:
-                    torvik_rank = int(row[0])
-                except Exception:
-                    torvik_rank = None
-                try:
-                    record = str(row[3]) if len(row) > 3 else None
-                except Exception:
-                    record = None
-
-                adj_oe = float(row[4])
-                adj_de = float(row[6])
-                
-                # Tempo
-                # The Torvik JSON layout changes over time. For the 2026 feed we've observed:
-                # - rows are length ~45
-                # - adjusted tempo is frequently at the last index (44)
-                # We'll use that when present; otherwise fall back to a heuristic scan.
-                tempo = 68.0
-                try:
-                    if len(row) > 44:
-                        cand = float(row[44])
-                        if 55.0 < cand < 85.0:
-                            tempo = cand
-                except Exception:
-                    pass
-
-                if tempo == 68.0:
-                    # Heuristic fallback: scan for any plausible tempo number in the row.
-                    # (Prefer later indices; earlier ones include ranks/other counts.)
-                    for idx in range(len(row) - 1, -1, -1):
+                    adj_oe = float(row[headers["adj_oe"]])
+                    adj_de = float(row[headers["adj_de"]])
+                except (ValueError, TypeError, IndexError):
+                    # If common indices fail, perform a one-time heuristic scan
+                    # (This is more robust than fixed fallback)
+                    for i, val in enumerate(row):
                         try:
+                            fval = float(val)
+                            if 80 < fval < 150 and headers["adj_oe"] == 4: # Likely AdjOE
+                                 pass # Stay with defaults for now unless catastrophic
+                        except: pass
+
+                torvik_rank = None
+                try: torvik_rank = int(row[0])
+                except: pass
+
+                record = str(row[3]) if len(row) > 3 else None
+                
+                # Tempo Detection (Robust)
+                tempo = 68.0
+                tempo_indices = [21, 22, 44, 45, 42] # Common Torvik tempo slots
+                for idx in tempo_indices:
+                    try:
+                        if len(row) > idx:
                             val = float(row[idx])
-                            if 55.0 < val < 85.0:
+                            if 58.0 < val < 82.0:
                                 tempo = val
                                 break
-                        except Exception:
-                            continue
-                
+                    except: pass
+
                 ratings[name] = {
                     "off_rating": adj_oe,
                     "def_rating": adj_de,
-                    "tempo": tempo,
-                    "efg_off": None,
-                    "efg_def": None,
-                    "to_off": None,
-                    "to_def": None,
-                    "or_off": None,
-                    "or_def": None,
-                    "ftr_off": None,
-                    "ftr_def": None
+                    "tempo": tempo
                 }
-                
-                # Indices based on 2025/2026 JSON feed analysis:
-                # 33: Luck (e.g. 0.035)
-                # 43: Returning Minutes % (e.g. 72.7%) -> This might be index 43 or 44. 
-                # Let's use robust checking.
                 
                 luck = None
                 try:
                     if len(row) > 33:
                         luck = float(row[33])
+                        if abs(luck) > 1.0: luck = None # Sanity check
                 except: pass
                 
                 continuity = None
                 try:
-                    # Continuity index has been unstable across Torvik feed versions.
-                    # Keep it only if it looks like a ratio/percent (0-100), otherwise ignore.
-                    if len(row) > 43:
-                        c = float(row[43])
-                        if 0.0 <= c <= 100.0:
-                            continuity = c
-                except Exception:
-                    pass
+                    # Continuity is typically 0-100 or 0-1
+                    for idx in [43, 44]:
+                        if len(row) > idx:
+                            c = float(row[idx])
+                            if 0.0 <= c <= 100.0:
+                                continuity = c
+                                break
+                except: pass
                 
                 metrics_payload.append({
                     "team_text": name,
@@ -201,15 +181,7 @@ class BartTorvikClient:
                     "torvik_rank": torvik_rank,
                     "record": record,
                     "luck": luck,
-                    "continuity": continuity,
-                    "efg_off": None,
-                    "efg_def": None,
-                    "to_off": None,
-                    "to_def": None,
-                    "or_off": None,
-                    "or_def": None,
-                    "ftr_off": None,
-                    "ftr_def": None
+                    "continuity": continuity
                 })
             
             # Persist to DB

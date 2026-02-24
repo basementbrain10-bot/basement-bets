@@ -10,6 +10,7 @@ from database import get_db_connection, _exec, update_model_prediction_result, u
 from parsers.espn_client import EspnClient
 from services.odds_selection_service import OddsSelectionService
 from src.action_network import get_todays_games
+from src.agents.post_mortem_agent import PostMortemAgent
 
 # Load env variables if not already loaded
 from dotenv import load_dotenv
@@ -19,6 +20,7 @@ class GradingService:
     def __init__(self):
         self.espn_client = EspnClient()
         self.odds_selector = OddsSelectionService()
+        self.post_mortem_agent = PostMortemAgent()
 
     def grade_predictions(self, *, backfill_days: int = 3, max_clv_rows: int = 250, max_grade_rows: int = 500, skip_clv: bool = False):
         """Grade pending predictions.
@@ -40,7 +42,15 @@ class GradingService:
             clv_count = self._compute_clv_for_started_games(max_rows=max_clv_rows, lookback_days=backfill_days)
 
         # 3) Grade outcomes for finals (bounded)
-        graded_count = self._evaluate_db_predictions(max_rows=max_grade_rows)
+        graded_count, graded_results = self._evaluate_db_predictions(max_rows=max_grade_rows)
+
+        # 4) Run Post-Mortem pipeline on recently graded games
+        if graded_count > 0:
+            print(f"[GRADING] Triggering post-mortem for {graded_count} games...")
+            try:
+                self.post_mortem_agent.execute({"completed_games": graded_results})
+            except Exception as e:
+                print(f"[GRADING] Post-mortem agent failed: {e}")
 
         return {"status": "Success", "graded": graded_count, "clv_updates": clv_count, "skip_clv": bool(skip_clv), "backfill_days": backfill_days}
 
@@ -264,6 +274,7 @@ class GradingService:
         min_ev = float(os.getenv('GRADING_MIN_EV_PER_UNIT', '0.02'))
         query = """
         SELECT m.id, m.market_type, m.pick, m.bet_line, m.book,
+               m.selection, m.analyzed_at, m.narrative_json,
                e.home_team, e.away_team,
                gr.home_score, gr.away_score, gr.final
         FROM model_predictions m
@@ -289,17 +300,32 @@ class GradingService:
             
         print(f"[GRADING] Found {len(rows)} pending bets with final scores.")
         
+        graded_results = []
         graded = 0
         for row in rows:
             try:
-                outcome = self._grade_row(dict(row))
+                row_dict = dict(row)
+                outcome = self._grade_row(row_dict)
                 if outcome != 'PENDING':
+                    # Add to results for post-mortem
+                    graded_results.append({
+                        "away_team": row_dict['away_team'],
+                        "home_team": row_dict['home_team'],
+                        "away_score": row_dict['away_score'],
+                        "home_score": row_dict['home_score'],
+                        "oracle_prediction": row_dict.get('oracle_verdict') or row_dict.get('narrative_json') or "N/A",
+                        "recommended_bet": row_dict.get('selection') or f"{row_dict['pick']} {row_dict['bet_line']}",
+                        "actual_result": f"{row_dict['home_team']} {row_dict['home_score']} - {row_dict['away_team']} {row_dict['away_score']}",
+                        "game_date": row_dict.get('analyzed_at').strftime("%Y-%m-%d") if row_dict.get('analyzed_at') else None,
+                        "final": row_dict.get('final')
+                    })
+                    from src.database import update_model_prediction_result
                     update_model_prediction_result(row['id'], outcome)
                     graded += 1
             except Exception as e:
                 print(f"[GRADING] Error grading row {row['id']}: {e}")
                 
-        return graded
+        return graded, graded_results
 
     def _grade_row(self, row):
         from src.utils.normalize import normalize_market

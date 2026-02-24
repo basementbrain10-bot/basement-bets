@@ -76,12 +76,13 @@ class IngestionEngine:
         Main entry point for ingestion.
         1. Save Snapshot
         2. Detect Drift
-        3. Log Run
+        3. Compute Hash & Diff
+        4. Log Run
         """
         start_time = datetime.datetime.now()
-        run_id = str(uuid.uuid4())
+        job_name = f"ingest_{provider.lower()}_{league.lower()}"
         
-        # 1. Snapshot (best-effort; may be disabled in read-only environments)
+        # 1. Snapshot (best-effort)
         snapshot_path = self._save_snapshot(provider, league, data)
         
         # 2. Drift
@@ -89,30 +90,40 @@ class IngestionEngine:
         if expected_keys:
             drift_detected = self._detect_drift(data, expected_keys)
             
-        # 3. Log (Placeholder for actual processing count logic)
+        # 3. Hash & Diff
+        from src.database import get_job_state, set_job_state
+        payload_str = json.dumps(data, sort_keys=True)
+        current_hash = hashlib.sha256(payload_str.encode()).hexdigest()
+        
+        state = get_job_state(job_name)
+        last_hash = state.get("last_payload_hash")
+        
+        items_changed = 0
+        if current_hash != last_hash:
+            # For now, we consider the whole batch changed if the hash differs
+            # TODO: Add item-level diffing if needed
+            items_changed = len(data) if isinstance(data, list) else 1
+            state["last_payload_hash"] = current_hash
+            set_job_state(job_name, state)
+
+        # 4. Log
         items_count = len(data) if isinstance(data, list) else 1
         
         log_data = {
-            "id": run_id,
             "provider": provider,
             "league": league,
-            "run_status": "SUCCESS", # TODO: Handle Errors
+            "run_status": "SUCCESS",
             "items_processed": items_count,
-            "items_changed": 0, # TODO: Diff logic
+            "items_changed": items_changed,
             "payload_snapshot_path": snapshot_path,
             "schema_drift_detected": drift_detected
         }
         
         try:
             log_ingestion_run(log_data)
-            print(f"[Ingestion] Logged run {run_id}. Drift: {drift_detected}")
+            print(f"[Ingestion] Logged run for {job_name}. Changed: {items_changed}. Drift: {drift_detected}")
         except Exception as e:
             print(f"[Ingestion] Failed to log run: {e}")
 
     # TODO: Add specific provider methods (ingest_espn, ingest_football_data)
 
-if __name__ == "__main__":
-    # Smoke Test
-    engine = IngestionEngine()
-    dummy_data = [{"id": 1, "name": "Event A"}, {"id": 2, "name": "Event B"}]
-    engine.ingest_data("TEST_PROVIDER", "NFL", dummy_data, expected_keys={"id", "name", "status"})

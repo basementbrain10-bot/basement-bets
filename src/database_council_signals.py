@@ -2,8 +2,6 @@ import json
 import os
 from typing import Optional
 
-from src.database import get_admin_db_connection
-
 
 def _force_reset() -> bool:
     return os.environ.get("BASEMENT_DB_RESET") == "1"
@@ -11,6 +9,7 @@ def _force_reset() -> bool:
 
 def init_council_signals_db():
     """Create a dedicated table to store council signals for offline analysis/training."""
+    from src.database import get_admin_db_connection
     drops = ["DROP TABLE IF EXISTS council_signals CASCADE;"] if _force_reset() else []
 
     schema = """

@@ -11,7 +11,7 @@ class OracleAgent(BaseAgent):
     into a structured debate and final prediction decision.
     """
     def __init__(self):
-        pass
+        super().__init__()
 
     def execute(self, context: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
         events: List[EventContext] = context.get('events', [])
@@ -50,26 +50,34 @@ class OracleAgent(BaseAgent):
         
         Here is the FACTUAL DATA gathered for each matchup:
         {json.dumps(matchups_data, indent=2)}
-        
+         
         TASK:
         1. For EACH matchup, analyze the `raw_news_snippets`. Extract ONLY verifiable roster/news facts (injuries, confirmed lineup changes).
-        2. Combine these facts with the `quantitative_data` and `historical_lessons`.
-        3. Provide strictly data-backed executive summaries and final verdicts.
+        2. Combine these facts with the `quantitative_data` and the `historical_lessons` (RAG memories).
+        3. CRITICAL: Pay special attention to `historical_lessons`. If the system has repeatedly missed on a specific team or matchup archetype, apply a qualitative correction.
+        4. Provide strictly data-backed executive summaries and final verdicts.
         
         ANTI-HALLUCINATION INSTRUCTIONS:
         - Do NOT invent storylines or unverified dynamics.
-        - If no actionable news is in the snippets, state "No actionable news found" and rely on the quantitative data.
+        - If no actionable news is in the snippets, state "No actionable news found" and rely on the quantitative data + historical lessons.
         - You MUST explicitly evaluate Spread, Moneyline, and Game Totals.
         
         OUTPUT FORMAT MUST BE VALID JSON:
         Return a single dictionary where keys are the exact `event_id` strings.
+        Each entry must include a "debate" with these specific agent roles:
+        - "Executive Summary": High-level view.
+        - "Research & Roster": Factual news and injury analysis.
+        - "Historical Context": Deep dive into `historical_lessons` and how they apply here.
+        - "Verdict": Final synthesizing decision.
+        
         Example:
         {{
             "event_id_1": {{
                 "debate": [
                     {{"agent": "Executive Summary", "message": "..."}},
                     {{"agent": "Research & Roster", "message": "..."}},
-                    {{"agent": "Historical Context", "message": "..."}}
+                    {{"agent": "Historical Context", "message": "..."}},
+                    {{"agent": "Verdict", "message": "..."}}
                 ],
                 "oracle_verdict": "...",
                 "signals": {{
@@ -86,6 +94,7 @@ class OracleAgent(BaseAgent):
                 }}
             }}
         }}
+        """
         
         try:
             self.log_trace(f"Synthesizing debate for {len(events)} matchups", {"event_ids": [ev.event_id for ev in events]})
@@ -102,16 +111,18 @@ class OracleAgent(BaseAgent):
                 clean_text = clean_text[:-3]
             clean_text = clean_text.strip()
             
+            self.log_trace("Oracle response received", {"raw_json": clean_text})
             council_output = json.loads(clean_text)
             
             # Map back to results ensuring all events have an entry
             for ev in events:
                 if ev.event_id in council_output:
                     results[ev.event_id] = council_output[ev.event_id]
-                    self.log_trace(f"Oracle verdict generated for {ev.away_team} at {ev.home_team}", {
+                    trace_data = {
                         "verdict": results[ev.event_id].get('oracle_verdict'),
                         "confidence": results[ev.event_id].get('signals', {}).get('confidence')
-                    })
+                    }
+                    self.log_trace(f"Oracle verdict generated for {ev.away_team} at {ev.home_team}", trace_data)
                 else:
                     results[ev.event_id] = {
                         "debate": [{"agent": "System", "message": "Oracle omitted this event in batch response."}],

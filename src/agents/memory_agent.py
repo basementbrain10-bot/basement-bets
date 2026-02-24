@@ -14,7 +14,7 @@ class MemoryAgent(BaseAgent):
     Queries the 'agent_memories' table via cosine similarity on embeddings.
     """
     def __init__(self):
-        pass
+        super().__init__()
 
     def execute(self, context: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
         """
@@ -31,6 +31,7 @@ class MemoryAgent(BaseAgent):
         all_memories = self._load_all_memories()
         
         if not all_memories:
+            self.log_trace("No memories found in database. Skipping RAG.")
             for ev in events:
                 retrieved_memories[ev.event_id] = []
             return retrieved_memories
@@ -39,46 +40,59 @@ class MemoryAgent(BaseAgent):
         # We will iterate through all_memories directly
         
         for ev in events:
-            query = f"Lessons learned betting on {ev.away_team} vs {ev.home_team} tight matchups"
-            self.log_trace(f"Performing RAG retrieval for {ev.away_team} vs {ev.home_team}", {"query": query})
-            try:
-                # 1. Embed the target query
-                target_emb = embed_content(
-                    model="models/gemini-embedding-001",
-                    content=query,
-                    task_type="RETRIEVAL_QUERY"
-                )
-                
-                # 2. Compute cosine similarities (dot product)
-                scored_memories = []
-                for mem in all_memories:
-                    emb = mem['embedding']
-                    dot_product = sum(a * b for a, b in zip(emb, target_emb))
-                    scored_memories.append((dot_product, mem))
-                
-                # 3. Sort by similarity descending
-                scored_memories.sort(key=lambda x: x[0], reverse=True)
-                
-                relevant_lessons = []
-                for similarity, mem in scored_memories[:3]:
-                    if similarity > 0.65:
-                        self.log_trace(f"Retrieved relevant memory ({round(float(similarity), 3)})", {
-                            "source_matchup": f"{mem['team_a']} vs {mem['team_b']}",
-                            "lesson": mem['lesson']
-                        })
-                        relevant_lessons.append({
-                            "similarity": round(float(similarity), 3),
-                            "teams": f"{mem['team_a']} vs {mem['team_b']}",
-                            "lesson": mem['lesson'],
-                            "date": mem['timestamp']
-                        })
-                        
-                retrieved_memories[ev.event_id] = relevant_lessons
+            # Multi-query strategy: Matchup, Team A, Team B
+            queries = [
+                f"Lessons learned betting on {ev.away_team} vs {ev.home_team} tight matchups",
+                f"Lessons learned betting on {ev.away_team} performance and dynamics",
+                f"Lessons learned betting on {ev.home_team} performance and dynamics"
+            ]
+            
+            event_lessons = []
+            seen_ids = set()
 
-            except Exception as e:
-                self.log_trace(f"RAG retrieval failed for {ev.event_id}", {"error": str(e)})
-                print(f"[MemoryAgent] Error retrieving memories for {ev.event_id}: {e}")
-                retrieved_memories[ev.event_id] = []
+            for query in queries:
+                self.log_trace(f"Performing RAG retrieval for {ev.event_id}", {"query": query})
+                try:
+                    # 1. Embed the target query
+                    target_emb = embed_content(
+                        model="models/gemini-embedding-001",
+                        content=query,
+                        task_type="RETRIEVAL_QUERY"
+                    )
+                    
+                    # 2. Compute cosine similarities (dot product)
+                    scored_memories = []
+                    for mem in all_memories:
+                        emb = mem['embedding']
+                        dot_product = sum(a * b for a, b in zip(emb, target_emb))
+                        scored_memories.append((dot_product, mem))
+                    
+                    # 3. Sort by similarity descending
+                    scored_memories.sort(key=lambda x: x[0], reverse=True)
+                    
+                    for similarity, mem in scored_memories[:3]:
+                        # Lower threshold for team-specific search to catch relevant history
+                        threshold = 0.62 if "performance" in query else 0.65
+                        if similarity > threshold:
+                            mem_id = f"{mem['team_a']}_{mem['team_b']}_{mem['timestamp']}"
+                            if mem_id not in seen_ids:
+                                seen_ids.add(mem_id)
+                                self.log_trace(f"Retrieved relevant memory ({round(float(similarity), 3)})", {
+                                    "source_matchup": f"{mem['team_a']} vs {mem['team_b']}",
+                                    "lesson": mem['lesson']
+                                })
+                                event_lessons.append({
+                                    "similarity": round(float(similarity), 3),
+                                    "teams": f"{mem['team_a']} vs {mem['team_b']}",
+                                    "lesson": mem['lesson'],
+                                    "date": mem['timestamp']
+                                })
+                except Exception as e:
+                    self.log_trace(f"RAG query failed for {ev.event_id}", {"query": query, "error": str(e)})
+
+            # Sort all retrieved lessons for this event by similarity
+            event_lessons.sort(key=lambda x: x['similarity'], reverse=True)
+            retrieved_memories[ev.event_id] = event_lessons[:6] # Top 6 from all queries
 
         return retrieved_memories
         

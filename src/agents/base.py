@@ -1,6 +1,6 @@
 import datetime
 import traceback
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.agents.contracts import AgentError
 
