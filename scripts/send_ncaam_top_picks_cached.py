@@ -63,10 +63,11 @@ def main():
               SELECT
                 COUNT(*) as total,
                 SUM(CASE WHEN is_actionable THEN 1 ELSE 0 END) as actionable,
-                SUM(CASE WHEN reason ILIKE '%Market Data Waiting%' OR reason ILIKE '%No Line%' THEN 1 ELSE 0 END) as no_line,
-                SUM(CASE WHEN reason ILIKE '%Torvik%' AND (reason ILIKE '%unavailable%' OR reason ILIKE '%no data%') THEN 1 ELSE 0 END) as missing_torvik,
-                SUM(CASE WHEN reason ILIKE '%No bet%' OR reason ILIKE '%Pass%' THEN 1 ELSE 0 END) as no_bet,
-                SUM(CASE WHEN reason ILIKE '%error%' THEN 1 ELSE 0 END) as errors
+                -- NOTE: psycopg2 uses 'pyformat' paramstyle; literal % must be escaped as %%.
+                SUM(CASE WHEN reason ILIKE '%%Market Data Waiting%%' OR reason ILIKE '%%No Line%%' THEN 1 ELSE 0 END) as no_line,
+                SUM(CASE WHEN reason ILIKE '%%Torvik%%' AND (reason ILIKE '%%unavailable%%' OR reason ILIKE '%%no data%%') THEN 1 ELSE 0 END) as missing_torvik,
+                SUM(CASE WHEN reason ILIKE '%%No bet%%' OR reason ILIKE '%%Pass%%' THEN 1 ELSE 0 END) as no_bet,
+                SUM(CASE WHEN reason ILIKE '%%error%%' THEN 1 ELSE 0 END) as errors
               FROM daily_top_picks
               WHERE date_et=%s AND league='NCAAM'
             """, (date_et,)).fetchone()
