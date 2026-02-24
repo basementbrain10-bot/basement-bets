@@ -2561,7 +2561,8 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
                 'no_pick_samples': [],
                 'picks': picks,
             }
-            from fastapi.encoders import jsonable_encoder
+            # NOTE: do not re-import jsonable_encoder inside this function; that
+            # creates a local symbol and can cause UnboundLocalError earlier.
             data = jsonable_encoder(data)
             etag = _make_etag(data)
             inm = request.headers.get('if-none-match')
