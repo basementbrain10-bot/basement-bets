@@ -811,107 +811,58 @@ async def sync_fanduel_token(request: Request):
 
 @app.post("/api/sync/draftkings")
 async def sync_draftkings(request: Request, user: dict = Depends(get_current_user)):
-    """
-    Triggers the Selenium Scraper to fetch DraftKings history and store it.
-    """
-    try:
-        user_id = user.get("sub")
-        print(f"[API] Starting DK Sync for user {user_id}...")
-        
-        # 1. Run Scraper
-        try:
-            from src.services.draftkings_service import DraftKingsService
-            service = DraftKingsService() # Uses default ./chrome_profile
-            bets = service.scrape_history(headless=True)
-        except ImportError as e:
-            print(f"[Sync Fail] Import Error (Likely Vercel): {e}")
-            raise HTTPException(
-                status_code=400, 
-                detail="Cloud Sync is not supported on Vercel. Please run the 'Sync DraftKings Bets' workflow in GitHub Actions."
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to initialize scraper: {e}")
-        
-        if not bets:
-            return {"status": "warning", "message": "Scraper finished but found 0 bets."}
-            
-        # 2. Save to DB
-        from src.database import insert_bet_v2
-        from src.services.event_linker import EventLinker
-        linker = EventLinker()
-        
-        saved_count = 0
-        
-        for bet in bets:
-            # Construct Doc (similar to FD Sync)
-            doc = {
-                "user_id": user_id,
-                "account_id": f"DK_{user_id}", 
-                "provider": "DraftKings",
-                "date": bet['date'],
-                "sport": bet['sport'],
-                "bet_type": bet['bet_type'],
-                "wager": bet['wager'],
-                "profit": round(bet['profit'], 2),
-                "status": bet['status'],
-                "description": bet['description'],
-                "selection": bet['selection'],
-                "odds": bet.get('odds', 0),
-                "is_live": bet.get('is_live', False),
-                "is_bonus": bet.get('is_bonus', False),
-                "raw_text": bet.get('raw_text'),
-                "external_id": bet.get('external_id') or bet.get('id') or bet.get('bet_id'),
-                "source": "sync_scrape",
-            }
-            
-            # Generate Hash
-            import hashlib
-            # Use same robust hash strategy
-            raw_string = f"{user_id}|DraftKings|{doc['date']}|{doc['description']}|{doc['wager']}"
-            doc['hash_id'] = hashlib.sha256(raw_string.encode()).hexdigest()
-            doc['is_parlay'] = "parlay" in str(doc['bet_type']).lower() or "sgp" in str(doc['bet_type']).lower()
-            
-            # Create Leg (Simplified)
-            leg = {
-                "leg_type": doc['bet_type'], 
-                "selection": doc['selection'],
-                "market_key": doc['bet_type'],
-                "odds_american": doc['odds'],
-                "status": doc['status'],
-                "subject_id": None, 
-                "side": None, 
-                "line_value": None
-            }
-            
-            # Matchup Link
-            link_result = linker.link_leg(leg, doc['sport'], doc['date'], doc['description'])
-            leg['event_id'] = link_result['event_id']
-            leg['link_status'] = link_result['link_status']
-            
-            # Validation Logic
-            errors = []
-            if doc['sport'] == 'Unknown':
-                errors.append("Unknown Sport")
-            if doc['status'] == 'WON' and doc['profit'] <= 0:
-                errors.append("Invalid Profit (WON <= 0)")
-            if doc['odds'] is None:
-                errors.append("Missing Odds")
-            
-            doc['validation_errors'] = ", ".join(errors) if errors else None
-            
-            try:
-                insert_bet_v2(doc, legs=[leg])
-                saved_count += 1
-            except Exception as e:
-                # print(f"Insert skip: {e}")
-                pass
-                
-        return {"status": "success", "bets_found": len(bets), "bets_saved": saved_count}
+    """Queues a DraftKings settled-bets ingest job (new pipeline).
 
+    IMPORTANT:
+    - We no longer scrape DraftKings from the Vercel API (serverless).
+    - This endpoint now *enqueues* a DK_INGEST job into sync_jobs.
+    - A persistent local worker (scripts/sync_worker.py) must claim and run it
+      using a logged-in Chrome profile (DK_PROFILE_PATH).
+
+    Returns: { status: 'queued', job_id }
+    """
+    from src.database import get_db_connection, _exec, init_dk_ingest_db
+    import json as _json
+    from datetime import datetime, timezone
+
+    user_id = (user or {}).get('sub')
+    if not user_id:
+        raise HTTPException(status_code=401, detail='Unauthorized')
+
+    # Ensure schema exists (idempotent)
+    try:
+        init_dk_ingest_db()
     except Exception as e:
-        print(f"[DK Sync] Error: {e}")
-        # Return 500 so frontend knows it failed
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"[DK Sync] init_dk_ingest_db warn: {e}")
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    account_id = str(body.get('account_id') or 'Main')
+    payload = _json.dumps({"book": "DraftKings", "user_id": str(user_id), "account_id": account_id})
+
+    with get_db_connection() as conn:
+        cur = _exec(
+            conn,
+            """
+            INSERT INTO sync_jobs (user_id, provider, status, requested_at, job_type, payload_json)
+            VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+            RETURNING id
+            """,
+            (str(user_id), 'draftkings', 'QUEUED', datetime.now(timezone.utc), 'DK_INGEST', payload),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        job_id = int(row['id'])
+
+    return {
+        'status': 'queued',
+        'job_id': job_id,
+        'note': 'Run scripts/sync_worker.py on the Mac to process the job (requires DK_PROFILE_PATH logged in).'
+    }
 
 @app.post("/api/parse-slip")
 async def parse_slip(request: Request, user: dict = Depends(get_current_user)):
