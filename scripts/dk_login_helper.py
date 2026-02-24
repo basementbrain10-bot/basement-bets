@@ -10,7 +10,11 @@ Then run the worker/ingest.
 """
 
 import os
+import sys
 import time
+
+# Allow running from repo root
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.scrapers.user_driver import UserDriver
 
