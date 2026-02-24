@@ -2758,6 +2758,7 @@ async def analyze_ncaam_game(request: Request):
     try:
         data = await request.json()
         event_id = data.get("event_id")
+        prefer_cached = bool(data.get('prefer_cached') or False)
         if not event_id:
             raise HTTPException(status_code=400, detail="event_id is required")
 
@@ -2772,8 +2773,52 @@ async def analyze_ncaam_game(request: Request):
             raise HTTPException(status_code=404, detail=f"Event not found: {event_id}")
 
         ev = dict(row)
-        analyzer = GameAnalyzer()
-        result = analyzer.analyze(event_id, "NCAAM", ev.get("home_team"), ev.get("away_team"))
+
+        # Optional: prefer cached daily_top_picks recommendation when available.
+        # This makes the Details modal consistent with the Top-Picks badge even if
+        # live market data is missing at click-time.
+        if prefer_cached:
+            try:
+                # Determine today's ET date from DB for consistency.
+                with get_db_connection() as conn:
+                    today_et = _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text").fetchone()[0]
+                    pick_row = _exec(
+                        conn,
+                        """
+                        SELECT rec_json, reason, computed_at
+                        FROM daily_top_picks
+                        WHERE date_et=%s AND league='NCAAM' AND event_id=%s
+                        LIMIT 1
+                        """,
+                        (today_et, event_id),
+                    ).fetchone()
+
+                if pick_row and pick_row.get('rec_json'):
+                    cached_rec = pick_row.get('rec_json')
+                    result = {
+                        'event_id': event_id,
+                        'league': 'NCAAM',
+                        'home_team': ev.get('home_team'),
+                        'away_team': ev.get('away_team'),
+                        'recommendations': [cached_rec],
+                        'headline': 'Cached pick (daily_top_picks)',
+                        'block_reason': None,
+                        '_source': 'daily_top_picks',
+                        '_cached_date_et': today_et,
+                        '_cached_computed_at': pick_row.get('computed_at').isoformat() if getattr(pick_row.get('computed_at'), 'isoformat', None) else str(pick_row.get('computed_at')),
+                        '_cached_reason': pick_row.get('reason'),
+                    }
+                else:
+                    # fall through to live analyze
+                    analyzer = GameAnalyzer()
+                    result = analyzer.analyze(event_id, "NCAAM", ev.get("home_team"), ev.get("away_team"))
+            except Exception as e:
+                print(f"[API] prefer_cached lookup failed; falling back to live analyze: {e}")
+                analyzer = GameAnalyzer()
+                result = analyzer.analyze(event_id, "NCAAM", ev.get("home_team"), ev.get("away_team"))
+        else:
+            analyzer = GameAnalyzer()
+            result = analyzer.analyze(event_id, "NCAAM", ev.get("home_team"), ev.get("away_team"))
 
         # Ensure teams are included even if model wrapper doesn't add them
         result.setdefault("home_team", ev.get("home_team"))
