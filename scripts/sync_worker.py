@@ -15,9 +15,13 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import socket
 import time
 from typing import Optional
+
+# Allow running from repo root
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.sync_jobs import (
     DEFAULT_USER_ID,
