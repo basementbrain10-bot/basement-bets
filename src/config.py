@@ -2,9 +2,13 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 
+# Robustly find project root to ensure .env loading works even when run from subdirectories
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.abspath(os.path.join(_current_dir, "../"))
+
 # Load env vars from .env and .env.local
-load_dotenv()
-load_dotenv('.env.local')
+load_dotenv(os.path.join(_project_root, '.env'))
+load_dotenv(os.path.join(_project_root, '.env.local'))
 
 class Config:
     def __init__(self):
@@ -33,6 +37,7 @@ class Config:
         self.OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
         self.BASEMENT_PASSWORD = os.environ.get("BASEMENT_PASSWORD")
         self.CRON_SECRET = os.environ.get("CRON_SECRET")
+        self.GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
         
         # Validation
         self._validate()
@@ -58,6 +63,8 @@ class Config:
                 missing.append("SUPABASE_SERVICE_ROLE_KEY")
             if not self.OPENAI_API_KEY:
                 missing.append("OPENAI_API_KEY")
+            if not self.GEMINI_API_KEY:
+                missing.append("GEMINI_API_KEY")
 
         if missing:
             msg = f"[CRITICAL] Missing required environment variables: {', '.join(missing)}"

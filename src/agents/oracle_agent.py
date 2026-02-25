@@ -15,7 +15,7 @@ class OracleAgent(BaseAgent):
     offline evaluation can audit every qualitative claim.
     """
     def __init__(self):
-        pass
+        super().__init__()
 
     def execute(self, context: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
         events: List[EventContext] = context.get('events', [])
@@ -60,7 +60,7 @@ class OracleAgent(BaseAgent):
         
         Here is the FACTUAL DATA gathered for each matchup:
         {json.dumps(matchups_data, indent=2)}
-        
+         
         TASK:
         1. For EACH matchup, analyze the `evidence` section. Use `extracted_facts` for verifiable roster/injury claims; use `raw_snippets` for broader context only.
         2. Combine these facts with the `quantitative_data` and `historical_lessons`.
@@ -70,7 +70,7 @@ class OracleAgent(BaseAgent):
         
         ANTI-HALLUCINATION INSTRUCTIONS:
         - Do NOT invent storylines or unverified dynamics.
-        - If no actionable news, state "No actionable news found" and rely on quantitative data + historical lessons.
+        - If no actionable news is in the snippets, state "No actionable news found" and rely on the quantitative data + historical lessons.
         - You MUST explicitly evaluate Spread, Moneyline, and Game Totals.
         
         OUTPUT FORMAT MUST BE VALID JSON:
@@ -121,16 +121,18 @@ class OracleAgent(BaseAgent):
                 clean_text = clean_text[:-3]
             clean_text = clean_text.strip()
             
+            self.log_trace("Oracle response received", {"raw_json": clean_text})
             council_output = json.loads(clean_text)
             
             # Map back to results ensuring all events have an entry
             for ev in events:
                 if ev.event_id in council_output:
                     results[ev.event_id] = council_output[ev.event_id]
-                    self.log_trace(f"Oracle verdict generated for {ev.away_team} at {ev.home_team}", {
+                    trace_data = {
                         "verdict": results[ev.event_id].get('oracle_verdict'),
                         "confidence": results[ev.event_id].get('signals', {}).get('confidence')
-                    })
+                    }
+                    self.log_trace(f"Oracle verdict generated for {ev.away_team} at {ev.home_team}", trace_data)
                 else:
                     results[ev.event_id] = {
                         "debate": [{"agent": "System", "message": "Oracle omitted this event in batch response."}],

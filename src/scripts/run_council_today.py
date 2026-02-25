@@ -7,6 +7,7 @@ from datetime import datetime as dt, timezone
 # Allow running from repo root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
+from src.config import settings
 from src.database import get_db_connection, _exec
 from src.agents.contracts import EventContext, DecisionRun
 from src.agents.research_agent import ResearchAgent
@@ -110,11 +111,17 @@ def main():
         )
         events.append(ev)
         
+        if isinstance(rec, list) and len(rec) > 0:
+            rec = rec[0]
+            
         # Build quant context
-        market_str = rec.get('selection', 'Unknown Selection')
-        ev_disp = rec.get('edge', 'Unknown Edge')
-        conf = rec.get('confidence', 'Unknown')
-        quant_edges[ev_id] = f"Selection: {market_str} | Model EV: {ev_disp} | Confidence: {conf}"
+        if isinstance(rec, dict):
+            market_str = rec.get('selection', rec.get('market', 'Unknown Selection'))
+            ev_disp = rec.get('edge', rec.get('ev_per_unit', 'Unknown Edge'))
+            conf = rec.get('confidence', 'Unknown')
+            quant_edges[ev_id] = f"Selection: {market_str} | Model EV: {ev_disp} | Confidence: {conf}"
+        else:
+            quant_edges[ev_id] = "No explicit quantitative recommendation found."
         
     print(f"Total events constructed: {len(events)}")
     if not events:
@@ -134,7 +141,8 @@ def main():
         eid = pick['event_id']
         rec = pick['rec_json']
         if isinstance(rec, str): rec = json.loads(rec)
-        current_line = rec.get('market_line') if rec else None
+        if isinstance(rec, list) and len(rec) > 0: rec = rec[0]
+        current_line = rec.get('market_line', rec.get('line')) if isinstance(rec, dict) else None
         line_map[eid] = current_line
 
     for ev in events:
@@ -217,6 +225,12 @@ def main():
             # 4. Persist to decision_runs via JournalAgent
             run_id = "DR-COUNCIL-" + dt.now(timezone.utc).strftime('%Y%m%d%H%M%S') + f"-B{i}"
             
+            # Aggregate Traces
+            all_traces = []
+            all_traces.extend(research_agent.get_traces())
+            all_traces.extend(memory_agent.get_traces())
+            all_traces.extend(oracle_agent.get_traces())
+
             decision_run = DecisionRun(
                 run_id=run_id,
                 created_at=dt.now(timezone.utc).isoformat(),
@@ -229,7 +243,8 @@ def main():
                 notes=[f"Council run on {len(batch_events)} top picks."],
                 errors=[],
                 model_version="2.1.2-council",
-                council_narrative=oracle_out
+                council_narrative=oracle_out,
+                agent_traces=all_traces
             )
             
             journal_agent.run({"decision_run": decision_run, "action": "persist"})

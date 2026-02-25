@@ -811,107 +811,58 @@ async def sync_fanduel_token(request: Request):
 
 @app.post("/api/sync/draftkings")
 async def sync_draftkings(request: Request, user: dict = Depends(get_current_user)):
-    """
-    Triggers the Selenium Scraper to fetch DraftKings history and store it.
-    """
-    try:
-        user_id = user.get("sub")
-        print(f"[API] Starting DK Sync for user {user_id}...")
-        
-        # 1. Run Scraper
-        try:
-            from src.services.draftkings_service import DraftKingsService
-            service = DraftKingsService() # Uses default ./chrome_profile
-            bets = service.scrape_history(headless=True)
-        except ImportError as e:
-            print(f"[Sync Fail] Import Error (Likely Vercel): {e}")
-            raise HTTPException(
-                status_code=400, 
-                detail="Cloud Sync is not supported on Vercel. Please run the 'Sync DraftKings Bets' workflow in GitHub Actions."
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to initialize scraper: {e}")
-        
-        if not bets:
-            return {"status": "warning", "message": "Scraper finished but found 0 bets."}
-            
-        # 2. Save to DB
-        from src.database import insert_bet_v2
-        from src.services.event_linker import EventLinker
-        linker = EventLinker()
-        
-        saved_count = 0
-        
-        for bet in bets:
-            # Construct Doc (similar to FD Sync)
-            doc = {
-                "user_id": user_id,
-                "account_id": f"DK_{user_id}", 
-                "provider": "DraftKings",
-                "date": bet['date'],
-                "sport": bet['sport'],
-                "bet_type": bet['bet_type'],
-                "wager": bet['wager'],
-                "profit": round(bet['profit'], 2),
-                "status": bet['status'],
-                "description": bet['description'],
-                "selection": bet['selection'],
-                "odds": bet.get('odds', 0),
-                "is_live": bet.get('is_live', False),
-                "is_bonus": bet.get('is_bonus', False),
-                "raw_text": bet.get('raw_text'),
-                "external_id": bet.get('external_id') or bet.get('id') or bet.get('bet_id'),
-                "source": "sync_scrape",
-            }
-            
-            # Generate Hash
-            import hashlib
-            # Use same robust hash strategy
-            raw_string = f"{user_id}|DraftKings|{doc['date']}|{doc['description']}|{doc['wager']}"
-            doc['hash_id'] = hashlib.sha256(raw_string.encode()).hexdigest()
-            doc['is_parlay'] = "parlay" in str(doc['bet_type']).lower() or "sgp" in str(doc['bet_type']).lower()
-            
-            # Create Leg (Simplified)
-            leg = {
-                "leg_type": doc['bet_type'], 
-                "selection": doc['selection'],
-                "market_key": doc['bet_type'],
-                "odds_american": doc['odds'],
-                "status": doc['status'],
-                "subject_id": None, 
-                "side": None, 
-                "line_value": None
-            }
-            
-            # Matchup Link
-            link_result = linker.link_leg(leg, doc['sport'], doc['date'], doc['description'])
-            leg['event_id'] = link_result['event_id']
-            leg['link_status'] = link_result['link_status']
-            
-            # Validation Logic
-            errors = []
-            if doc['sport'] == 'Unknown':
-                errors.append("Unknown Sport")
-            if doc['status'] == 'WON' and doc['profit'] <= 0:
-                errors.append("Invalid Profit (WON <= 0)")
-            if doc['odds'] is None:
-                errors.append("Missing Odds")
-            
-            doc['validation_errors'] = ", ".join(errors) if errors else None
-            
-            try:
-                insert_bet_v2(doc, legs=[leg])
-                saved_count += 1
-            except Exception as e:
-                # print(f"Insert skip: {e}")
-                pass
-                
-        return {"status": "success", "bets_found": len(bets), "bets_saved": saved_count}
+    """Queues a DraftKings settled-bets ingest job (new pipeline).
 
+    IMPORTANT:
+    - We no longer scrape DraftKings from the Vercel API (serverless).
+    - This endpoint now *enqueues* a DK_INGEST job into sync_jobs.
+    - A persistent local worker (scripts/sync_worker.py) must claim and run it
+      using a logged-in Chrome profile (DK_PROFILE_PATH).
+
+    Returns: { status: 'queued', job_id }
+    """
+    from src.database import get_db_connection, _exec, init_dk_ingest_db
+    import json as _json
+    from datetime import datetime, timezone
+
+    user_id = (user or {}).get('sub')
+    if not user_id:
+        raise HTTPException(status_code=401, detail='Unauthorized')
+
+    # Ensure schema exists (idempotent)
+    try:
+        init_dk_ingest_db()
     except Exception as e:
-        print(f"[DK Sync] Error: {e}")
-        # Return 500 so frontend knows it failed
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"[DK Sync] init_dk_ingest_db warn: {e}")
+
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    account_id = str(body.get('account_id') or 'Main')
+    payload = _json.dumps({"book": "DraftKings", "user_id": str(user_id), "account_id": account_id})
+
+    with get_db_connection() as conn:
+        cur = _exec(
+            conn,
+            """
+            INSERT INTO sync_jobs (user_id, provider, status, requested_at, job_type, payload_json)
+            VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+            RETURNING id
+            """,
+            (str(user_id), 'draftkings', 'QUEUED', datetime.now(timezone.utc), 'DK_INGEST', payload),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        job_id = int(row['id'])
+
+    return {
+        'status': 'queued',
+        'job_id': job_id,
+        'note': 'Run scripts/sync_worker.py on the Mac to process the job (requires DK_PROFILE_PATH logged in).'
+    }
 
 @app.post("/api/parse-slip")
 async def parse_slip(request: Request, user: dict = Depends(get_current_user)):
@@ -1466,6 +1417,7 @@ async def backfill_event_text(
     """
     try:
         uid = user.get('sub')
+        from src.config import settings
         from datetime import datetime, timedelta
         from src.database import get_db_connection, _exec
 
@@ -2758,6 +2710,7 @@ async def analyze_ncaam_game(request: Request):
     try:
         data = await request.json()
         event_id = data.get("event_id")
+        prefer_cached = bool(data.get('prefer_cached') or False)
         if not event_id:
             raise HTTPException(status_code=400, detail="event_id is required")
 
@@ -2772,8 +2725,52 @@ async def analyze_ncaam_game(request: Request):
             raise HTTPException(status_code=404, detail=f"Event not found: {event_id}")
 
         ev = dict(row)
-        analyzer = GameAnalyzer()
-        result = analyzer.analyze(event_id, "NCAAM", ev.get("home_team"), ev.get("away_team"))
+
+        # Optional: prefer cached daily_top_picks recommendation when available.
+        # This makes the Details modal consistent with the Top-Picks badge even if
+        # live market data is missing at click-time.
+        if prefer_cached:
+            try:
+                # Determine today's ET date from DB for consistency.
+                with get_db_connection() as conn:
+                    today_et = _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text").fetchone()[0]
+                    pick_row = _exec(
+                        conn,
+                        """
+                        SELECT rec_json, reason, computed_at
+                        FROM daily_top_picks
+                        WHERE date_et=%s AND league='NCAAM' AND event_id=%s
+                        LIMIT 1
+                        """,
+                        (today_et, event_id),
+                    ).fetchone()
+
+                if pick_row and pick_row.get('rec_json'):
+                    cached_rec = pick_row.get('rec_json')
+                    result = {
+                        'event_id': event_id,
+                        'league': 'NCAAM',
+                        'home_team': ev.get('home_team'),
+                        'away_team': ev.get('away_team'),
+                        'recommendations': [cached_rec],
+                        'headline': 'Cached pick (daily_top_picks)',
+                        'block_reason': None,
+                        '_source': 'daily_top_picks',
+                        '_cached_date_et': today_et,
+                        '_cached_computed_at': pick_row.get('computed_at').isoformat() if getattr(pick_row.get('computed_at'), 'isoformat', None) else str(pick_row.get('computed_at')),
+                        '_cached_reason': pick_row.get('reason'),
+                    }
+                else:
+                    # fall through to live analyze
+                    analyzer = GameAnalyzer()
+                    result = analyzer.analyze(event_id, "NCAAM", ev.get("home_team"), ev.get("away_team"))
+            except Exception as e:
+                print(f"[API] prefer_cached lookup failed; falling back to live analyze: {e}")
+                analyzer = GameAnalyzer()
+                result = analyzer.analyze(event_id, "NCAAM", ev.get("home_team"), ev.get("away_team"))
+        else:
+            analyzer = GameAnalyzer()
+            result = analyzer.analyze(event_id, "NCAAM", ev.get("home_team"), ev.get("away_team"))
 
         # Ensure teams are included even if model wrapper doesn't add them
         result.setdefault("home_team", ev.get("home_team"))
@@ -3717,6 +3714,11 @@ async def trigger_run_council_today(
     the quantitative model found an edge, stores the qualitative debate to decision_runs,
     and then re-runs the Top Picks builder to apply the qualitative adjustments.
     """
+    if not settings.GEMINI_API_KEY:
+        error_msg = "GEMINI_API_KEY missing. Please add to Vercel Dashboard and REDEPLOY."
+        print(f"[JOB ERROR] {error_msg}")
+        raise HTTPException(status_code=401, detail=error_msg)
+
     try:
         from src.scripts.run_council_today import main as run_council
         
@@ -4253,3 +4255,149 @@ def get_agent_memories(limit: int = 10):
         rows = _exec(conn, "SELECT id, team_a, team_b, context, lesson, timestamp FROM agent_memories ORDER BY timestamp DESC LIMIT %s", (limit,)).fetchall()
         return {"status": "success", "data": [dict(r) for r in rows]}
 
+
+def _dk_queue_auth(request: Request) -> bool:
+    """
+    Validate CRON_SECRET for the DK queue endpoint.
+    - Production: REQUIRES Authorization: Bearer <CRON_SECRET> header.
+    - Non-production: also accepts ?token=<CRON_SECRET> query param for local testing.
+    Returns True if authorized, False otherwise.
+    """
+    cron_secret = os.environ.get("CRON_SECRET", "")
+    if not cron_secret:
+        # No secret configured → allow (dev convenience; warn loudly)
+        print("[DK-Queue] WARN: CRON_SECRET not set — endpoint is unprotected!")
+        return True
+
+    # Primary: Authorization: Bearer <secret>
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[len("Bearer "):]
+        if token == cron_secret:
+            return True
+
+    # Fallback (non-production only): ?token=<secret>
+    app_env = os.environ.get("APP_ENV", "local").lower()
+    if app_env not in ("prod", "production"):
+        token_param = request.query_params.get("token", "")
+        if token_param == cron_secret:
+            return True
+
+    return False
+
+
+@app.api_route("/api/jobs/queue_sync/draftkings", methods=["GET", "POST"])
+async def queue_dk_sync_job(request: Request):
+    """
+    Enqueue a DraftKings DK_INGEST job into sync_jobs.
+
+    Vercel Cron calls this with GET at 07:00 UTC.
+    Manual trigger: POST with optional JSON body or GET with ?token= param.
+
+    Security:
+    - Production: requires Authorization: Bearer <CRON_SECRET> header → 401 on failure.
+    - Non-production: also accepts ?token=<CRON_SECRET> for local curl testing.
+
+    No scraping is performed here — only a fast DB insert to enqueue the job.
+    The persistent local worker (scripts/sync_worker.py) does the heavy work.
+    """
+    from src.database import get_db_connection, _exec, init_dk_ingest_db
+    from src.sync_jobs import DEFAULT_USER_ID
+    import json as _json
+    from datetime import datetime, timezone
+
+    # --- Auth gate ---
+    if not _dk_queue_auth(request):
+        raise HTTPException(status_code=401, detail="Unauthorized: valid CRON_SECRET required")
+
+    # Ensure schema exists (idempotent)
+    try:
+        init_dk_ingest_db()
+    except Exception as e:
+        print(f"[DK-Queue] init_dk_ingest_db warn: {e}")
+
+    # Parse optional body (POST) — GET has no body
+    body: dict = {}
+    if request.method == "POST":
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+
+    user_id = str(body.get("user_id") or DEFAULT_USER_ID)
+    account_id = str(body.get("account_id") or "Main")
+    payload = _json.dumps({"book": "DraftKings", "user_id": user_id, "account_id": account_id})
+
+    with get_db_connection() as conn:
+        cur = _exec(
+            conn,
+            """
+            INSERT INTO sync_jobs (user_id, provider, status, requested_at, job_type, payload_json)
+            VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+            RETURNING id
+            """,
+            (user_id, "draftkings", "QUEUED", datetime.now(timezone.utc),
+             "DK_INGEST", payload),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        job_id = int(row["id"])
+
+    print(f"[DK-Queue] Queued DK_INGEST job_id={job_id} user={user_id} method={request.method}")
+    return {"status": "queued", "job_id": job_id}
+
+
+@app.get("/api/ingest/status")
+def dk_ingest_status():
+    """
+    Returns the latest DraftKings book_ingest_runs row and recent DK_INGEST jobs.
+    Distinct from the existing /api/sync/status endpoint.
+    """
+    from src.database import get_db_connection, _exec
+
+    result: dict = {"last_ingest": None, "recent_jobs": []}
+
+    try:
+        with get_db_connection() as conn:
+            cur = _exec(
+                conn,
+                """
+                SELECT id, book, account_id, run_started_at, run_finished_at,
+                       status, count_parsed, inserted, updated, message
+                FROM book_ingest_runs
+                WHERE book = 'DraftKings'
+                ORDER BY run_started_at DESC
+                LIMIT 1
+                """,
+            )
+            row = cur.fetchone()
+            if row:
+                r = dict(row)
+                for k in ("run_started_at", "run_finished_at"):
+                    if r.get(k) and hasattr(r[k], "isoformat"):
+                        r[k] = r[k].isoformat()
+                result["last_ingest"] = r
+
+            cur2 = _exec(
+                conn,
+                """
+                SELECT id, status, job_type, requested_at, started_at, finished_at, error
+                FROM sync_jobs
+                WHERE job_type = 'DK_INGEST'
+                ORDER BY requested_at DESC
+                LIMIT 5
+                """,
+            )
+            jobs = []
+            for r in cur2.fetchall():
+                j = dict(r)
+                for k in ("requested_at", "started_at", "finished_at"):
+                    if j.get(k) and hasattr(j[k], "isoformat"):
+                        j[k] = j[k].isoformat()
+                jobs.append(j)
+            result["recent_jobs"] = jobs
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result

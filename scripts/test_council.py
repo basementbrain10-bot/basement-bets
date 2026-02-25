@@ -29,7 +29,9 @@ def run_test():
             {
                 "away_team": "Purdue",
                 "home_team": "Indiana",
+                "game_date": "2026-02-23",
                 "oracle_prediction": "Take Indiana +3.5 at home. The crowd energy in Assembly Hall combined with Purdue's recent struggles against high-pressure defense should keep this close.",
+                "recommended_bet": "Indiana +3.5",
                 "actual_result": "Indiana wins outright 74-68."
             }
         ]

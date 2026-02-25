@@ -1,9 +1,19 @@
 
 import time
+import os
 from .user_driver import UserDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+
+
+class NeedsHumanAuth(Exception):
+    """Raised when DraftKings requires interactive login.
+
+    The caller should update the job status to NEEDS_AUTH and surface this
+    to the operator so they can manually log in via the same Chrome profile.
+    """
+
 
 class DraftKingsScraper:
     def __init__(self, profile_path=None):
@@ -152,7 +162,21 @@ class DraftKingsScraper:
 
             if bet_texts:
                 body_text = "\n\n".join(bet_texts)
-                print(f"Scraped {len(bet_texts)} bet elements; {len(body_text)} chars.")
+
+                # If we landed on an empty-state / marketing view, don't pretend we scraped bets.
+                empty_signals = [
+                    "YOUR PICKS WILL SHOW UP HERE",
+                    "Select picks to then see",
+                    "POPULAR",
+                ]
+                if any(sig.lower() in body_text.lower() for sig in empty_signals):
+                    raise Exception(
+                        "DraftKings returned an empty-state page (no settled bets visible). "
+                        "Check that the account has settled bets, the correct jurisdiction is selected, "
+                        "and the profile is fully logged in."
+                    )
+
+                print(f"[DK-Auto] Extracted {len(bet_texts)} bet elements ({len(body_text)} chars).")
                 return body_text
 
             # Fallback: whole page
@@ -162,4 +186,214 @@ class DraftKingsScraper:
 
         finally:
             self.driver_helper.close()
+
+    # ------------------------------------------------------------------
+    # Automated settled-bets scraper (additive — does not change scrape())
+    # ------------------------------------------------------------------
+
+    def scrape_settled_bets_automated(self) -> str:
+        """
+        Automated wrapper for scraping DraftKings 'My Bets → Settled'.
+
+        Environment vars consumed:
+          DK_PROFILE_PATH    — persistent Chrome profile directory (required)
+          DK_SCROLL_PAGES    — number of scroll iterations (default 5)
+
+        Raises:
+          NeedsHumanAuth     — if login is required (caller marks job NEEDS_AUTH)
+
+        Returns:
+          Body text / bet-card text as a single string for the text parser.
+        """
+        profile = os.environ.get("DK_PROFILE_PATH") or self.profile_path
+        scroll_pages = int(os.environ.get("DK_SCROLL_PAGES", "5"))
+
+        # Create a fresh helper scoped to this call so we don't conflict with scrape()
+        helper = UserDriver()
+        driver = helper.launch(profile_path=profile)
+
+        keep_open_on_auth = str(os.environ.get('DK_KEEP_OPEN_ON_AUTH', '0')).lower() in ('1','true','yes')
+        _skip_close = False
+
+        try:
+            # 1. Navigate to My Bets (settled) page
+            # DK has multiple routes; the query param tends to land directly on the settled view.
+            target_urls = [
+                # Prefer the canonical My Bets route first (user reports this works reliably)
+                "https://sportsbook.draftkings.com/mybets",
+                "https://sportsbook.draftkings.com/my-bets",
+                # Some builds support category param; keep as fallback
+                "https://sportsbook.draftkings.com/mybets?category=settled",
+                "https://sportsbook.draftkings.com/my-bets?category=settled",
+            ]
+            last_exc = None
+            for target_url in target_urls:
+                try:
+                    print(f"[DK-Auto] Navigating to {target_url}")
+                    driver.get(target_url)
+                    time.sleep(4)
+                    last_exc = None
+                    break
+                except Exception as e:
+                    last_exc = e
+                    continue
+            if last_exc:
+                raise last_exc
+
+            # 2. Auth check: detect login wall / location wall
+            # If auth/location is required, optionally wait for the operator to complete login
+            # in the opened browser (interactive), then continue.
+            wait_login_s = int(os.environ.get("DK_WAIT_FOR_LOGIN_SECONDS", "300"))
+
+            def _is_login_wall() -> bool:
+                try:
+                    current_url = (driver.current_url or "").lower()
+                    page_src = (driver.page_source or "")
+                    # URL signals
+                    if any(x in current_url for x in ("log-in", "client-login", "/auth/login", "myaccount.draftkings.com/auth", "code=krn-")):
+                        return True
+                    # DOM signals
+                    if driver.find_elements(By.CSS_SELECTOR, "input[type='password']"):
+                        return True
+                    # Text signals
+                    s = page_src.lower()
+                    if "to continue to draftkings" in s:
+                        return True
+                    if "you're not logged in" in s or "you must be logged in" in s:
+                        return True
+                    if "trouble verifying your location" in s:
+                        return True
+                    if "remember my email" in s and "password" in s and "log in" in s:
+                        return True
+                    return False
+                except Exception:
+                    return False
+
+            if _is_login_wall():
+                print("[DK-Auto] Login/location verification required — please complete it in the opened browser window...")
+                import time as _time
+                start = _time.time()
+                while _time.time() - start < wait_login_s:
+                    _time.sleep(3)
+                    if not _is_login_wall():
+                        print("[DK-Auto] Login appears complete. Continuing...")
+                        break
+
+                if _is_login_wall():
+                    if keep_open_on_auth:
+                        _skip_close = True
+                        raise NeedsHumanAuth(
+                            f"DraftKings auth/location wall detected (url={driver.current_url!r}). "
+                            "Browser left open because DK_KEEP_OPEN_ON_AUTH=1. "
+                            "Please log in/verify location in that window, then rerun the worker."
+                        )
+                    raise NeedsHumanAuth(
+                        f"DraftKings auth/location wall detected (url={driver.current_url!r}). "
+                        "Please open Chrome with DK_PROFILE_PATH and log in/verify location, then retry."
+                    )
+
+            # 3. Click 'Settled' tab with resilient selectors
+            settled_selectors = [
+                (By.XPATH, "//button[normalize-space()='Settled']"),
+                (By.XPATH, "//a[normalize-space()='Settled']"),
+                (By.XPATH, "//*[@data-testid='settled-tab']"),
+                (By.XPATH, "//*[contains(@class,'settled') and (self::button or self::a)]"),
+                (By.XPATH, "//div[normalize-space()='Settled']"),
+                (By.XPATH, "//span[normalize-space()='Settled']"),
+            ]
+            settled_clicked = False
+            for by, sel in settled_selectors:
+                try:
+                    elements = driver.find_elements(by, sel)
+                    for el in elements:
+                        if el.is_displayed():
+                            el.click()
+                            settled_clicked = True
+                            print(f"[DK-Auto] Clicked 'Settled' via {sel}")
+                            break
+                    if settled_clicked:
+                        break
+                except Exception:
+                    pass
+
+            if not settled_clicked:
+                print("[DK-Auto] Settled tab not clicked; proceeding with current view.")
+
+            time.sleep(4)
+
+            # 4. Scroll to load more bets
+            last_h = driver.execute_script("return document.body.scrollHeight")
+            for i in range(scroll_pages):
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(2)
+                new_h = driver.execute_script("return document.body.scrollHeight")
+                if new_h == last_h:
+                    print(f"[DK-Auto] Scroll stopped at page {i+1} (no new content).")
+                    break
+                last_h = new_h
+
+            # 5. Extract bet card text
+            # Prefer scoping to the main content area so we don't accidentally scrape
+            # sidebar marketing/empty-state text.
+            root = None
+            try:
+                root = driver.find_element(By.TAG_NAME, "main")
+            except Exception:
+                root = driver
+
+            bet_texts = []
+            card_selectors = [
+                "[data-testid*='bet']",
+                "[data-test-id*='bet']",
+                "[class*='bet-card']",
+                "[class*='BetCard']",
+                "[class*='mybets']",
+                "[class*='my-bets']",
+            ]
+
+            for sel in card_selectors:
+                try:
+                    elements = root.find_elements(By.CSS_SELECTOR, sel) if hasattr(root, 'find_elements') else driver.find_elements(By.CSS_SELECTOR, sel)
+                    for el in elements:
+                        try:
+                            t = (el.text or "").strip()
+                            if not t or len(t) <= 60:
+                                continue
+
+                            tl = t.lower()
+                            # Heuristic: real settled bet cards almost always contain an outcome word
+                            # and a currency amount. This avoids grabbing nav/marketing blocks.
+                            outcome = any(x in tl for x in ("won", "lost", "void", "push", "cashed"))
+                            money = ("$" in t) or ("usd" in tl)
+                            if outcome and money:
+                                bet_texts.append(t)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            if bet_texts:
+                body = "\n\n".join(bet_texts)
+                print(f"[DK-Auto] Extracted {len(bet_texts)} bet-card candidates ({len(body)} chars).")
+                return body
+
+            # Fallback: raw body text
+            body = driver.find_element(By.TAG_NAME, "body").text
+            # If we still look like we're gated, treat as auth required.
+            b_low = (body or '').lower()
+            if any(x in b_low for x in ("you're not logged in", "you must be logged in", "trouble verifying your location")):
+                if keep_open_on_auth:
+                    _skip_close = True
+                raise NeedsHumanAuth(
+                    f"DraftKings gated view detected (url={driver.current_url!r}). "
+                    "Please log in/verify location and retry."
+                )
+            print(f"[DK-Auto] Fallback body text ({len(body)} chars). url={driver.current_url!r}")
+            return body
+
+        finally:
+            if _skip_close:
+                print("[DK-Auto] Leaving browser open for manual login (DK_KEEP_OPEN_ON_AUTH=1).")
+            else:
+                helper.close()
 

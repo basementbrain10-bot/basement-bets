@@ -12,6 +12,9 @@ class ResearchAgent(BaseAgent):
     injuries, or lineup changes, then extracts concrete structured facts
     with source URLs for use by the Agent Council.
     """
+    def __init__(self):
+        super().__init__()
+
     def execute(self, context: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
         events: List[EventContext] = context.get("events", [])
         if not events:
@@ -68,6 +71,7 @@ class ResearchAgent(BaseAgent):
                     "citations": [],
                     "facts": []
                 }
+
 
         # 2. LLM EXTRACTION — extract structured facts from snippets in a single batched call.
         # Each fact must have: team, type (injury|lineup|travel|pace|other), detail, source_url.

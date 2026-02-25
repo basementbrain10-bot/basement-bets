@@ -123,15 +123,19 @@ class TeamIdentityService:
             """, {"l": league, "n": name}).fetchone()
             if row:
                 return row[0]
+
+            # 3. Fuzzy Matching Fallback
+            from difflib import get_close_matches
+            # Fetch all teams for this league for fuzzy comparison
+            all_teams = _exec(conn, "SELECT id, name FROM teams WHERE league = :l", {"l": league}).fetchall()
+            names_to_ids = {t['name']: t['id'] for t in all_teams}
+            
+            matches = get_close_matches(name, names_to_ids.keys(), n=1, cutoff=0.85)
+            if matches:
+                matched_name = matches[0]
+                matched_id = names_to_ids[matched_name]
+                # print(f"[Identity] Fuzzy matched '{name}' to '{matched_name}' ({matched_id})")
+                return matched_id
                 
         return None
 
-if __name__ == "__main__":
-    # Smoke Test
-    svc = TeamIdentityService()
-    tid = svc.get_or_create_team("NFL", "TEST_PROVIDER", "101", "Test Team Falcons", "TTF")
-    print(f"Team ID: {tid}")
-    tid2 = svc.get_or_create_team("NFL", "TEST_PROVIDER", "101", "Test Team Falcons", "TTF")
-    print(f"Team ID (2nd call): {tid2}")
-    assert tid == tid2
-    print("Smoke Test Passed.")
