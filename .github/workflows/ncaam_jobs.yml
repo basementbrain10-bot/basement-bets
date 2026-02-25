@@ -99,9 +99,18 @@ jobs:
           BASEMENT_CRON_SECRET: ${{ secrets.BASEMENT_CRON_SECRET }}
         run: |
           set -euo pipefail
+
+          diag_url="${BASEMENT_BETS_URL%/}/api/jobs/diag_auth"
           url="${BASEMENT_BETS_URL%/}/api/jobs/run_council_today"
+
+          echo "Auth diagnostic: ${diag_url}"
+          curl -sS -X GET \
+            -H "Authorization: Bearer ${BASEMENT_CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            --fail-with-body "${diag_url}" || true
+
           echo "Triggering Agent Council: ${url}"
           curl -sS -X POST \
             -H "Authorization: Bearer ${BASEMENT_CRON_SECRET}" \
             -H "Content-Type: application/json" \
-            --fail "${url}"
+            --fail-with-body "${url}"
