@@ -66,7 +66,13 @@ async def check_access_key(request: Request, call_next):
          return await call_next(request)
          
     if request.url.path.startswith("/api"):
-        # Allow Vercel Cron invocations for job endpoints (cron requests don't carry X-BASEMENT-KEY).
+        # 1. Skip password enforcement for /api/jobs/. 
+        # These paths use individual path-level dependencies (Depends(verify_cron_secret))
+        # to handle Bearer, Vercel, and Password auth interchangeably.
+        if request.url.path.startswith("/api/jobs/"):
+            return await call_next(request)
+
+        # Allow Vercel Cron invocations for other job endpoints (if any existed outside /api/jobs/).
         try:
             if str(request.headers.get('x-vercel-cron') or '').strip() == '1' and request.url.path.startswith('/api/jobs/'):
                 return await call_next(request)
@@ -1920,38 +1926,41 @@ async def get_model_health(date: Optional[str] = None, league: Optional[str] = N
 # --- Cron Security & Jobs ---
 
 async def verify_cron_secret(request: Request):
-    """Verifies Authorization header matches CRON_SECRET.
+    """Verifies access for automated jobs or manual triggers.
 
-    Vercel Cron behavior:
-    - Vercel sends an `x-vercel-cron: 1` header on cron invocations.
-    - We allow those calls (server-side scheduled jobs) even if CRON_SECRET isn't set,
-      because they won't have the Basement password header.
-
-    If CRON_SECRET *is* set, we still require it for non-Vercel-cron callers.
+    Allows if ANY of these are valid:
+    1. Vercel Cron header (x-vercel-cron: 1)
+    2. Authorization: Bearer <CRON_SECRET>
+    3. X-BASEMENT-KEY: <BASEMENT_PASSWORD>
     """
     from src.config import settings
 
-    # Allow Vercel cron invocations without additional auth.
+    # 1. Vercel native crons
     try:
         if str(request.headers.get('x-vercel-cron') or '').strip() == '1':
             return True
     except Exception:
         pass
 
-    expected = settings.CRON_SECRET
-    if not expected:
-        # No cron secret configured; allow (Basement-key middleware may still gate).
+    # 2. Bearer Token (External jobs like GitHub Actions)
+    expected_cron = settings.CRON_SECRET
+    auth_header = request.headers.get("Authorization")
+    if expected_cron and auth_header:
+        parts = auth_header.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1] == expected_cron:
+            return True
+
+    # 3. Basement Password (UI or manual curl)
+    expected_pwd = settings.BASEMENT_PASSWORD
+    client_key = request.headers.get("X-BASEMENT-KEY")
+    if expected_pwd and client_key and client_key.strip() == expected_pwd:
         return True
 
-    auth = request.headers.get("Authorization")
-    if not auth:
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-
-    parts = auth.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer" or parts[1] != expected:
-        raise HTTPException(status_code=401, detail="Invalid Cron Secret")
-
-    return True
+    # If none matched, deny
+    raise HTTPException(
+        status_code=403, 
+        detail="Forbidden: Invalid Cron Secret or Basement Password"
+    )
 
 @app.api_route("/api/jobs/policy_refresh", methods=["GET", "POST"])
 async def trigger_policy_refresh(request: Request, authorized: bool = Depends(verify_cron_secret)):
@@ -3445,7 +3454,7 @@ async def get_ncaam_model_performance_series(days: int = 30, min_ev_per_unit: fl
 
 
 @app.api_route("/api/jobs/ingest_events/{league}", methods=["GET", "POST"])
-async def trigger_event_ingestion(league: str, date: Optional[str] = None):
+async def trigger_event_ingestion(league: str, date: Optional[str] = None, authorized: bool = Depends(verify_cron_secret)):
     """
     Cron Job / Manual Trigger: Ingests scheduled events from ESPN.
     """
@@ -3498,7 +3507,7 @@ async def trigger_result_ingestion(league: str, date: Optional[str] = None, auth
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/jobs/ingest_enrichment")
-async def trigger_enrichment_ingestion(league: str, date: Optional[str] = None):
+async def trigger_enrichment_ingestion(league: str, date: Optional[str] = None, authorized: bool = Depends(verify_cron_secret)):
     """
     Ingests Action Network enrichment (Splits, Enrichment JSON).
     """
@@ -4301,7 +4310,7 @@ def _dk_queue_auth(request: Request) -> bool:
 
 
 @app.api_route("/api/jobs/queue_sync/draftkings", methods=["GET", "POST"])
-async def queue_dk_sync_job(request: Request):
+async def queue_dk_sync_job(request: Request, authorized: bool = Depends(verify_cron_secret)):
     """
     Enqueue a DraftKings DK_INGEST job into sync_jobs.
 
