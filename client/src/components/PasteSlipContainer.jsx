@@ -329,7 +329,7 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                     </div>
                 )}
 
-                {entryType === 'BET' && isSyncing && (
+                {entryType === 'BET' && isSyncing && sportsbook === 'FD' && (
                     <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
                         <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-lg text-blue-200 text-sm">
                             <p className="font-bold mb-1">FanDuel API Sync</p>
@@ -364,12 +364,15 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                     </div>
                 )}
 
-                {entryType === 'BET' && isSyncing && !showCurlInput && (
-                    <div className="bg-blue-900/20 border border-blue-500/30 p-4 rounded-lg text-blue-200 text-sm flex items-center gap-3">
+                {entryType === 'BET' && isSyncing && !showCurlInput && sportsbook === 'DK' && (
+                    <div className="bg-emerald-900/20 border border-emerald-500/30 p-4 rounded-lg text-emerald-100 text-sm flex items-center gap-3">
                         <Loader2 className="w-5 h-5 animate-spin shrink-0" />
                         <div>
-                            <p className="font-bold">Browser Opened!</p>
-                            <p>Please log in to the betting site in the new window. We'll scrape the history automatically once you're in.</p>
+                            <p className="font-bold">DraftKings sync queued</p>
+                            <p>
+                                A DraftKings window will open on the Mac worker if login/location verification is needed.
+                                Please log in there (Primary or Secondary), and we'll ingest your settled bets automatically.
+                            </p>
                         </div>
                     </div>
                 )}
