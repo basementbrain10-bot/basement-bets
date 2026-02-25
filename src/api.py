@@ -4423,3 +4423,17 @@ def dk_ingest_status():
         result["error"] = str(e)
 
     return result
+
+@app.get("/api/v1/diagnostics/env")
+async def diagnostics_env(authorized: bool = Depends(verify_cron_secret)):
+    """Safe diagnostic endpoint to see which environment variables are visible."""
+    return {
+        "APP_ENV": os.environ.get("APP_ENV"),
+        "visible_keys": sorted(list(os.environ.keys())),
+        "crucial_checks": {
+            "HAS_GEMINI_KEY": "GEMINI_API_KEY" in os.environ,
+            "HAS_POSTGRES_URL": "POSTGRES_URL" in os.environ,
+            "HAS_SUPABASE_KEY": "SUPABASE_SERVICE_ROLE_KEY" in os.environ,
+            "HAS_DATABASE_URL": "DATABASE_URL" in os.environ,
+        }
+    }
