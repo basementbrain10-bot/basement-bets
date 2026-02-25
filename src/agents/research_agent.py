@@ -9,7 +9,8 @@ from src.utils.gemini_rest import generate_content
 class ResearchAgent(BaseAgent):
     """
     Performs real-time web research for an event to find breaking news,
-    injuries, or lineup changes.
+    injuries, or lineup changes, then extracts concrete structured facts
+    with source URLs for use by the Agent Council.
     """
     def execute(self, context: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
         events: List[EventContext] = context.get("events", [])
@@ -54,7 +55,7 @@ class ResearchAgent(BaseAgent):
                 research_results[ev.event_id] = {
                     "query": query,
                     "articles_found": len(citations),
-                    "summary": "No notable breaking news found.",
+                    "summary": f"Found {len(citations)} raw search results for analysis.",
                     "citations": citations,
                     "facts": []
                 }
@@ -63,13 +64,83 @@ class ResearchAgent(BaseAgent):
                 research_results[ev.event_id] = {
                     "query": query,
                     "articles_found": 0,
-                    "summary": f"Search failed: {str(e)}"
+                    "summary": f"Search failed: {str(e)}",
+                    "citations": [],
+                    "facts": []
                 }
 
-        # 2. RAW RETURN: Skip LLM extraction to save on Rate Limits. 
-        # The OracleAgent will handle the raw snippets in its consolidated prompt.
-        for eid in events_ids := [ev.event_id for ev in events]:
-            if eid in research_results:
-                research_results[eid]["summary"] = f"Found {research_results[eid]['articles_found']} raw search results for analysis."
-        
+        # 2. LLM EXTRACTION — extract structured facts from snippets in a single batched call.
+        # Each fact must have: team, type (injury|lineup|travel|pace|other), detail, source_url.
+        # Falls back gracefully if the call fails to avoid blocking the Oracle.
+        events_with_citations = [ev for ev in events if batch_citations.get(ev.event_id)]
+        if events_with_citations:
+            try:
+                extraction_input = []
+                for ev in events_with_citations:
+                    cites = batch_citations.get(ev.event_id, [])
+                    extraction_input.append({
+                        "event_id": ev.event_id,
+                        "matchup": f"{ev.away_team} at {ev.home_team}",
+                        "snippets": cites
+                    })
+
+                extract_prompt = f"""
+You are a sports reporter extracting ONLY verifiable facts from search result snippets.
+
+Here are raw search snippets for multiple college basketball matchups:
+{json.dumps(extraction_input, indent=2)}
+
+For EACH matchup, extract concrete facts. Return ONLY a JSON dict keyed by event_id.
+Each value is a list of facts with this exact schema:
+{{
+    "event_id_1": [
+      {{"team": "<team name>", "type": "<injury|lineup|travel|fatigue|pace|matchup|other>",
+        "detail": "<one sentence, specific and factual>", "source_url": "<URL from snippet or ''>"}}
+    ],
+    "event_id_2": []
+}}
+
+RULES:
+- Only include claims directly stated in the snippets. NO INFERENCE.
+- If no concrete facts exist for a matchup, return an empty list for that event_id.
+- Do NOT invent injuries or roster changes.
+- Keep detail to one sentence.
+"""
+                raw = generate_content(
+                    model="gemini-2.0-flash",
+                    system_prompt=extract_prompt,
+                    json_mode=True,
+                    max_tokens=2048
+                )
+                clean = raw.strip()
+                if clean.startswith("```json"):
+                    clean = clean[7:]
+                if clean.endswith("```"):
+                    clean = clean[:-3]
+                extracted = json.loads(clean.strip())
+
+                for ev in events_with_citations:
+                    eid = ev.event_id
+                    facts = extracted.get(eid, [])
+                    if isinstance(facts, list):
+                        research_results[eid]["facts"] = facts
+                        count = len(facts)
+                        research_results[eid]["summary"] = (
+                            f"Found {research_results[eid]['articles_found']} snippets; "
+                            f"extracted {count} concrete fact{'s' if count != 1 else ''}."
+                        )
+                        for f in facts:
+                            self.log_trace(
+                                f"Extracted fact for {ev.away_team} @ {ev.home_team}: {f.get('detail', '')[:80]}",
+                                {"team": f.get("team"), "type": f.get("type"), "url": f.get("source_url")}
+                            )
+
+            except Exception as e:
+                print(f"[ResearchAgent] LLM fact extraction failed (non-fatal): {e}")
+                for ev in events_with_citations:
+                    research_results[ev.event_id]["summary"] = (
+                        f"Found {research_results[ev.event_id]['articles_found']} raw results; "
+                        f"fact extraction unavailable ({type(e).__name__})."
+                    )
+
         return research_results

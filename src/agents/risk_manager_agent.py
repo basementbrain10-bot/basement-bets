@@ -1,7 +1,7 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 import uuid
 from src.agents.base import BaseAgent
-from src.agents.contracts import BetRecommendation, EdgeResult
+from src.agents.contracts import BetRecommendation, EdgeResult, RejectedOffer
 from src.agents.settings import (
     AGENTS_MIN_EDGE, AGENTS_MIN_EV_PER_UNIT, AGENTS_SIZING_MODE,
     AGENTS_KELLY_FRACTION, AGENTS_MAX_KELLY_PCT, AGENTS_MAX_EVENT_EXPOSURE_PCT,
@@ -12,25 +12,51 @@ class RiskManagerAgent(BaseAgent):
     """
     Applies bankroll sizing rules, min-EV gates, and rudimentary
     correlation haircuts to guard over-exposure on specific events.
+
+    Returns a tuple of (recommendations, rejections) so every filtered
+    edge carries a traceable gate reason.
     """
-    def execute(self, context: Dict[str, Any], *args, **kwargs) -> List[BetRecommendation]:
+    def execute(self, context: Dict[str, Any], *args, **kwargs) -> Tuple[List[BetRecommendation], List[RejectedOffer]]:
         edges: List[EdgeResult] = context.get("edges", [])
         if not edges:
-            return []
+            return [], []
             
         recs: List[BetRecommendation] = []
+        rejections: List[RejectedOffer] = []
         
-        # Sieve 1: Hard thresholds
+        # Sieve 1: Hard thresholds — track why each edge is dropped
         filtered_edges = []
         for e in edges:
             if "NEGATIVE_EV" in e.flags:
+                rejections.append(RejectedOffer(
+                    event_id=e.offer.event_id,
+                    market_type=e.offer.market_type,
+                    side=e.offer.side,
+                    line=e.offer.line,
+                    ev_per_unit=float(e.ev_per_unit),
+                    reason="negative_ev"
+                ))
                 continue
             if e.ev_per_unit < AGENTS_MIN_EV_PER_UNIT:
+                rejections.append(RejectedOffer(
+                    event_id=e.offer.event_id,
+                    market_type=e.offer.market_type,
+                    side=e.offer.side,
+                    line=e.offer.line,
+                    ev_per_unit=float(e.ev_per_unit),
+                    reason=f"ev_threshold(min={AGENTS_MIN_EV_PER_UNIT})"
+                ))
                 continue
-            if e.edge_points < AGENTS_MIN_EDGE and e.edge_points > (-AGENTS_MIN_EDGE):
-                # Edge points are absolute absolute deviations if handled correctly
-                if abs(e.edge_points) < AGENTS_MIN_EDGE:
-                    continue
+            if abs(e.edge_points) < AGENTS_MIN_EDGE:
+                rejections.append(RejectedOffer(
+                    event_id=e.offer.event_id,
+                    market_type=e.offer.market_type,
+                    side=e.offer.side,
+                    line=e.offer.line,
+                    ev_per_unit=float(e.ev_per_unit),
+                    reason=f"edge_threshold(min={AGENTS_MIN_EDGE},actual={e.edge_points:.2f})"
+                ))
+                continue
             filtered_edges.append(e)
 
         # Sieve 2: Base Sizing
@@ -78,10 +104,10 @@ class RiskManagerAgent(BaseAgent):
             for grp, grp_recs in c_groups.items():
                 total_grp_stake = sum(r.stake for r in grp_recs)
                 if total_grp_stake > AGENTS_MAX_EVENT_EXPOSURE_PCT:
-                    # Prorate
+                    # Prorate and tag haircut reason
                     ratio = AGENTS_MAX_EVENT_EXPOSURE_PCT / total_grp_stake
                     for r in grp_recs:
                         r.stake = round(r.stake * ratio, 4)
                         r.risk_flags.append(f"HAIRCUT_CORRELATION:{grp}")
 
-        return recs
+        return recs, rejections

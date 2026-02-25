@@ -206,7 +206,8 @@ def main():
                 "events": batch_events,
                 "edges": batch_edges,
                 "research": research_out,
-                "memories": memory_out
+                "memories": memory_out,
+                "run_id": "DR-COUNCIL-" + dt.now(timezone.utc).strftime('%Y%m%d%H%M%S') + f"-B{i}"
             })
             
             if not oracle_out:
