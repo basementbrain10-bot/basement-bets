@@ -64,22 +64,29 @@ class OracleAgent(BaseAgent):
         TASK:
         1. For EACH matchup, analyze the `evidence` section. Use `extracted_facts` for verifiable roster/injury claims; use `raw_snippets` for broader context only.
         2. Combine these facts with the `quantitative_data` and `historical_lessons`.
-        3. Provide strictly data-backed executive summaries and final verdicts.
-        4. Emit `signals.red_flags` for any major risks or contradictions that require human review.
+        3. CRITICAL: Pay special attention to `historical_lessons`. If the system has repeatedly missed on a specific team or matchup archetype, apply a qualitative correction and flag it in red_flags.
+        4. Provide strictly data-backed executive summaries and final verdicts.
+        5. Emit `signals.red_flags` for any major risks, contradictions, or recurring lesson patterns that require human review.
         
         ANTI-HALLUCINATION INSTRUCTIONS:
         - Do NOT invent storylines or unverified dynamics.
-        - If no actionable news, state "No actionable news found" and rely on quantitative data.
+        - If no actionable news, state "No actionable news found" and rely on quantitative data + historical lessons.
         - You MUST explicitly evaluate Spread, Moneyline, and Game Totals.
         
         OUTPUT FORMAT MUST BE VALID JSON:
         Return a single dictionary where keys are the exact `event_id` strings.
+        Each entry must include a "debate" with these four specific agent roles:
+        - "Executive Summary": High-level view combining quant edge + news context.
+        - "Research & Roster": Factual news and injury analysis from extracted_facts only.
+        - "Historical Context": Deep dive into historical_lessons and how they apply here.
+        - "Verdict": Final synthesizing decision across Spread, Moneyline, and Totals.
         {{
             "event_id_1": {{
                 "debate": [
                     {{"agent": "Executive Summary", "message": "..."}},
                     {{"agent": "Research & Roster", "message": "..."}},
-                    {{"agent": "Historical Context", "message": "..."}}
+                    {{"agent": "Historical Context", "message": "..."}},
+                    {{"agent": "Verdict", "message": "..."}}
                 ],
                 "oracle_verdict": "...",
                 "signals": {{
