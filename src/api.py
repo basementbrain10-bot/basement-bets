@@ -937,6 +937,8 @@ async def save_manual_bet(request: Request, user: dict = Depends(get_current_use
         user_id = user.get("sub")
         bet_data['user_id'] = user_id
         
+        from src.utils.sport_normalization import normalize_sport
+
         # Basic mapping to DB schema
         status = bet_data.get("status", "PENDING").upper()
         stake = float(bet_data.get("stake", 0))
@@ -1015,7 +1017,8 @@ async def save_manual_bet(request: Request, user: dict = Depends(get_current_use
             "account_id": account_id,
             "provider": provider,
             "date": date_part,
-            "sport": bet_data.get("sport") or "Unknown",
+            # Normalize sport to canonical codes (prevents duplicates by casing/alias).
+            "sport": normalize_sport(bet_data.get("sport") or "Unknown"),
             "bet_type": bet_data.get("market_type"),
             "wager": stake,
             "profit": round(profit, 2) if profit is not None else 0.0,
@@ -1194,6 +1197,12 @@ async def update_bet(bet_id: int, request: Request, user: dict = Depends(get_cur
             'description', 'selection', 'event_text'
         }
         fields = {k: payload.get(k) for k in allowed if k in payload}
+
+        # Normalize sport to avoid duplicates like "World Cup" vs "WORLD CUP".
+        if 'sport' in fields:
+            from src.utils.sport_normalization import normalize_sport
+            fields['sport'] = normalize_sport(fields.get('sport'))
+
         update_note = payload.get('update_note') or payload.get('audit_note')
 
         from src.database import update_bet_fields
@@ -1303,7 +1312,8 @@ async def apply_bet_sport_fix(bet_id: int, request: Request, user: dict = Depend
     try:
         uid = user.get("sub")
         payload = await request.json()
-        sport = str(payload.get('sport') or '').upper().strip()
+        from src.utils.sport_normalization import normalize_sport
+        sport = normalize_sport(payload.get('sport') or '')
         if not sport:
             raise HTTPException(status_code=400, detail="Missing sport")
 
@@ -1320,6 +1330,26 @@ async def apply_bet_sport_fix(bet_id: int, request: Request, user: dict = Depend
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/api/audit/bets/normalize-sport")
+async def normalize_bet_sport(limit: int = 50000, user: dict = Depends(get_current_user)):
+    """Normalize bet.sport values in DB to prevent duplicates (case/alias).
+
+    Example fixes:
+    - World Cup -> EPL (soccer bucket)
+    - ncaab -> NCAAM
+    - unknown/blank -> UNKNOWN
+    """
+    try:
+        uid = user.get("sub")
+        from src.services.sport_cleanup_service import SportCleanupService
+        svc = SportCleanupService()
+        res = svc.normalize_user_bets_sport(user_id=str(uid), limit=int(limit))
+        invalidate_analytics_cache(uid)
+        return {"status": "success", **res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/api/audit/bets/backfill-sport")
 async def backfill_bet_sport(days: int = 365, limit: int = 5000, user: dict = Depends(get_current_user)):
     """Backfill/repair bet.sport by re-detecting from raw_text/selection/description."""
@@ -1328,6 +1358,7 @@ async def backfill_bet_sport(days: int = 365, limit: int = 5000, user: dict = De
         from datetime import datetime, timedelta
         from src.parsers.sport_detection import detect_sport
         from src.database import get_db_connection, _exec, update_bet_fields
+        from src.utils.sport_normalization import normalize_sport
 
         now = datetime.now()
         cutoff = (now - timedelta(days=int(days))).date().isoformat()
@@ -1354,10 +1385,12 @@ async def backfill_bet_sport(days: int = 365, limit: int = 5000, user: dict = De
                 str(b.get('description') or ''),
                 str(b.get('provider') or ''),
             ])
-            suggested = detect_sport(text)
-            current = str(b.get('sport') or '').upper().strip()
+            from src.utils.sport_normalization import normalize_sport
 
-            if suggested and suggested != 'Unknown' and suggested != current:
+            suggested = normalize_sport(detect_sport(text))
+            current = normalize_sport(b.get('sport') or '')
+
+            if suggested and suggested != 'UNKNOWN' and suggested != current:
                 ok = update_bet_fields(int(b['id']), {"sport": suggested}, user_id=uid, update_note="audit: backfill sport")
                 if ok:
                     updated += 1
