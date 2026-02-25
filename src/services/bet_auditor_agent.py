@@ -118,7 +118,13 @@ class BetAuditorAgent:
             }
 
     def audit_sport_mismatches(self, user_id: str, days_back: int = 60, limit: int = 800) -> List[Dict]:
-        """Return a list of bets whose sport disagrees with matched event league."""
+        """Return a list of bets whose sport appears wrong.
+
+        Includes:
+        - Case/whitespace duplicates (e.g. 'World Cup' vs 'WORLD CUP')
+        - UNKNOWN/blank sports with detect_sport suggestions
+        - Team+date mismatches against canonical events table (when matchup is extractable)
+        """
         if not user_id:
             return []
 
@@ -148,7 +154,12 @@ class BetAuditorAgent:
             if not text:
                 text = (b.get('description') or '')
 
-            current = str(b.get('sport') or '').upper().strip()
+            try:
+                from src.utils.sport_normalization import normalize_sport
+            except Exception:
+                from utils.sport_normalization import normalize_sport
+
+            current = normalize_sport(b.get('sport') or '')
 
             # Primary path: matchup -> events table -> league
             matchup = self._extract_matchup(text)
@@ -156,7 +167,7 @@ class BetAuditorAgent:
                 team_a, team_b = matchup
                 ev = self._find_event_league(team_a, team_b, bet_dt)
                 if ev and ev.get('league'):
-                    suggested = str(ev.get('league') or '').upper().strip()
+                    suggested = normalize_sport(ev.get('league') or '')
                     if current and suggested and current != suggested:
                         out.append({
                             "bet_id": b.get('id'),
@@ -185,7 +196,7 @@ class BetAuditorAgent:
                     str(b.get('description') or ''),
                     str(b.get('provider') or ''),
                 ])
-                suggested = str(detect_sport(blob) or '').upper().strip()
+                suggested = normalize_sport(detect_sport(blob) or '')
                 if suggested and suggested not in ("UNKNOWN", "UNK"):
                     out.append({
                         "bet_id": b.get('id'),
