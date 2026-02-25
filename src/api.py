@@ -3650,6 +3650,18 @@ async def trigger_settlement_reconcile(request: Request, league: Optional[str] =
         print(f"[JOB ERROR] Settlement reconciliation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/jobs/dedupe_model_predictions")
+async def trigger_dedupe_model_predictions(request: Request, authorized: bool = Depends(verify_cron_secret)):
+    """One-time maintenance: delete duplicate model_predictions and backfill prediction_key."""
+    try:
+        from src.scripts.dedupe_model_predictions import main as dedupe
+        res = dedupe()
+        return {"status": "success", **(res or {})}
+    except Exception as e:
+        print(f"[JOB ERROR] dedupe_model_predictions failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.api_route("/api/jobs/grade_predictions", methods=["GET", "POST"])
 async def trigger_prediction_grading(request: Request, fast: bool = True, backfill_days: int = 3, max_clv_rows: int = 250, max_grade_rows: int = 500, skip_clv: bool = False, authorized: bool = Depends(verify_cron_secret)):
     """Cron/manual: grade model_predictions using local game_results.

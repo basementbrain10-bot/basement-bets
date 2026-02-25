@@ -547,6 +547,8 @@ def init_model_history_db():
         "ALTER TABLE model_predictions ADD COLUMN IF NOT EXISTS user_id TEXT;",
         "ALTER TABLE model_predictions ADD COLUMN IF NOT EXISTS context_json JSONB;",
         "CREATE UNIQUE INDEX IF NOT EXISTS ux_model_predictions_prediction_key ON model_predictions(prediction_key);",
+        # If older data had NULL keys, cleanup job should backfill first; this is best-effort.
+        "ALTER TABLE model_predictions ALTER COLUMN prediction_key SET NOT NULL;",
         "CREATE INDEX IF NOT EXISTS idx_model_user_time ON model_predictions(user_id, analyzed_at DESC);"
     ]
 
@@ -999,24 +1001,14 @@ def insert_model_prediction(doc: dict) -> bool:
     else:
         analyzed_at_dt = analyzed_at
 
-    # Use ET *day* bucket for dedupe so we don't store the same recommendation
-    # repeatedly across reruns in the same day.
-    # (We still allow multiple bets per event/day if they differ by side/line/price.)
-    try:
-        import pytz
-        et = pytz.timezone('America/New_York')
-        if analyzed_at_dt.tzinfo is None:
-            analyzed_at_dt = analyzed_at_dt.replace(tzinfo=timezone.utc)
-        analyzed_bucket = analyzed_at_dt.astimezone(et).strftime('%Y-%m-%d')
-    except Exception:
-        analyzed_bucket = analyzed_at_dt.date().isoformat()
-
     # Get user_id (important for multi-user isolation)
     user_id = doc.get('user_id') or ''
     doc['user_id'] = user_id if user_id else None
 
-    # Compute prediction_key including line/price to avoid duplicate spam while
-    # still distinguishing materially different bets.
+    # Compute prediction_key deterministically so reruns do not create duplicates.
+    # Keyed by the *bet identity* (event/model/market/side/line/price/book/user).
+    # IMPORTANT: do NOT include a day/time bucket; events are unique, and including
+    # a bucket can create duplicates across reruns/timezones.
     parts = [
         str(user_id),
         str(event_id),
@@ -1026,7 +1018,6 @@ def insert_model_prediction(doc: dict) -> bool:
         str(doc.get('bet_line') if doc.get('bet_line') is not None else ''),
         str(doc.get('bet_price') if doc.get('bet_price') is not None else ''),
         str(doc.get('book') or ''),
-        analyzed_bucket
     ]
     raw = "|".join(parts)
     doc['prediction_key'] = hashlib.sha256(raw.encode()).hexdigest()
