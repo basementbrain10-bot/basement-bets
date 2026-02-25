@@ -25,6 +25,11 @@ def _safe_float(x):
 from src.models.base_model import BaseModel
 from src.utils.naming import standardize_team_name
 
+# Phase gate: council qualitative adjustments are only applied to model outputs
+# once Phase 2 offline evaluation confirms positive CLV/ROI contribution.
+# Set to True only after running performance_auditor_agent.py and confirming signal quality.
+COUNCIL_ADJUSTMENTS_ENABLED: bool = os.environ.get("COUNCIL_ADJUSTMENTS_ENABLED", "false").lower() == "true"
+
 class NCAAMMarketFirstModelV2(BaseModel):
     """
     NCAAM Market-First Model v2.
@@ -612,8 +617,13 @@ class NCAAMMarketFirstModelV2(BaseModel):
             elif total_lean.get('side') == 'UNDER':
                 council_adjustment_total = -abs(float(total_lean.get('points', 1.5)))
 
-        # Apply council_adjustment_spread
-        mu_spread_final += council_adjustment_spread
+        # Apply council_adjustment_spread (gated by COUNCIL_ADJUSTMENTS_ENABLED)
+        council_adj_gated = not COUNCIL_ADJUSTMENTS_ENABLED
+        if COUNCIL_ADJUSTMENTS_ENABLED:
+            mu_spread_final += council_adjustment_spread
+        else:
+            if council_adjustment_spread != 0.0:
+                print(f"[MODEL] Council spread adj {council_adjustment_spread:+.2f} computed but GATED (Phase 1 mode).")
         
         # Apply Caps
         if abs(mu_spread_final - mu_market_spread) > self.CAP_SPREAD:
@@ -651,7 +661,11 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         mu_total_final = mu_market_total + (w_base * (mu_torvik_total - mu_market_total)) + (self.W_KENPOM * (mu_kenpom_total - mu_market_total))
         mu_total_final += kp_player_total_adj
-        mu_total_final += council_adjustment_total
+        if COUNCIL_ADJUSTMENTS_ENABLED:
+            mu_total_final += council_adjustment_total
+        else:
+            if council_adjustment_total != 0.0:
+                print(f"[MODEL] Council total adj {council_adjustment_total:+.2f} computed but GATED (Phase 1 mode).")
         
         if abs(mu_total_final - mu_market_total) > self.CAP_TOTAL:
              mu_total_final = mu_market_total + (self.CAP_TOTAL * math.copysign(1, mu_total_final - mu_market_total))

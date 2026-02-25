@@ -89,6 +89,16 @@ class AgentTrace(BaseModel):
     details: Optional[Dict[str, Any]] = None
     timestamp: Optional[str] = None
 
+class RejectedOffer(BaseModel):
+    """Structured record of a candidate edge that was filtered by the RiskManagerAgent."""
+    model_config = ConfigDict(strict=True)
+    event_id: str
+    market_type: str
+    side: str
+    line: Optional[float] = None
+    ev_per_unit: float
+    reason: str  # e.g. "ev_threshold|negative_ev|edge_threshold|correlation"
+
 class DecisionRun(BaseModel):
     model_config = ConfigDict(strict=True)
     run_id: str
@@ -98,7 +108,7 @@ class DecisionRun(BaseModel):
     inputs_hash: str
     offers_count: int
     recommendations: List[BetRecommendation]
-    rejected_offers: List[Dict[str, Any]]
+    rejected_offers: List[RejectedOffer]
     notes: List[str]
     errors: List[AgentError]
     model_version: str

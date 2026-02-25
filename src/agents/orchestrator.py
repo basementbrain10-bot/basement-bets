@@ -10,7 +10,7 @@ from src.agents.settings import (
 )
 from src.agents.contracts import (
     AgentError, BetRecommendation, DecisionRun, EdgeResult, EventContext,
-    FairPrice, MarketOffer
+    FairPrice, MarketOffer, RejectedOffer
 )
 
 class DecisionOrchestrator:
@@ -100,10 +100,15 @@ class DecisionOrchestrator:
             return self._fail_fast(run_id, inputs_hash, errors + [err], traces)
             
         # E. Risk Sizing & Constraints
-        recommendations, err = _exec_agent(risk_manager_agent, {"edges": edges})
+        risk_out, err = _exec_agent(risk_manager_agent, {"edges": edges})
         if err:
             return self._fail_fast(run_id, inputs_hash, errors + [err], traces)
-            
+        # RiskManagerAgent now returns (recommendations, rejections)
+        if isinstance(risk_out, tuple):
+            recommendations, risk_rejections = risk_out
+        else:
+            recommendations, risk_rejections = risk_out, []
+
         # F. Bet Builder Formatting
         final_picks, err = _exec_agent(bet_builder_agent, {"recommendations": recommendations})
         if err:
@@ -164,8 +169,10 @@ class DecisionOrchestrator:
             inputs_hash=inputs_hash,
             offers_count=len(offers) if offers else 0,
             recommendations=final_picks or [],
-            rejected_offers=[], # Collect rejections actively in agents later
-            notes=["Completed orchestrator pipeline."],
+            rejected_offers=risk_rejections,
+            notes=[
+                f"Completed orchestrator pipeline. {len(risk_rejections)} edges rejected by risk gates."
+            ],
             errors=errors,
             model_version=self.model_version,
             council_narrative=council_narrative,
@@ -180,7 +187,7 @@ class DecisionOrchestrator:
             
         return decision_run
 
-    def _fail_fast(self, run_id: str, inputs_hash: str, errors: List[AgentError]) -> DecisionRun:
+    def _fail_fast(self, run_id: str, inputs_hash: str, errors: List[AgentError], traces: list = []) -> DecisionRun:
         return DecisionRun(
             run_id=run_id,
             created_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -192,5 +199,6 @@ class DecisionOrchestrator:
             rejected_offers=[],
             notes=["Pipeline aborted due to fatal agent error."],
             errors=errors,
-            model_version=self.model_version
+            model_version=self.model_version,
+            agent_traces=traces
         )
