@@ -185,8 +185,28 @@ class DraftKingsIngestService:
             count_parsed = len(parsed)
 
             # 3. Filter by placed-at (incremental): keep only bets newer than cutoff
+            # Also filter out obvious UI artifacts (e.g. 'MY BETS', 'BET SLIP', 'POPULAR', promo shells).
+            def _looks_like_artifact(b: dict) -> bool:
+                try:
+                    sel = str(b.get('selection') or '').strip().lower()
+                    desc = str(b.get('description') or '').strip().lower()
+                    rawt = str(b.get('raw_text') or '').strip().lower()
+                    noise = {'my bets', 'bet slip', 'popular', 'all', 'create group', 'view picks'}
+                    if sel in noise:
+                        return True
+                    if 'bet & get' in desc or 'bet & get' in rawt:
+                        return True
+                    if 'your picks will show up here' in rawt:
+                        return True
+                    return False
+                except Exception:
+                    return False
+
             filtered = []
             for bet in parsed:
+                if _looks_like_artifact(bet):
+                    continue
+
                 dt = _parse_date(bet.get("date"))
                 # If date missing/unparseable, keep it (conservative) but these should be rare.
                 if dt is None:
