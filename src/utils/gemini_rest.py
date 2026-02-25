@@ -1,20 +1,15 @@
 import os
 import requests
 import time
-from dotenv import load_dotenv
-
-# Robustly find project root to ensure .env loading works even when run from subdirectories
-_current_dir = os.path.dirname(os.path.abspath(__file__))
-_project_root = os.path.abspath(os.path.join(_current_dir, "../../"))
-
-# Load environment variables from .env in project root
-load_dotenv(os.path.join(_project_root, '.env'))
-load_dotenv(os.path.join(_project_root, '.env.local'))
+from src.config import settings
 
 def generate_content(model: str, system_prompt: str, json_mode: bool = False, max_tokens: int = 1024, retries: int = 5) -> str:
-    api_key = os.environ.get('GEMINI_API_KEY')
+    api_key = settings.GEMINI_API_KEY
     if not api_key:
-        raise ValueError("GEMINI_API_KEY not set")
+        error_msg = "GEMINI_API_KEY not set."
+        if settings.is_prod or settings.is_preview:
+            error_msg += " CRITICAL: Missing from Vercel Dashboard. Please add GEMINI_API_KEY to Environment Variables and REDEPLOY."
+        raise ValueError(error_msg)
 
     # API Version / Model standardization
     # Standardize on 1.5 for better quota availability in free tier
