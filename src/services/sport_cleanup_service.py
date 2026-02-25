@@ -41,13 +41,13 @@ class SportCleanupService:
                 bid = int(r["id"])
                 cur = r.get("sport")
                 norm = normalize_sport(cur)
-                # Only write when it actually changes (case/whitespace/alias)
-                if (cur is None and norm == "UNKNOWN"):
+
+                # Only write when it actually changes (case/whitespace/alias).
+                # IMPORTANT: do not treat "Unknown" as already canonical; we want it to become "UNKNOWN".
+                cur_s = "" if cur is None else str(cur).strip()
+                if cur is None and norm == "UNKNOWN":
                     continue
-                if cur is not None and str(cur).strip() == norm:
-                    continue
-                if cur is not None and normalize_sport(cur) == norm and str(cur).strip().upper() == norm:
-                    # already canonical
+                if cur_s == norm:
                     continue
 
                 _exec(conn, upd, (norm, bid, user_id))
