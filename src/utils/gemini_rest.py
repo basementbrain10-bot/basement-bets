@@ -79,7 +79,7 @@ def generate_content(model: str, system_prompt: str, json_mode: bool = False, ma
             raise ValueError(f"Unexpected Gemini response format: {resp.json() if 'resp' in locals() else str(e)}")
 
 def embed_content(model: str, content: str, title: str = None, task_type: str = "RETRIEVAL_QUERY", retries: int = 5) -> list[float]:
-    api_key = os.environ.get('GEMINI_API_KEY')
+    api_key = os.environ.get('GEMINI_API_KEY') or settings.GEMINI_API_KEY
     if not api_key:
         raise ValueError("GEMINI_API_KEY not set")
         

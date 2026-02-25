@@ -16,7 +16,7 @@ def setup_seeded_data():
     - 1 Prediction: Win Prob 0.60.
     - 1 Settlement: inputs incl CLV (-110).
     """
-    txn_date = date.today().strftime("%Y-%m-%d")
+    txn_date = "2025-01-01"
     
     with get_db_connection() as conn:
         # Clean
@@ -40,7 +40,7 @@ def setup_seeded_data():
             "line": -110,
             "odds_american": -110
         })
-        _exec(conn, "INSERT OR IGNORE INTO settlement_events (id, event_id, leg_id, outcome, inputs_json) VALUES (1, 'evt_seed_99', 99901, 'WON', :j)", {"j": inputs})
+        _exec(conn, "INSERT OR IGNORE INTO settlement_events (id, event_id, leg_id, bet_id, outcome, inputs_json, fingerprint) VALUES (1, 'evt_seed_99', 99901, 999, 'WON', :j, 'seed_999')", {"j": inputs})
         
         conn.commit()
 
@@ -50,11 +50,12 @@ def test_evaluation_api():
     
     # 2. Run Evaluation
     svc = EvaluationService()
-    count = svc.evaluate_daily_performance(date.today())
+    # Pass the seeded date
+    count = svc.evaluate_daily_performance(date(2025, 1, 1))
     assert count > 0
     
     # 3. Call API
-    response = client.get("/api/model-health/daily")
+    response = client.get("/api/reports/model-health", headers={"X-BASEMENT-KEY": "Xavier"})
     assert response.status_code == 200
     data = response.json()
     

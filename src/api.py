@@ -1,5 +1,5 @@
 from src.auth import get_current_user
-from fastapi import FastAPI, HTTPException, Request, Security, Depends
+from fastapi import FastAPI, HTTPException, Request, Security, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
@@ -90,17 +90,14 @@ async def check_access_key(request: Request, call_next):
         if request.url.path in public_paths:
             return await call_next(request)
 
-        # 1. Check Authorization Header (Cron OR Supabase JWT)
+        # 1. Check Authorization Header (for Vercel Cron)
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-            # If it matches CRON_SECRET, allow
             if settings.CRON_SECRET and token == settings.CRON_SECRET:
                  return await call_next(request)
-            # Otherwise assume it's a Supabase JWT - let it through (auth happens in Depends)
-            return await call_next(request)
 
-        # 2. Check Client Key (for non-Bearer requests)
+        # 2. Check Client Key (Basement Password)
         client_key = request.headers.get(API_KEY_NAME)
         if client_key:
             client_key = client_key.strip()
@@ -109,7 +106,6 @@ async def check_access_key(request: Request, call_next):
         
         # If Password is set on Server, enforce it
         if server_key and client_key != server_key:
-             print(f"[AUTH FAIL] Received: '{client_key}' | Expected: '{server_key}'")
              return JSONResponse(status_code=403, content={"message": "Wrong Password"})
              
     response = await call_next(request)
@@ -3705,6 +3701,7 @@ async def trigger_build_daily_top_picks(
 @app.api_route("/api/jobs/run_council_today", methods=["GET", "POST"])
 async def trigger_run_council_today(
     request: Request,
+    background_tasks: BackgroundTasks,
     date: Optional[str] = None,
     authorized: bool = Depends(verify_cron_secret),
 ):
@@ -3722,23 +3719,18 @@ async def trigger_run_council_today(
     try:
         from src.scripts.run_council_today import main as run_council
         
-        # Override sys.argv briefly to pass the date to the script
-        import sys
-        old_argv = sys.argv[:]
-        
-        try:
-            sys.argv = ['run_council_today.py']
-            if date:
-                sys.argv.append(date)
-            
-            run_council()
-            
-        finally:
-            sys.argv = old_argv
+        def do_run():
+            try:
+                run_council()
+                print(f"[JOB SUCCESS] Agent Council completed for date={date or 'today'}")
+            except Exception as e:
+                print(f"[JOB ERROR] Background run_council_today failed: {e}")
+
+        background_tasks.add_task(do_run)
 
         return {
             "status": "success",
-            "message": "Agent Council completed successfully."
+            "message": "Agent Council job queued in background."
         }
     except Exception as e:
         print(f"[JOB ERROR] run_council_today failed: {e}")
@@ -4433,7 +4425,6 @@ async def diagnostics_env(authorized: bool = Depends(verify_cron_secret)):
         "crucial_checks": {
             "HAS_GEMINI_KEY": "GEMINI_API_KEY" in os.environ,
             "HAS_POSTGRES_URL": "POSTGRES_URL" in os.environ,
-            "HAS_SUPABASE_KEY": "SUPABASE_SERVICE_ROLE_KEY" in os.environ,
             "HAS_DATABASE_URL": "DATABASE_URL" in os.environ,
         }
     }
