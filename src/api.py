@@ -1,5 +1,5 @@
 from src.auth import get_current_user
-from fastapi import FastAPI, HTTPException, Request, Security, Depends
+from fastapi import FastAPI, HTTPException, Request, Security, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
@@ -3701,6 +3701,7 @@ async def trigger_build_daily_top_picks(
 @app.api_route("/api/jobs/run_council_today", methods=["GET", "POST"])
 async def trigger_run_council_today(
     request: Request,
+    background_tasks: BackgroundTasks,
     date: Optional[str] = None,
     authorized: bool = Depends(verify_cron_secret),
 ):
@@ -3718,23 +3719,18 @@ async def trigger_run_council_today(
     try:
         from src.scripts.run_council_today import main as run_council
         
-        # Override sys.argv briefly to pass the date to the script
-        import sys
-        old_argv = sys.argv[:]
-        
-        try:
-            sys.argv = ['run_council_today.py']
-            if date:
-                sys.argv.append(date)
-            
-            run_council()
-            
-        finally:
-            sys.argv = old_argv
+        def do_run():
+            try:
+                run_council()
+                print(f"[JOB SUCCESS] Agent Council completed for date={date or 'today'}")
+            except Exception as e:
+                print(f"[JOB ERROR] Background run_council_today failed: {e}")
+
+        background_tasks.add_task(do_run)
 
         return {
             "status": "success",
-            "message": "Agent Council completed successfully."
+            "message": "Agent Council job queued in background."
         }
     except Exception as e:
         print(f"[JOB ERROR] run_council_today failed: {e}")
