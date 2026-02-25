@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.basementbets.dkworker</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/basementai/clawd/repos/basement-bets</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/basementai/clawd/repos/basement-bets/.venv311/bin/python</string>
+    <string>scripts/sync_worker.py</string>
+    <string>--loop</string>
+    <string>--provider</string>
+    <string>draftkings</string>
+    <string>--sleep</string>
+    <string>30</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DK_PROFILE_PATH</key>
+    <string>./chrome_profile</string>
+    <key>DK_KEEP_OPEN_ON_AUTH</key>
+    <string>1</string>
+    <key>DK_WAIT_FOR_LOGIN_SECONDS</key>
+    <string>60</string>
+    <key>DK_AUTO_RETRY_SECONDS</key>
+    <string>600</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/basementai/Library/Logs/basement-bets-dkworker.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/basementai/Library/Logs/basement-bets-dkworker.err.log</string>
+</dict>
+</plist>
