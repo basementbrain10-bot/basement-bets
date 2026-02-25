@@ -240,8 +240,8 @@ class DraftKingsScraper:
             if last_exc:
                 raise last_exc
 
-            # 2. Auth check: detect login wall
-            # If login is required, optionally wait for the operator to complete login
+            # 2. Auth check: detect login wall / location wall
+            # If auth/location is required, optionally wait for the operator to complete login
             # in the opened browser (interactive), then continue.
             wait_login_s = int(os.environ.get("DK_WAIT_FOR_LOGIN_SECONDS", "300"))
 
@@ -250,22 +250,27 @@ class DraftKingsScraper:
                     current_url = (driver.current_url or "").lower()
                     page_src = (driver.page_source or "")
                     # URL signals
-                    if any(x in current_url for x in ("log-in", "client-login", "/auth/login", "myaccount.draftkings.com/auth")):
+                    if any(x in current_url for x in ("log-in", "client-login", "/auth/login", "myaccount.draftkings.com/auth", "code=krn-")):
                         return True
                     # DOM signals
                     if driver.find_elements(By.CSS_SELECTOR, "input[type='password']"):
                         return True
                     # Text signals
-                    if "to continue to draftkings" in page_src.lower():
+                    s = page_src.lower()
+                    if "to continue to draftkings" in s:
                         return True
-                    if "remember my email" in page_src.lower() and "password" in page_src.lower() and "log in" in page_src:
+                    if "you're not logged in" in s or "you must be logged in" in s:
+                        return True
+                    if "trouble verifying your location" in s:
+                        return True
+                    if "remember my email" in s and "password" in s and "log in" in s:
                         return True
                     return False
                 except Exception:
                     return False
 
             if _is_login_wall():
-                print("[DK-Auto] Login required — please complete login in the opened browser window...")
+                print("[DK-Auto] Login/location verification required — please complete it in the opened browser window...")
                 import time as _time
                 start = _time.time()
                 while _time.time() - start < wait_login_s:
@@ -278,13 +283,13 @@ class DraftKingsScraper:
                     if keep_open_on_auth:
                         _skip_close = True
                         raise NeedsHumanAuth(
-                            f"DraftKings login wall detected (url={driver.current_url!r}). "
+                            f"DraftKings auth/location wall detected (url={driver.current_url!r}). "
                             "Browser left open because DK_KEEP_OPEN_ON_AUTH=1. "
-                            "Please log in manually in that window, then rerun the worker."
+                            "Please log in/verify location in that window, then rerun the worker."
                         )
                     raise NeedsHumanAuth(
-                        f"DraftKings login wall detected (url={driver.current_url!r}). "
-                        "Please open Chrome with DK_PROFILE_PATH and log in manually, then retry."
+                        f"DraftKings auth/location wall detected (url={driver.current_url!r}). "
+                        "Please open Chrome with DK_PROFILE_PATH and log in/verify location, then retry."
                     )
 
             # 3. Click 'Settled' tab with resilient selectors
@@ -374,7 +379,16 @@ class DraftKingsScraper:
 
             # Fallback: raw body text
             body = driver.find_element(By.TAG_NAME, "body").text
-            print(f"[DK-Auto] Fallback body text ({len(body)} chars).")
+            # If we still look like we're gated, treat as auth required.
+            b_low = (body or '').lower()
+            if any(x in b_low for x in ("you're not logged in", "you must be logged in", "trouble verifying your location")):
+                if keep_open_on_auth:
+                    _skip_close = True
+                raise NeedsHumanAuth(
+                    f"DraftKings gated view detected (url={driver.current_url!r}). "
+                    "Please log in/verify location and retry."
+                )
+            print(f"[DK-Auto] Fallback body text ({len(body)} chars). url={driver.current_url!r}")
             return body
 
         finally:
