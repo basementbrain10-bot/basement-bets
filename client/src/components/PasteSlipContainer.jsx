@@ -315,7 +315,7 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                     </div>
                 </div>
 
-                {entryType === 'BET' && !parsedData && !batchResults && (
+                {entryType === 'BET' && !parsedData && !batchResults && sportsbook === 'FD' && (
                     <div className="flex gap-3 mb-2">
                         <button
                             onClick={handleSync}
@@ -323,7 +323,7 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
                             className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg"
                         >
                             {isSyncing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                            {isSyncing ? 'Waiting for Login...' : `Sync from ${sportsbook === 'DK' ? 'DraftKings' : 'FanDuel'}`}
+                            {isSyncing ? 'Waiting for Login...' : 'Sync from FanDuel'}
                         </button>
                     </div>
                 )}
