@@ -8,8 +8,20 @@ export default function SportAuditorModal({
   onClose,
   onRerun,
   onApply,
+  onNormalize, // optional: normalize sports in DB
 }) {
   const [mode, setMode] = React.useState('all'); // all | unknown | mismatches
+  const [sportEdits, setSportEdits] = React.useState({}); // bet_id -> chosen sport
+
+  React.useEffect(() => {
+    // When new items arrive, default edit value to suggested_sport.
+    const next = {};
+    for (const it of (items || [])) {
+      if (!it?.bet_id) continue;
+      next[it.bet_id] = String(it?.suggested_sport || '').toUpperCase().trim() || '';
+    }
+    setSportEdits(next);
+  }, [JSON.stringify((items || []).map(x => [x?.bet_id, x?.suggested_sport]))]);
 
   const filteredItems = (items || []).filter((it) => {
     const cur = String(it?.sport || '').toUpperCase().trim();
@@ -55,6 +67,18 @@ export default function SportAuditorModal({
               <option value="mismatches">Mismatches only</option>
             </select>
 
+            {typeof onNormalize === 'function' ? (
+              <button
+                type="button"
+                onClick={() => onNormalize?.()}
+                disabled={auditLoading}
+                className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 hover:bg-slate-800/50"
+                title="Normalize sport values in the database (case/aliases)"
+              >
+                Normalize
+              </button>
+            ) : null}
+
             <button
               type="button"
               onClick={() => onRerun?.()}
@@ -80,13 +104,14 @@ export default function SportAuditorModal({
                 <th className="text-left px-3 py-2">Type</th>
                 <th className="text-left px-3 py-2">Current</th>
                 <th className="text-left px-3 py-2">Suggested</th>
+                <th className="text-left px-3 py-2">Edit</th>
                 <th className="text-left px-3 py-2">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-6 text-slate-500" colSpan={7}>
+                  <td className="px-3 py-6 text-slate-500" colSpan={8}>
                     No items found.
                   </td>
                 </tr>
@@ -115,9 +140,20 @@ export default function SportAuditorModal({
                       </span>
                     </td>
                     <td className="px-3 py-2">
+                      <input
+                        value={sportEdits?.[it.bet_id] ?? ''}
+                        onChange={(e) => setSportEdits((prev) => ({ ...(prev || {}), [it.bet_id]: e.target.value }))}
+                        placeholder="e.g. NCAAM"
+                        className="w-28 text-[11px] px-2 py-1 rounded border border-slate-700 bg-slate-950 text-slate-200 font-mono"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
                       <button
                         type="button"
-                        onClick={() => onApply?.(it)}
+                        onClick={() => {
+                          const chosen = String(sportEdits?.[it.bet_id] ?? '').trim();
+                          onApply?.({ ...it, chosen_sport: chosen || it.suggested_sport });
+                        }}
                         className="text-[11px] px-2 py-1 rounded border border-green-900/40 bg-green-900/20 text-green-200 hover:bg-green-900/35"
                       >
                         Apply

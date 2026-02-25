@@ -245,7 +245,7 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
 
     const applyAuditFix = async (item) => {
         const betId = item?.bet_id;
-        const sport = item?.suggested_sport;
+        const sport = item?.chosen_sport || item?.suggested_sport;
         if (!betId || !sport) return;
         try {
             await api.post(`/api/audit/bets/${betId}/apply-sport`, { sport });
@@ -461,6 +461,17 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
                 auditLoading={auditLoading}
                 onClose={() => setShowAudit(false)}
                 onRerun={runAudit}
+                onNormalize={async () => {
+                    try {
+                        const res = await api.post('/api/audit/bets/normalize-sport?limit=50000');
+                        const updated = res?.data?.updated;
+                        alert(`Normalized sports in DB. Updated ${updated ?? 0} rows.`);
+                        await runAudit();
+                    } catch (err) {
+                        const msg = err?.response?.data?.detail || err?.message || 'Normalize failed';
+                        alert(`Normalize failed: ${msg}`);
+                    }
+                }}
                 onApply={applyAuditFix}
             />
 
