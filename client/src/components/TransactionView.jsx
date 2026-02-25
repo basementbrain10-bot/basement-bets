@@ -231,12 +231,13 @@ export default function TransactionView({ bets, setBets, financials, reconciliat
         setAuditLoading(true);
         try {
             // Audit the full Transactions history (not just a recent slice)
-            const { data } = await api.get('/api/audit/bets/sport-mismatches', { params: { days: 3650, limit: 20000 } });
+            const { data } = await api.get('/api/audit/bets/sport-mismatches', { params: { days: 3650, limit: 5000 } });
             setAuditItems(data?.items || []);
             setShowAudit(true);
         } catch (err) {
             console.error('Audit failed', err);
-            alert('Audit failed. See console.');
+            const msg = err?.response?.data?.detail || err?.response?.data?.message || err?.message || '';
+            alert(`Audit failed. ${msg}`);
         } finally {
             setAuditLoading(false);
         }

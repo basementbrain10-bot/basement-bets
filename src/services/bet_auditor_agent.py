@@ -123,7 +123,7 @@ class BetAuditorAgent:
             return []
 
         q = """
-        SELECT id, date, sport, bet_type, provider, description, selection, is_bonus
+        SELECT id, date, sport, bet_type, provider, description, selection, raw_text, is_bonus
         FROM bets
         WHERE user_id = %s
         ORDER BY date DESC
@@ -148,33 +148,55 @@ class BetAuditorAgent:
             if not text:
                 text = (b.get('description') or '')
 
-            matchup = self._extract_matchup(text)
-            if not matchup:
-                continue
-
-            team_a, team_b = matchup
-            ev = self._find_event_league(team_a, team_b, bet_dt)
-            if not ev or not ev.get('league'):
-                continue
-
             current = str(b.get('sport') or '').upper().strip()
-            suggested = str(ev.get('league') or '').upper().strip()
 
-            if not current or not suggested:
-                continue
-            if current == suggested:
-                continue
+            # Primary path: matchup -> events table -> league
+            matchup = self._extract_matchup(text)
+            if matchup:
+                team_a, team_b = matchup
+                ev = self._find_event_league(team_a, team_b, bet_dt)
+                if ev and ev.get('league'):
+                    suggested = str(ev.get('league') or '').upper().strip()
+                    if current and suggested and current != suggested:
+                        out.append({
+                            "bet_id": b.get('id'),
+                            "date": str(bet_dt.date().isoformat()),
+                            "provider": b.get('provider'),
+                            "bet_type": b.get('bet_type'),
+                            "is_bonus": bool(b.get('is_bonus')),
+                            "sport": current,
+                            "suggested_sport": suggested,
+                            "matchup": f"{ev.get('away_team')} @ {ev.get('home_team')}" if ev.get('home_team') and ev.get('away_team') else f"{team_a} @ {team_b}",
+                            "reason": "Matched teams in events table within +/- 1 day"
+                        })
+                        continue
 
-            out.append({
-                "bet_id": b.get('id'),
-                "date": str(bet_dt.date().isoformat()),
-                "provider": b.get('provider'),
-                "bet_type": b.get('bet_type'),
-                "is_bonus": bool(b.get('is_bonus')),
-                "sport": current,
-                "suggested_sport": suggested,
-                "matchup": f"{ev.get('away_team')} @ {ev.get('home_team')}" if ev.get('home_team') and ev.get('away_team') else f"{team_a} @ {team_b}",
-                "reason": "Matched teams in events table within +/- 1 day"
-            })
+            # Fallback path: if sport is UNKNOWN/blank (common for parlays/SGP text),
+            # try detect_sport on the raw text blob.
+            if current in ("", "UNKNOWN", "UNK"):
+                try:
+                    from src.parsers.sport_detection import detect_sport
+                except Exception:
+                    from parsers.sport_detection import detect_sport
+
+                blob = " ".join([
+                    str(b.get('raw_text') or ''),
+                    str(b.get('selection') or ''),
+                    str(b.get('description') or ''),
+                    str(b.get('provider') or ''),
+                ])
+                suggested = str(detect_sport(blob) or '').upper().strip()
+                if suggested and suggested not in ("UNKNOWN", "UNK"):
+                    out.append({
+                        "bet_id": b.get('id'),
+                        "date": str(bet_dt.date().isoformat()),
+                        "provider": b.get('provider'),
+                        "bet_type": b.get('bet_type'),
+                        "is_bonus": bool(b.get('is_bonus')),
+                        "sport": current or "UNKNOWN",
+                        "suggested_sport": suggested,
+                        "matchup": None,
+                        "reason": "Sport was UNKNOWN; suggested via detect_sport"
+                    })
 
         return out
