@@ -701,15 +701,26 @@ class DraftKingsTextParser:
             # 5. Sport Inference — use shared detector
             sport = detect_sport(" ".join(lines) + " " + selection + " " + matchup)
 
-            # Guardrails: skip malformed/leg-only artifacts
+            # Guardrails: skip only truly malformed artifacts.
+            # For DK paste dumps, we prefer returning a minimal row over dropping
+            # the bet entirely (dropping causes missed bets + duplicates later).
             if wager is None or float(wager) <= 0:
                 return None
-            if not selection or str(selection).strip().lower() in ('unknown matchup',):
-                return None
+
+            # Ensure we always keep an external_id when DK id is present.
+            ext_id = bet_id if bet_id and bet_id != 'DK_UNKNOWN' else None
+
+            # If selection couldn't be inferred, fall back to a trimmed version of the summary.
+            if not selection or str(selection).strip().lower() in ('unknown matchup', 'unknown'):
+                selection = (matchup or summary or 'DraftKings bet')
+                try:
+                    selection = str(selection).strip()
+                except Exception:
+                    selection = 'DraftKings bet'
 
             return {
                 "provider": "DraftKings",
-                "external_id": bet_id if bet_id and bet_id != 'DK_UNKNOWN' else None,
+                "external_id": ext_id,
                 "date": dt.strftime("%Y-%m-%d %H:%M:%S"),
                 "sport": sport,
                 "bet_type": bet_type,
