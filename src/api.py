@@ -1417,6 +1417,7 @@ async def backfill_event_text(
     """
     try:
         uid = user.get('sub')
+        from src.config import settings
         from datetime import datetime, timedelta
         from src.database import get_db_connection, _exec
 
@@ -3713,6 +3714,11 @@ async def trigger_run_council_today(
     the quantitative model found an edge, stores the qualitative debate to decision_runs,
     and then re-runs the Top Picks builder to apply the qualitative adjustments.
     """
+    if not settings.GEMINI_API_KEY:
+        error_msg = "GEMINI_API_KEY missing. Please add to Vercel Dashboard and REDEPLOY."
+        print(f"[JOB ERROR] {error_msg}")
+        raise HTTPException(status_code=401, detail=error_msg)
+
     try:
         from src.scripts.run_council_today import main as run_council
         

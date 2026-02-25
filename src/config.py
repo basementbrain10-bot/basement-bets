@@ -2,9 +2,13 @@ import os
 from typing import Optional
 from dotenv import load_dotenv
 
+# Robustly find project root to ensure .env loading works even when run from subdirectories
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.abspath(os.path.join(_current_dir, "../"))
+
 # Load env vars from .env and .env.local
-load_dotenv()
-load_dotenv('.env.local')
+load_dotenv(os.path.join(_project_root, '.env'))
+load_dotenv(os.path.join(_project_root, '.env.local'))
 
 class Config:
     def __init__(self):

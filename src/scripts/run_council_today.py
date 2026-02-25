@@ -7,10 +7,7 @@ from datetime import datetime as dt, timezone
 # Allow running from repo root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-from dotenv import load_dotenv
-load_dotenv()
-load_dotenv('.env.local')
-
+from src.config import settings
 from src.database import get_db_connection, _exec
 from src.agents.contracts import EventContext, DecisionRun
 from src.agents.research_agent import ResearchAgent
