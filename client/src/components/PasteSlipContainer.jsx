@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../api/supabase';
 import api from '../api/axios';
 import { AlertCircle, CheckCircle2, Loader2, Save, X } from 'lucide-react';
 import { clsx } from 'clsx';

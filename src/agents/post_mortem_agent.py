@@ -150,27 +150,32 @@ Rules:
                         
                     full_context_json = json.dumps(lesson_obj, ensure_ascii=False)
                     
-                    # 2. Get Embedding
-                    embed_res = embed_content(
-                        model="models/gemini-embedding-001",
-                        title="Reflection",
-                        task_type="RETRIEVAL_DOCUMENT",
-                        content=lesson_text
-                    )
-                    
-                    self.log_trace(f"Generated embedding for {team_a} vs {team_b}", {"embedding_size": len(embed_res)})
-                    
-                    # 3. Save to memory DB
-                    insert_query = """
-                        INSERT INTO agent_memories (team_a, team_b, context, lesson, timestamp, embedding_json)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """
-                    _exec(conn, insert_query, (
-                        team_a, team_b, full_context_json, display_lesson, 
-                        datetime.now(timezone.utc), json.dumps(embed_res)
-                    ))
-                    conn.commit()
-                    memories_added += 1
+                    try:
+                        # 2. Get Embedding
+                        embed_res = embed_content(
+                            model="models/gemini-embedding-001",
+                            title="Reflection",
+                            task_type="RETRIEVAL_DOCUMENT",
+                            content=lesson_text
+                        )
+                        
+                        self.log_trace(f"Generated embedding for {team_a} vs {team_b}", {"embedding_size": len(embed_res)})
+                        
+                        # 3. Save to memory DB
+                        insert_query = """
+                            INSERT INTO agent_memories (team_a, team_b, context, lesson, timestamp, embedding_json)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        """
+                        _exec(conn, insert_query, (
+                            team_a, team_b, full_context_json, display_lesson, 
+                            datetime.now(timezone.utc), json.dumps(embed_res)
+                        ))
+                        conn.commit()
+                        memories_added += 1
+                    except Exception as ei:
+                        print(f"[PM Agent] Failed to embed/save reflection for {team_a} vs {team_b}: {ei}")
+                        self.log_trace(f"Memory save failed for {team_a} vs {team_b}", {"error": str(ei)})
+                        conn.rollback()
 
             except Exception as e:
                 print(f"[PostMortemAgent] Failed to process batch: {e}")

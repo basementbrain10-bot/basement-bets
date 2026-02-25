@@ -1711,7 +1711,49 @@ def upsert_bt_team_metrics_daily(metrics: list):
 
 
 def fetch_model_health_daily(date=None, league=None, market_type=None):
-    return []
+    """Retrieves aggregated metrics from model_health_daily."""
+    with get_db_connection() as conn:
+        q = "SELECT * FROM model_health_daily WHERE 1=1"
+        params = {}
+        if date:
+            q += " AND date = :date"
+            params["date"] = str(date)
+        if league:
+            q += " AND league = :league"
+            params["league"] = league
+        if market_type:
+            q += " AND market_type = :market"
+            params["market"] = market_type
+        
+        cursor = _exec(conn, q, params)
+        return [dict(r) for r in cursor.fetchall()]
+
+def store_daily_evaluation(metrics):
+    """
+    Persists a list of metrics to model_health_daily.
+    Input: list of dicts with {date, model_version_id, league, market_type, metric_name, metric_value, sample_size}
+    """
+    if not metrics:
+        return
+        
+    with get_db_connection() as conn:
+        q = """
+        INSERT INTO model_health_daily (
+            date, model_version_id, league, market_type, 
+            metric_name, metric_value, sample_size
+        ) VALUES (
+            :date, :model_version_id, :league, :market_type, 
+            :metric_name, :metric_value, :sample_size
+        )
+        ON CONFLICT (date, model_version_id, league, market_type, metric_name)
+        DO UPDATE SET 
+            metric_value = EXCLUDED.metric_value,
+            sample_size = EXCLUDED.sample_size
+        """
+        for m in metrics:
+            _exec(conn, q, m)
+        conn.commit()
+
 
 def init_transactions_db():
     """

@@ -33,9 +33,8 @@ class Config:
 
         self.REQUIRE_DATABASE = os.environ.get("REQUIRE_DATABASE", "1") != "0"
         
-        self.SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
         self.OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-        self.BASEMENT_PASSWORD = os.environ.get("BASEMENT_PASSWORD")
+        self.BASEMENT_PASSWORD = os.environ.get("BASEMENT_PASSWORD") or os.environ.get("VITE_BASEMENT_PASSWORD", "Xavier")
         self.CRON_SECRET = os.environ.get("CRON_SECRET")
         self.GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
         
@@ -59,8 +58,6 @@ class Config:
         
         # In Prod/Preview, we should be noisier about missing keys
         if self.APP_ENV != "local":
-            if not self.SUPABASE_SERVICE_ROLE_KEY:
-                missing.append("SUPABASE_SERVICE_ROLE_KEY")
             if not self.OPENAI_API_KEY:
                 missing.append("OPENAI_API_KEY")
             if not self.GEMINI_API_KEY:

@@ -90,17 +90,14 @@ async def check_access_key(request: Request, call_next):
         if request.url.path in public_paths:
             return await call_next(request)
 
-        # 1. Check Authorization Header (Cron OR Supabase JWT)
+        # 1. Check Authorization Header (for Vercel Cron)
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-            # If it matches CRON_SECRET, allow
             if settings.CRON_SECRET and token == settings.CRON_SECRET:
                  return await call_next(request)
-            # Otherwise assume it's a Supabase JWT - let it through (auth happens in Depends)
-            return await call_next(request)
 
-        # 2. Check Client Key (for non-Bearer requests)
+        # 2. Check Client Key (Basement Password)
         client_key = request.headers.get(API_KEY_NAME)
         if client_key:
             client_key = client_key.strip()
@@ -109,7 +106,6 @@ async def check_access_key(request: Request, call_next):
         
         # If Password is set on Server, enforce it
         if server_key and client_key != server_key:
-             print(f"[AUTH FAIL] Received: '{client_key}' | Expected: '{server_key}'")
              return JSONResponse(status_code=403, content={"message": "Wrong Password"})
              
     response = await call_next(request)
@@ -4433,7 +4429,6 @@ async def diagnostics_env(authorized: bool = Depends(verify_cron_secret)):
         "crucial_checks": {
             "HAS_GEMINI_KEY": "GEMINI_API_KEY" in os.environ,
             "HAS_POSTGRES_URL": "POSTGRES_URL" in os.environ,
-            "HAS_SUPABASE_KEY": "SUPABASE_SERVICE_ROLE_KEY" in os.environ,
             "HAS_DATABASE_URL": "DATABASE_URL" in os.environ,
         }
     }
