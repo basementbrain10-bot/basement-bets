@@ -4,7 +4,8 @@ import time
 from src.config import settings
 
 def generate_content(model: str, system_prompt: str, json_mode: bool = False, max_tokens: int = 1024, retries: int = 5) -> str:
-    api_key = settings.GEMINI_API_KEY
+    # Read key at call time so Vercel env vars injected after cold-start are always current.
+    api_key = os.environ.get("GEMINI_API_KEY") or settings.GEMINI_API_KEY
     if not api_key:
         error_msg = "GEMINI_API_KEY not set."
         if settings.is_prod or settings.is_preview:
