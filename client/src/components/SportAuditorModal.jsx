@@ -9,6 +9,18 @@ export default function SportAuditorModal({
   onRerun,
   onApply,
 }) {
+  const [mode, setMode] = React.useState('all'); // all | unknown | mismatches
+
+  const filteredItems = (items || []).filter((it) => {
+    const cur = String(it?.sport || '').toUpperCase().trim();
+    const sug = String(it?.suggested_sport || '').toUpperCase().trim();
+    const isUnknown = !cur || cur === 'UNKNOWN' || cur === 'UNK';
+    const isMismatch = !!sug && !!cur && !isUnknown && cur !== sug;
+    if (mode === 'unknown') return isUnknown;
+    if (mode === 'mismatches') return isMismatch;
+    return true;
+  });
+
   if (!show) return null;
 
   return (
@@ -26,22 +38,36 @@ export default function SportAuditorModal({
           </button>
         </div>
 
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-xs text-slate-400">
-            Found <span className="text-white font-bold">{(items || []).length}</span> potential mismatches.
+            Found <span className="text-white font-bold">{filteredItems.length}</span> items
+            <span className="text-slate-600"> (of {(items || []).length})</span>.
           </div>
-          <button
-            type="button"
-            onClick={() => onRerun?.()}
-            disabled={auditLoading}
-            className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition ${
-              auditLoading
-                ? 'text-gray-500 border-gray-800 bg-gray-900/40 animate-pulse'
-                : 'text-amber-300 hover:text-amber-200 border-amber-900/40 hover:bg-amber-900/20'
-            }`}
-          >
-            {auditLoading ? 'Re-running…' : 'Re-run'}
-          </button>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+              className="text-xs px-2 py-1.5 rounded-lg border border-slate-700 bg-slate-950 text-slate-200"
+            >
+              <option value="all">All</option>
+              <option value="unknown">Unknown only</option>
+              <option value="mismatches">Mismatches only</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={() => onRerun?.()}
+              disabled={auditLoading}
+              className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition ${
+                auditLoading
+                  ? 'text-gray-500 border-gray-800 bg-gray-900/40 animate-pulse'
+                  : 'text-amber-300 hover:text-amber-200 border-amber-900/40 hover:bg-amber-900/20'
+              }`}
+            >
+              {auditLoading ? 'Re-running…' : 'Re-run'}
+            </button>
+          </div>
         </div>
 
         <div className="max-h-[60vh] overflow-auto border border-slate-800 rounded-lg">
@@ -58,14 +84,14 @@ export default function SportAuditorModal({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {(items || []).length === 0 ? (
+              {filteredItems.length === 0 ? (
                 <tr>
                   <td className="px-3 py-6 text-slate-500" colSpan={7}>
-                    No mismatches found.
+                    No items found.
                   </td>
                 </tr>
               ) : (
-                (items || []).map((it) => (
+                filteredItems.map((it) => (
                   <tr key={it.bet_id} className="hover:bg-slate-800/40">
                     <td className="px-3 py-2 font-mono text-[11px] text-slate-300 whitespace-nowrap">{it.date}</td>
                     <td className="px-3 py-2 text-slate-200">
