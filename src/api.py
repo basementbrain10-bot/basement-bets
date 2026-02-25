@@ -66,18 +66,10 @@ async def check_access_key(request: Request, call_next):
          return await call_next(request)
          
     if request.url.path.startswith("/api"):
-        # 1. Skip password enforcement for /api/jobs/. 
-        # These paths use individual path-level dependencies (Depends(verify_cron_secret))
-        # to handle Bearer, Vercel, and Password auth interchangeably.
+        # 1. Skip ALL security for /api/jobs/ here. 
+        # These paths MUST be handled by Depends(verify_cron_secret) or explicit checks.
         if request.url.path.startswith("/api/jobs/"):
             return await call_next(request)
-
-        # Allow Vercel Cron invocations for other job endpoints (if any existed outside /api/jobs/).
-        try:
-            if str(request.headers.get('x-vercel-cron') or '').strip() == '1' and request.url.path.startswith('/api/jobs/'):
-                return await call_next(request)
-        except Exception:
-            pass
 
         # Allow public diagnostic endpoints + read-only UI endpoints
         public_paths = {
@@ -89,21 +81,13 @@ async def check_access_key(request: Request, call_next):
         }
 
         # Agent Council UI endpoints should be readable without a password.
-        # The docket should not break just because memories/debates are missing.
         if request.url.path.startswith("/api/v1/council"):
             return await call_next(request)
 
         if request.url.path in public_paths:
             return await call_next(request)
 
-        # 1. Check Authorization Header (for Vercel Cron)
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
-            if settings.CRON_SECRET and token == settings.CRON_SECRET:
-                 return await call_next(request)
-
-        # 2. Check Client Key (Basement Password)
+        # 2. Check Client Key (Basement Password) for all other /api paths
         client_key = request.headers.get(API_KEY_NAME)
         if client_key:
             client_key = client_key.strip()
@@ -112,7 +96,7 @@ async def check_access_key(request: Request, call_next):
         
         # If Password is set on Server, enforce it
         if server_key and client_key != server_key:
-             return JSONResponse(status_code=403, content={"message": "Wrong Password"})
+             return JSONResponse(status_code=403, content={"message": "Forbidden: Invalid Basement Password"})
              
     response = await call_next(request)
     return response
@@ -1937,36 +1921,94 @@ async def verify_cron_secret(request: Request):
     Allows if ANY of these are valid:
     1. Vercel Cron header (x-vercel-cron: 1)
     2. Authorization: Bearer <CRON_SECRET>
-    3. X-BASEMENT-KEY: <BASEMENT_PASSWORD>
+    3. Authorization: Bearer <BASEMENT_PASSWORD> (Fallback for simpler setups)
+    4. X-BASEMENT-KEY: <BASEMENT_PASSWORD> (UI / Manual)
     """
     from src.config import settings
 
     # 1. Vercel native crons
     try:
-        if str(request.headers.get('x-vercel-cron') or '').strip() == '1':
+        cron_header = str(request.headers.get('x-vercel-cron') or '').strip()
+        if cron_header == '1':
             return True
     except Exception:
         pass
 
-    # 2. Bearer Token (External jobs like GitHub Actions)
-    expected_cron = settings.CRON_SECRET
+    # 2. Bearer Token Check (External jobs like GitHub Actions)
     auth_header = request.headers.get("Authorization")
-    if expected_cron and auth_header:
+    if auth_header:
         parts = auth_header.split()
-        if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1] == expected_cron:
-            return True
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token = parts[1].strip()
+            
+            # Match CRON_SECRET if configured
+            expected_cron = settings.CRON_SECRET
+            if expected_cron and token == expected_cron.strip():
+                return True
+                
+            # FALLBACK: Match BASEMENT_PASSWORD (allows GitHub secrets to use the site password)
+            expected_pwd = settings.BASEMENT_PASSWORD
+            if expected_pwd and token == expected_pwd.strip():
+                return True
+            
+            # If Bearer was provided but didn't match
+            token_hint = f"{token[:3]}..." if len(token) > 3 else "***"
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Forbidden: Bearer token mismatch (sent: {token_hint})"
+            )
 
-    # 3. Basement Password (UI or manual curl)
+    # 3. Direct Key Check (UI or manual curl)
     expected_pwd = settings.BASEMENT_PASSWORD
     client_key = request.headers.get("X-BASEMENT-KEY")
     if expected_pwd and client_key and client_key.strip() == expected_pwd:
         return True
 
-    # If none matched, deny
-    raise HTTPException(
-        status_code=403, 
-        detail="Forbidden: Invalid Cron Secret or Basement Password"
-    )
+    # If none matched, deny with specific missing info if possible
+    err_detail = "Forbidden: Invalid Auth"
+    if not auth_header and not client_key:
+        err_detail += " (No Authorization or X-BASEMENT-KEY header found)"
+    
+    raise HTTPException(status_code=403, detail=err_detail)
+
+@app.get("/api/jobs/diag_auth")
+async def diagnostic_auth_check(request: Request):
+    """Diagnostic endpoint to debug 403 issues safely."""
+    from src.config import settings
+    
+    def mask(s):
+        if not s: return "None"
+        s = str(s).strip()
+        if len(s) <= 3: return "***"
+        return f"{s[:3]}...({len(s)} chars)"
+
+    auth_h = request.headers.get("Authorization", "")
+    bearer_token = ""
+    if auth_h.lower().startswith("bearer "):
+        bearer_token = auth_h.split(" ")[1]
+
+    client_key = request.headers.get("X-BASEMENT-KEY", "")
+
+    return {
+        "status": "diagnostic",
+        "timestamp": time.time(),
+        "headers_received": {
+            "authorization": mask(auth_h),
+            "x-basement-key": mask(client_key),
+            "x-vercel-cron": request.headers.get("x-vercel-cron")
+        },
+        "server_configuration": {
+            "has_cron_secret": bool(settings.CRON_SECRET),
+            "has_basement_password": bool(settings.BASEMENT_PASSWORD),
+            "cron_secret_mask": mask(settings.CRON_SECRET),
+            "basement_password_mask": mask(settings.BASEMENT_PASSWORD),
+        },
+        "matches": {
+            "bearer_matches_cron": bool(settings.CRON_SECRET and bearer_token == settings.CRON_SECRET),
+            "bearer_matches_password": bool(settings.BASEMENT_PASSWORD and bearer_token == settings.BASEMENT_PASSWORD),
+            "key_matches_password": bool(settings.BASEMENT_PASSWORD and client_key == settings.BASEMENT_PASSWORD),
+        }
+    }
 
 @app.api_route("/api/jobs/policy_refresh", methods=["GET", "POST"])
 async def trigger_policy_refresh(request: Request, authorized: bool = Depends(verify_cron_secret)):
