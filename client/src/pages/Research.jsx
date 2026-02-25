@@ -945,12 +945,6 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
                         {!loading && edges.length > 0 && boardTab === 'recommended' && (
                             <div className="p-6">
-                                <div className="flex items-center justify-between mb-3">
-                                    <div>
-                                        <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Recommended picks</div>
-                                        {/* helper text removed */}
-                                    </div>
-                                </div>
 
                                 {(() => {
                                     const isSameEtDay = (ts, ymd) => {
