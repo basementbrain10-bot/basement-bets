@@ -130,33 +130,127 @@ class NCAAMMarketFirstModelV2(BaseModel):
         pass
 
     def _get_dynamic_weights(self, game_date) -> float:
+        """Delegates to data-driven v2, falling back to month buckets."""
+        return self._get_dynamic_weights_v2(game_date)
+
+    def _get_dynamic_weights_v2(self, game_date, lookback: int = 30) -> float:
         """
-        Returns a weight (W_BASE) that scales based on the time of year.
-        Early season: Trust Market heavily (projections are preseason-based).
-        Late season: Trust Projections more (based on actual games).
+        Data-driven W_BASE: queries recent resolved model_predictions for MAE,
+        then blends the month-bucket baseline with error feedback.
+        Falls back to month-bucket if fewer than 10 resolved rows exist.
         """
         from datetime import datetime
-        
+        from src.database import get_db_connection, _exec
+
+        # ── Month-bucket baseline (always computed as fallback) ──
         if game_date is None:
-            game_date = datetime.now()
+            gd = datetime.now()
         elif isinstance(game_date, str):
             try:
-                game_date = datetime.fromisoformat(game_date.replace('Z', '+00:00'))
-            except:
-                game_date = datetime.now()
-        
-        month = game_date.month
-        
-        # Off-season/Early Season (Nov/Dec) - Preseason projections
-        if month == 11: return 0.12  # Trust Market heavily
-        if month == 12: return 0.18  
-        # Conference Play (Jan/Feb) - Real data accumulating
-        if month == 1: return 0.25   # Standard Sniper Weight
-        if month == 2: return 0.32   # Trust Projections more
-        # Tournament Time (March) - Peak sample size
-        if month == 3: return 0.38   # Peak Alpha
-        # April+ (Rare, post-tournament)
-        return 0.25  # Default
+                gd = datetime.fromisoformat(game_date.replace('Z', '+00:00'))
+            except Exception:
+                gd = datetime.now()
+        else:
+            gd = game_date
+
+        month = gd.month
+        if month == 11: base_w = 0.12
+        elif month == 12: base_w = 0.18
+        elif month == 1:  base_w = 0.25
+        elif month == 2:  base_w = 0.32
+        elif month == 3:  base_w = 0.38
+        else:             base_w = 0.25
+
+        try:
+            with get_db_connection() as conn:
+                rows = _exec(conn, """
+                    SELECT predicted_spread, actual_spread
+                    FROM model_predictions
+                    WHERE actual_spread IS NOT NULL AND predicted_spread IS NOT NULL
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                """, (lookback,)).fetchall()
+
+            if not rows or len(rows) < 10:
+                return base_w  # Not enough data — use month bucket
+
+            errors = [abs(float(r['predicted_spread']) - float(r['actual_spread'])) for r in rows]
+            mae = sum(errors) / len(errors)
+            # Blend: lower MAE → trust model more; higher MAE → trust market more
+            blended = base_w + (8.0 - mae) * 0.01
+            return max(0.08, min(0.42, blended))
+
+        except Exception as e:
+            print(f"[MODEL] _get_dynamic_weights_v2 fallback ({e})")
+            return base_w
+
+    def _compute_rolling_sigma(self, market: str, lookback: int = 40) -> Optional[float]:
+        """
+        Compute std(residuals) from recent resolved predictions to calibrate sigma.
+        Returns None if fewer than 20 rows available (caller uses hardcoded baseline).
+        market: 'spread' or 'total'
+        """
+        import math as _math
+        from src.database import get_db_connection, _exec
+
+        col_pred = 'predicted_spread' if market == 'spread' else 'predicted_total'
+        col_act  = 'actual_spread'    if market == 'spread' else 'actual_total'
+
+        try:
+            with get_db_connection() as conn:
+                rows = _exec(conn, f"""
+                    SELECT {col_pred}, {col_act}
+                    FROM model_predictions
+                    WHERE {col_act} IS NOT NULL AND {col_pred} IS NOT NULL
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                """, (lookback,)).fetchall()
+
+            if not rows or len(rows) < 20:
+                return None
+
+            residuals = [float(r[col_act]) - float(r[col_pred]) for r in rows]
+            mean_r = sum(residuals) / len(residuals)
+            variance = sum((x - mean_r) ** 2 for x in residuals) / len(residuals)
+            return _math.sqrt(variance)
+
+        except Exception as e:
+            print(f"[MODEL] _compute_rolling_sigma({market}) failed: {e}")
+            return None
+
+    def _log_council_adj(self, event_id: str, run_id: Optional[str],
+                         adj_spread: float, adj_total: float,
+                         spread_gated: bool, total_gated: bool,
+                         council_confidence: float) -> None:
+        """
+        Persist council adjustment magnitude and gating status to council_signals
+        for offline CLV evaluation. Non-fatal — never blocks the model run.
+        """
+        if not event_id:
+            return
+        try:
+            import json
+            from src.database import get_db_connection, _exec
+            audit = {
+                "adj_spread": adj_spread,
+                "adj_total": adj_total,
+                "spread_gated": spread_gated,
+                "total_gated": total_gated,
+                "COUNCIL_ADJUSTMENTS_ENABLED": COUNCIL_ADJUSTMENTS_ENABLED,
+                "council_confidence": council_confidence,
+            }
+            effective_run_id = run_id or f"model-auto-{event_id}"
+            with get_db_connection() as conn:
+                _exec(conn, """
+                    INSERT INTO council_signals (run_id, event_id, league, signals_json)
+                    VALUES (%s, %s, 'NCAAM', %s)
+                    ON CONFLICT (run_id, event_id) DO UPDATE SET
+                        signals_json = council_signals.signals_json || %s::jsonb,
+                        created_at   = NOW()
+                """, (effective_run_id, event_id, json.dumps(audit), json.dumps(audit)))
+                conn.commit()
+        except Exception as e:
+            print(f"[MODEL] _log_council_adj failed (non-fatal): {e}")
 
     def _calculate_shooting_regression(self, team_name: str) -> float:
         """
@@ -621,10 +715,19 @@ class NCAAMMarketFirstModelV2(BaseModel):
         council_adj_gated = not COUNCIL_ADJUSTMENTS_ENABLED
         if COUNCIL_ADJUSTMENTS_ENABLED:
             mu_spread_final += council_adjustment_spread
-        else:
-            if council_adjustment_spread != 0.0:
-                print(f"[MODEL] Council spread adj {council_adjustment_spread:+.2f} computed but GATED (Phase 1 mode).")
-        
+
+        # Audit log — persist magnitude + gating status to council_signals for CLV eval
+        _council_confidence = float((council_verdict or {}).get('signals', {}).get('confidence', 0.0)) if council_verdict else 0.0
+        _run_id = (event_context or {}).get('run_id') if event_context else None
+        self._log_council_adj(
+            event_id=str(event.get('id') or ''),
+            run_id=_run_id,
+            adj_spread=council_adjustment_spread,
+            adj_total=council_adjustment_total,
+            spread_gated=not COUNCIL_ADJUSTMENTS_ENABLED,
+            total_gated=not COUNCIL_ADJUSTMENTS_ENABLED,
+            council_confidence=_council_confidence,
+        )
         # Apply Caps
         if abs(mu_spread_final - mu_market_spread) > self.CAP_SPREAD:
              mu_spread_final = mu_market_spread + (self.CAP_SPREAD * math.copysign(1, mu_spread_final - mu_market_spread))
@@ -670,18 +773,19 @@ class NCAAMMarketFirstModelV2(BaseModel):
         if abs(mu_total_final - mu_market_total) > self.CAP_TOTAL:
              mu_total_final = mu_market_total + (self.CAP_TOTAL * math.copysign(1, mu_total_final - mu_market_total))
 
-        # 6. Pace-Adjusted Sigma (Refined)
-        # Higher tempo = more possessions = higher variance = wider sigma
-        # Scaling: sqrt(tempo / avg) is theoretically correct for variance scaling.
+        # 6. Pace-Adjusted Sigma — calibrated from rolling residuals when available
         game_tempo = (torvik_team_stats or {}).get('game_tempo', 68.0) or 68.0
         tempo_factor = math.sqrt(game_tempo / 68.0)
-        
+
         base_sigma_spread = 10.5
-        base_sigma_total = 13.5  # Adjusted from 15.0 for accuracy
-        
-        
-        sigma_spread = (base_sigma_spread * tempo_factor) + 0.1 * abs(diff_torvik)
-        sigma_total = (base_sigma_total * tempo_factor) + 0.1 * abs(mu_torvik_total - mu_market_total)
+        base_sigma_total  = 13.5
+
+        # Use rolling std(residuals) from recent model_predictions if >= 20 rows
+        rolling_sig_s = self._compute_rolling_sigma('spread') or base_sigma_spread
+        rolling_sig_t = self._compute_rolling_sigma('total')  or base_sigma_total
+
+        sigma_spread = (rolling_sig_s * tempo_factor) + 0.1 * abs(diff_torvik)
+        sigma_total  = (rolling_sig_t * tempo_factor) + 0.1 * abs(mu_torvik_total - mu_market_total)
 
         # Possessions validation: compare Torvik game_tempo vs KenPom team tempo (AdjT) average.
         kp_tempo = None
@@ -692,7 +796,6 @@ class NCAAMMarketFirstModelV2(BaseModel):
             if hr and ar and hr.get('adj_t') is not None and ar.get('adj_t') is not None:
                 kp_tempo = (float(hr['adj_t']) + float(ar['adj_t'])) / 2.0
                 kp_tempo_gap = float(game_tempo) - float(kp_tempo)
-                # If tempo sources disagree materially, inflate sigma_total (uncertainty).
                 if abs(kp_tempo_gap) >= 3.0:
                     sigma_total *= 1.10
         except Exception as e:
@@ -742,12 +845,51 @@ class NCAAMMarketFirstModelV2(BaseModel):
         if dist > 1000 and not is_neutral:
             mu_spread_final -= 0.5
 
-        # --- Feature: Live Injury Impact Toggle ---
+        # --- Feature: Research/Memory Signal Injection ---
+        # Apply verified facts from ResearchAgent before manual overrides.
+        # Only facts with a source_url are treated as verified (no hallucinations).
+        # manual_adjustments acts as override layer on top.
+        research_adj_spread = 0.0
+        research_adj_total  = 0.0
+        research_facts_applied = 0
+        research_facts: list = (event_context or {}).get('research_facts', [])
+        _INJURY_HOME_ADJ  = float(os.environ.get('RESEARCH_INJURY_HOME_ADJ',  '1.5'))
+        _INJURY_AWAY_ADJ  = float(os.environ.get('RESEARCH_INJURY_AWAY_ADJ',  '1.5'))
+        _TRAVEL_TOTAL_ADJ = float(os.environ.get('RESEARCH_TRAVEL_TOTAL_ADJ', '0.5'))
+        _FATIGUE_ADJ      = float(os.environ.get('RESEARCH_FATIGUE_ADJ',      '0.75'))
+        for fact in research_facts:
+            if not isinstance(fact, dict) or not fact.get('source_url'):
+                continue  # Skip unverified / hallucinated facts
+            ftype = str(fact.get('type', '')).lower()
+            fteam = str(fact.get('team', '')).lower()
+            is_home = event['home_team'].lower() in fteam or fteam in event['home_team'].lower()
+            is_away = event['away_team'].lower() in fteam or fteam in event['away_team'].lower()
+            if ftype == 'injury':
+                if is_home:
+                    research_adj_spread -= _INJURY_HOME_ADJ  # home team worse → spread moves against home
+                elif is_away:
+                    research_adj_spread += _INJURY_AWAY_ADJ  # away team worse → home team benefits
+                research_facts_applied += 1
+            elif ftype == 'travel':
+                if is_away:
+                    research_adj_total -= _TRAVEL_TOTAL_ADJ  # traveling team tired → under lean
+                research_facts_applied += 1
+            elif ftype == 'fatigue':
+                if is_home:
+                    research_adj_spread -= _FATIGUE_ADJ
+                elif is_away:
+                    research_adj_spread += _FATIGUE_ADJ
+                research_facts_applied += 1
+        mu_spread_final += research_adj_spread
+        mu_total_final  += research_adj_total
+
+        # --- Feature: Live Injury Impact Toggle (manual override layer) ---
         if self.manual_adjustments:
             h_inj = self.manual_adjustments.get('home_injury', 0.0)
             a_inj = self.manual_adjustments.get('away_injury', 0.0)
             mu_spread_final += h_inj
             mu_spread_final -= a_inj
+
 
         # --- Feature: Basement Line (Power Rating) ---
         raw_basement_line = (mu_torvik_spread + mu_kenpom_line) / 2.0
@@ -788,7 +930,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         bell_curve_total = self._generate_bell_curve(mu_total_final, sigma_total, mu_market_total)
             
         # 7. Recommendations & EV
-        recs = self._generate_recommendations(mu_spread_final, sigma_spread, mu_total_final, sigma_total, market_snapshot, event, torvik_view=torvik_view, relax_gates=relax_gates)
+        recs, rejected_candidates = self._generate_recommendations(mu_spread_final, sigma_spread, mu_total_final, sigma_total, market_snapshot, event, torvik_view=torvik_view, relax_gates=relax_gates)
 
         # Only fetch news context if something passed the gates.
         if recs:
@@ -833,6 +975,13 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "tempo_gap": kp_tempo_gap if 'kp_tempo_gap' in locals() else None,
             "council_adj_spread": council_adjustment_spread,
             "council_adj_total": council_adjustment_total,
+            "council_adj_gated": not COUNCIL_ADJUSTMENTS_ENABLED,
+            "rolling_sigma_spread": rolling_sig_s if 'rolling_sig_s' in locals() else None,
+            "rolling_sigma_total": rolling_sig_t if 'rolling_sig_t' in locals() else None,
+            "research_adj_spread": research_adj_spread if 'research_adj_spread' in locals() else 0.0,
+            "research_adj_total": research_adj_total if 'research_adj_total' in locals() else 0.0,
+            "research_facts_applied": research_facts_applied if 'research_facts_applied' in locals() else 0,
+            "rejected_candidates_count": len(rejected_candidates),
         }
         
         # 8. Narrative (UI MATCH)
@@ -1539,10 +1688,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
             return 'Medium'
         return 'Low'
 
-    def _generate_recommendations(self, mu_s, sig_s, mu_t, sig_t, snap, event, torvik_view: Optional[Dict[str, Any]] = None, relax_gates: bool = False) -> List[Dict]:
+    def _generate_recommendations(self, mu_s, sig_s, mu_t, sig_t, snap, event, torvik_view: Optional[Dict[str, Any]] = None, relax_gates: bool = False):
+        """Returns (recs, rejected_candidates) — every gated candidate has a reason."""
         recs: List[Dict[str, Any]] = []
+        rejected_candidates: List[Dict[str, Any]] = []
         if not snap:
-            return recs
+            return recs, rejected_candidates
 
         # Torvik availability: do not hard-require; used to tighten gates.
         torvik_ok = True
@@ -1992,7 +2143,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
                     else:
                         recs.append({**best, 'steam_blocked': False})
 
-        return recs
+        return recs, rejected_candidates
 
     def _normal_cdf(self, x, mu, sigma):
         return 0.5 * (1 + math.erf((x - mu) / (sigma * math.sqrt(2))))
