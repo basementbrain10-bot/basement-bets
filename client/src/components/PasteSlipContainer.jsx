@@ -82,7 +82,12 @@ export function PasteSlipContainer({ onSaveSuccess, onClose }) {
         try {
             // Background sync (Mac worker). Queue a job and poll status.
             const provider = sportsbook === 'DK' ? 'draftkings' : 'fanduel';
-            const q = await api.post('/api/sync/request', { provider });
+            const body = { provider };
+            if (provider === 'draftkings') {
+                // Map UI choice to account_id
+                body.account_id = (bankrollAccount === 'Secondary' || bankrollAccount === 'User2') ? 'User2' : 'Main';
+            }
+            const q = await api.post('/api/sync/request', body);
 
             const jobId = q.data?.job?.id;
             if (!jobId) {

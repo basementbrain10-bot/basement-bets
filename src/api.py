@@ -3832,11 +3832,50 @@ async def sync_request(payload: dict):
     Auth: Basement password (X-BASEMENT-KEY). We intentionally do NOT require Supabase auth
     because this app primarily uses the Basement key gate.
 
-    Payload: {"provider": "draftkings"|"fanduel"}
+    Payload:
+      - FanDuel:   {"provider": "fanduel"}
+      - DraftKings:{"provider": "draftkings", "account_id": "Main"|"User2"}
+
+    DraftKings uses the new DK_INGEST pipeline (job_type=DK_INGEST + payload_json).
     """
+    from datetime import datetime, timezone
+    import json as _json
+
     from src.sync_jobs import create_sync_job, DEFAULT_USER_ID
+    from src.database import get_db_connection, _exec, init_dk_ingest_db
 
     provider = (payload or {}).get("provider")
+    provider = (provider or '').strip().lower()
+
+    if provider == 'draftkings':
+        account_id = str((payload or {}).get('account_id') or 'Main')
+        if account_id not in ('Main', 'User2'):
+            raise HTTPException(status_code=400, detail='account_id must be Main or User2')
+
+        # Ensure schema exists (idempotent)
+        try:
+            init_dk_ingest_db()
+        except Exception as e:
+            print(f"[sync/request] init_dk_ingest_db warn: {e}")
+
+        user_id = DEFAULT_USER_ID
+        payload_json = _json.dumps({"book": "DraftKings", "user_id": str(user_id), "account_id": account_id})
+
+        with get_db_connection() as conn:
+            cur = _exec(
+                conn,
+                """
+                INSERT INTO sync_jobs (user_id, provider, status, requested_at, job_type, payload_json)
+                VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                RETURNING id, user_id, provider, status, requested_at, job_type, payload_json;
+                """,
+                (str(user_id), 'draftkings', 'QUEUED', datetime.now(timezone.utc), 'DK_INGEST', payload_json),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return {"status": "queued", "job": dict(row)}
+
+    # Default: legacy queue job (FanDuel)
     job = create_sync_job(provider=provider, user_id=DEFAULT_USER_ID)
     return {"status": "queued", "job": job}
 
@@ -3848,30 +3887,13 @@ async def sync_status():
 
 @app.post("/api/sync/draftkings")
 def sync_draftkings(payload: dict):
+    """Deprecated legacy endpoint.
+
+    DraftKings syncing now uses the DK_INGEST job queue (see /api/sync/request and
+    /api/jobs/queue_sync/draftkings). This endpoint is kept only to avoid breaking
+    older clients, and returns a 410.
     """
-    Launches local browser for DraftKings Sync.
-    Payload: {"account_name": "Main"}
-    """
-    from src.scrapers.user_draftkings import DraftKingsScraper
-    from src.parsers.draftkings_text import DraftKingsTextParser
-    
-    try:
-        scraper = DraftKingsScraper()
-        raw_text = scraper.scrape()
-        
-        parser = DraftKingsTextParser()
-        parsed_bets = parser.parse(raw_text)
-        
-        return {
-            "source": "DraftKings", 
-            "status": "success", 
-            "count": len(parsed_bets),
-            "bets": parsed_bets,
-            "raw_text_summary": raw_text[:100]
-        }
-    except Exception as e:
-        print(f"Sync failed: {e}")
-        return {"status": "error", "message": str(e)}
+    raise HTTPException(status_code=410, detail="DraftKings sync moved to queued DK_INGEST pipeline. Use POST /api/sync/request {provider:'draftkings', account_id:'Main'|'User2'}. ")
 
 @app.post("/api/sync/fanduel")
 def sync_fanduel(payload: dict):
