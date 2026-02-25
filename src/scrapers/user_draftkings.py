@@ -244,6 +244,9 @@ class DraftKingsScraper:
             # If auth/location is required, optionally wait for the operator to complete login
             # in the opened browser (interactive), then continue.
             wait_login_s = int(os.environ.get("DK_WAIT_FOR_LOGIN_SECONDS", "300"))
+            # When enabled, keep the worker running and auto-retry within a single job
+            # so the operator only has to log in once (no rerun command).
+            auto_retry_s = int(os.environ.get("DK_AUTO_RETRY_SECONDS", "0"))
 
             def _is_login_wall() -> bool:
                 try:
@@ -272,12 +275,24 @@ class DraftKingsScraper:
             if _is_login_wall():
                 print("[DK-Auto] Login/location verification required — please complete it in the opened browser window...")
                 import time as _time
+
+                # Phase 1: wait_login_s (existing behavior)
                 start = _time.time()
                 while _time.time() - start < wait_login_s:
                     _time.sleep(3)
                     if not _is_login_wall():
                         print("[DK-Auto] Login appears complete. Continuing...")
                         break
+
+                # Phase 2: optional auto-retry window to avoid forcing a rerun
+                if _is_login_wall() and auto_retry_s and auto_retry_s > 0:
+                    print(f"[DK-Auto] Still gated. Auto-retrying for up to {auto_retry_s}s (no rerun needed)...")
+                    start2 = _time.time()
+                    while _time.time() - start2 < auto_retry_s:
+                        _time.sleep(3)
+                        if not _is_login_wall():
+                            print("[DK-Auto] Login appears complete during auto-retry. Continuing...")
+                            break
 
                 if _is_login_wall():
                     if keep_open_on_auth:
@@ -291,6 +306,13 @@ class DraftKingsScraper:
                         f"DraftKings auth/location wall detected (url={driver.current_url!r}). "
                         "Please open Chrome with DK_PROFILE_PATH and log in/verify location, then retry."
                     )
+
+            # After auth clears, reload target page once to ensure the shell rehydrates.
+            try:
+                driver.get(driver.current_url)
+                time.sleep(2)
+            except Exception:
+                pass
 
             # 3. Click 'Settled' tab with resilient selectors
             settled_selectors = [
