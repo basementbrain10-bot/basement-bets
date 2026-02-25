@@ -68,7 +68,7 @@ def _finish_ingest_run(
 
 
 def _parse_date(val: Any) -> datetime | None:
-    """Robustly convert a date value to datetime."""
+    """Robustly convert a date value to datetime (naive/local)."""
     if val is None:
         return None
     if isinstance(val, datetime):
@@ -77,12 +77,55 @@ def _parse_date(val: Any) -> datetime | None:
     if not s:
         return None
     # Try common formats
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%b %d, %Y, %I:%M:%S %p", "%b %d, %Y"):
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d",
+        "%b %d, %Y, %I:%M:%S %p",
+        "%b %d, %Y",
+    ):
         try:
             return datetime.strptime(s, fmt)
         except ValueError:
             pass
     return None
+
+
+def _latest_existing_dk_placed_at(user_id: str, account_id: str) -> datetime | None:
+    """Find the latest placed-at timestamp we already have for DraftKings.
+
+    We use this as an incremental cutoff to avoid duplicates and backfills.
+    Falls back to None if no parsable dates exist.
+
+    NOTE: bets.date is stored as text in many legacy rows.
+    """
+    try:
+        with get_db_connection() as conn:
+            rows = _exec(
+                conn,
+                """
+                SELECT date
+                FROM bets
+                WHERE provider='DraftKings'
+                  AND user_id=%s
+                  AND account_id=%s
+                  AND date IS NOT NULL
+                ORDER BY id DESC
+                LIMIT 250
+                """,
+                (str(user_id), str(account_id)),
+            ).fetchall()
+        best = None
+        for r in rows:
+            d = r['date'] if isinstance(r, dict) else r[0]
+            dt = _parse_date(d)
+            if dt is None:
+                continue
+            if best is None or dt > best:
+                best = dt
+        return best
+    except Exception:
+        return None
 
 
 class DraftKingsIngestService:
@@ -104,7 +147,22 @@ class DraftKingsIngestService:
         """
         newer_than_days = int(os.environ.get("NEWER_THAN_DAYS", "7"))
         max_bets = int(os.environ.get("MAX_BETS_PER_RUN", "50"))
-        cutoff = datetime.now() - timedelta(days=newer_than_days)
+
+        # Incremental mode (preferred): only ingest bets placed AFTER the latest DK bet
+        # already present in the DB for this user+account.
+        #
+        # Override:
+        # - DK_SINCE_PLACED_AT can force a specific cutoff (e.g. "2026-02-20 19:24:00")
+        #
+        # Fallback:
+        # - NEWER_THAN_DAYS window (legacy behavior)
+        since_override = os.environ.get("DK_SINCE_PLACED_AT")
+        since_dt = _parse_date(since_override) if since_override else None
+        if since_dt is None:
+            since_dt = _latest_existing_dk_placed_at(user_id=str(user_id), account_id=str(account_id))
+
+        # Legacy safety window if we can't infer a since_dt
+        cutoff = since_dt or (datetime.now() - timedelta(days=newer_than_days))
 
         with get_db_connection() as conn:
             run_id = _start_ingest_run(conn, "DraftKings", account_id)
@@ -126,11 +184,17 @@ class DraftKingsIngestService:
             parsed = parser.parse(raw_text)
             count_parsed = len(parsed)
 
-            # 3. Filter by date
+            # 3. Filter by placed-at (incremental): keep only bets newer than cutoff
             filtered = []
             for bet in parsed:
                 dt = _parse_date(bet.get("date"))
-                if dt is None or dt >= cutoff:
+                # If date missing/unparseable, keep it (conservative) but these should be rare.
+                if dt is None:
+                    filtered.append(bet)
+                    continue
+
+                # Strictly greater than cutoff to avoid re-ingesting the last known bet.
+                if dt > cutoff:
                     filtered.append(bet)
 
             # 4. Cap
@@ -154,7 +218,10 @@ class DraftKingsIngestService:
                 inserted, updated = writer.upsert_bets(conn, filtered)
 
             status = "success"
-            message = f"Parsed {count_parsed}, filtered to {len(filtered)}, inserted {inserted}, updated {updated}."
+            message = (
+                f"Parsed {count_parsed}, cutoff>{cutoff}, filtered to {len(filtered)}, "
+                f"inserted {inserted}, updated {updated}."
+            )
 
         except NeedsHumanAuth as e:
             status = "needs_auth"
