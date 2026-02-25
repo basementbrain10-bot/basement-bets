@@ -1296,13 +1296,19 @@ async def remove_bet(bet_id: int, user: dict = Depends(get_current_user)):
 
 @app.get("/api/audit/bets/sport-mismatches")
 async def audit_bet_sport_mismatches(days: int = 60, limit: int = 800, user: dict = Depends(get_current_user)):
-    """Auditor agent: find bets whose `sport` appears wrong by matching teams to the canonical events table."""
+    """Auditor agent: find bets whose `sport` appears wrong.
+
+    Primary method: matchup -> events table -> league mismatch.
+    Fallback: for UNKNOWN sports (common for parlays/SGP text), suggest via detect_sport.
+    """
     try:
         uid = user.get("sub")
         from src.services.bet_auditor_agent import BetAuditorAgent
         agent = BetAuditorAgent()
-        items = agent.audit_sport_mismatches(user_id=uid, days_back=int(days), limit=int(limit))
-        return {"status": "success", "items": items}
+        safe_limit = min(int(limit), 5000)
+        safe_days = min(int(days), 3650)
+        items = agent.audit_sport_mismatches(user_id=uid, days_back=safe_days, limit=safe_limit)
+        return {"status": "success", "items": items, "days": safe_days, "limit": safe_limit}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
