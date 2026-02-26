@@ -44,11 +44,14 @@ class GradingService:
         # 3) Grade outcomes for finals (bounded)
         graded_count, graded_results = self._evaluate_db_predictions(max_rows=max_grade_rows)
 
-        # 4) Run Post-Mortem pipeline on recently graded games
-        if graded_count > 0:
-            print(f"[GRADING] Triggering post-mortem for {graded_count} games...")
+        # 4) Run Post-Mortem pipeline on recently graded AND orphaned graded games
+        orphaned_results = self._fetch_unreflected_graded_results(backfill_days=backfill_days)
+        all_to_review = graded_results + orphaned_results
+
+        if all_to_review:
+            print(f"[GRADING] Triggering post-mortem for {len(all_to_review)} games ({len(graded_results)} new, {len(orphaned_results)} orphaned)...")
             try:
-                self.post_mortem_agent.execute({"completed_games": graded_results})
+                self.post_mortem_agent.execute({"completed_games": all_to_review})
             except Exception as e:
                 print(f"[GRADING] Post-mortem agent failed: {e}")
 
@@ -326,6 +329,52 @@ class GradingService:
                 print(f"[GRADING] Error grading row {row['id']}: {e}")
                 
         return graded, graded_results
+
+    def _fetch_unreflected_graded_results(self, backfill_days: int = 3) -> list:
+        """Fetch games that are GRADED but have no entry in agent_memories yet.
+        This provides a safety net if a post-mortem run failed or timed out.
+        """
+        min_ev = float(os.getenv('GRADING_MIN_EV_PER_UNIT', '0.02'))
+        query = """
+        SELECT m.id, m.event_id, m.market_type, m.pick, m.bet_line, m.book,
+               m.selection, m.analyzed_at, m.narrative_json,
+               e.home_team, e.away_team,
+               gr.home_score, gr.away_score, gr.final
+        FROM model_predictions m
+        JOIN events e ON m.event_id = e.id
+        JOIN game_results gr ON e.id = gr.event_id
+        LEFT JOIN agent_memories am ON (am.team_a = e.away_team AND am.team_b = e.home_team)
+        WHERE m.outcome <> 'PENDING' 
+          AND m.outcome IS NOT NULL
+          AND m.outcome <> 'VOID'
+          AND gr.final = TRUE
+          AND am.id IS NULL
+          AND e.start_time >= (NOW() - (%(days)s || ' days')::interval)
+          AND COALESCE(m.ev_per_unit, 0) >= %(min_ev)s
+        ORDER BY m.analyzed_at DESC
+        LIMIT 20
+        """
+        results = []
+        try:
+            with get_db_connection() as conn:
+                rows = _exec(conn, query, {"days": backfill_days, "min_ev": min_ev}).fetchall()
+                for row in rows:
+                    row_dict = dict(row)
+                    results.append({
+                        "away_team": row_dict['away_team'],
+                        "home_team": row_dict['home_team'],
+                        "away_score": row_dict['away_score'],
+                        "home_score": row_dict['home_score'],
+                        "oracle_prediction": row_dict.get('oracle_verdict') or row_dict.get('narrative_json') or "N/A",
+                        "recommended_bet": row_dict.get('selection') or f"{row_dict['pick']} {row_dict['bet_line']}",
+                        "actual_result": f"{row_dict['home_team']} {row_dict['home_score']} - {row_dict['away_team']} {row_dict['away_score']}",
+                        "game_date": row_dict.get('analyzed_at').strftime("%Y-%m-%d") if row_dict.get('analyzed_at') else None,
+                        "final": row_dict.get('final')
+                    })
+        except Exception as e:
+            print(f"[GRADING] Error pre-fetching orphaned reflections: {e}")
+            
+        return results
 
     def _grade_row(self, row):
         from src.utils.normalize import normalize_market
