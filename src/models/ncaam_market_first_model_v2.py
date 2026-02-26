@@ -431,12 +431,16 @@ class NCAAMMarketFirstModelV2(BaseModel):
             # Step A: Get CONSENSUS lines (median of all books) for model input
             consensus_spread = self.odds_selector.get_consensus_snapshot(raw_snaps, 'SPREAD', 'HOME')
             consensus_total = self.odds_selector.get_consensus_snapshot(raw_snaps, 'TOTAL', 'OVER')
+            consensus_ml_home = self.odds_selector.get_consensus_snapshot(raw_snaps, 'MONEYLINE', 'HOME')
+            consensus_ml_away = self.odds_selector.get_consensus_snapshot(raw_snaps, 'MONEYLINE', 'AWAY')
             
             # Step B: Get BEST PRICES for later (after we find an edge)
             best_spread_home = self.odds_selector.get_best_price_for_side(raw_snaps, 'SPREAD', 'HOME')
             best_spread_away = self.odds_selector.get_best_price_for_side(raw_snaps, 'SPREAD', 'AWAY')
             best_total_over = self.odds_selector.get_best_price_for_side(raw_snaps, 'TOTAL', 'OVER')
             best_total_under = self.odds_selector.get_best_price_for_side(raw_snaps, 'TOTAL', 'UNDER')
+            best_ml_home = self.odds_selector.get_best_price_for_side(raw_snaps, 'MONEYLINE', 'HOME')
+            best_ml_away = self.odds_selector.get_best_price_for_side(raw_snaps, 'MONEYLINE', 'AWAY')
             
             # Composite Snapshot for Analysis (uses CONSENSUS for model math)
             mc = self._get_market_consensus(event_id)
@@ -446,8 +450,13 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 'spread_price_home': consensus_spread['price'] if consensus_spread else -110,
                 'total': consensus_total['line_value'] if consensus_total else None,
                 'total_over_price': consensus_total['price'] if consensus_total else -110,
+                # Moneyline consensus prices (used for ML persistence + parlay agent)
+                'moneyline_price_home': consensus_ml_home['price'] if consensus_ml_home else None,
+                'moneyline_price_away': consensus_ml_away['price'] if consensus_ml_away else None,
                 'book_spread': 'Consensus',
                 'book_total': 'Consensus',
+                'book_ml': 'Consensus',
+                'book_ml': 'Consensus',
                 # Movement / derived
                 '_market_consensus': mc,
                 'open_spread_home': (mc.get('open_spread_home') if mc else None),
@@ -461,6 +470,8 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 '_best_spread_away': best_spread_away,
                 '_best_total_over': best_total_over,
                 '_best_total_under': best_total_under,
+                '_best_moneyline_home': best_ml_home,
+                '_best_moneyline_away': best_ml_away,
                 # Raw for narrative
                 '_raw_snaps': raw_snaps
             }
@@ -1168,6 +1179,99 @@ class NCAAMMarketFirstModelV2(BaseModel):
 
         if persist and should_persist:
             insert_model_prediction(res)
+
+        # 10b. Persist ML prediction (separate row)
+        # This does NOT change the existing spread/total recommendation selection.
+        # It exists to power 2-leg ML parlay construction.
+        try:
+            from src.utils.ev import ev_per_unit, implied_prob_american
+
+            # Determine best ML prices (prefer best book, fallback to consensus).
+            best_ml_home = (market_snapshot.get('_best_moneyline_home') or {}) if isinstance(market_snapshot, dict) else {}
+            best_ml_away = (market_snapshot.get('_best_moneyline_away') or {}) if isinstance(market_snapshot, dict) else {}
+            ml_price_home = best_ml_home.get('price') if best_ml_home else None
+            ml_price_away = best_ml_away.get('price') if best_ml_away else None
+            ml_book_home = best_ml_home.get('book') if best_ml_home else (market_snapshot.get('book_ml') if isinstance(market_snapshot, dict) else None)
+            ml_book_away = best_ml_away.get('book') if best_ml_away else (market_snapshot.get('book_ml') if isinstance(market_snapshot, dict) else None)
+
+            if ml_price_home is None and isinstance(market_snapshot, dict):
+                ml_price_home = market_snapshot.get('moneyline_price_home')
+            if ml_price_away is None and isinstance(market_snapshot, dict):
+                ml_price_away = market_snapshot.get('moneyline_price_away')
+
+            # Compute home win prob from margin distribution: P(margin_home > 0)
+            # mu_s is home-perspective margin mean.
+            if ml_price_home is not None and ml_price_away is not None:
+                prob_home_raw = 1.0 - self._normal_cdf(0.0, float(mu_s), float(sig_s))
+                prob_home = self._calibrate_win_prob(prob_home_raw)
+                prob_away = self._calibrate_win_prob(1.0 - prob_home_raw)
+
+                ev_home = float(ev_per_unit(prob_home, int(ml_price_home)) or 0.0)
+                ev_away = float(ev_per_unit(prob_away, int(ml_price_away)) or 0.0)
+
+                # Choose side with higher EV
+                side = 'HOME' if ev_home >= ev_away else 'AWAY'
+                team = event.get('home_team') if side == 'HOME' else event.get('away_team')
+                price = int(ml_price_home) if side == 'HOME' else int(ml_price_away)
+                book = ml_book_home if side == 'HOME' else ml_book_away
+                wp = prob_home if side == 'HOME' else prob_away
+                ev = ev_home if side == 'HOME' else ev_away
+
+                # Gate persistence similarly to straight picks
+                should_persist_ml = float(ev or 0.0) >= float(self.PUBLISH_MIN_EV)
+                should_persist_ml = should_persist_ml and team is not None and str(team).strip() != ''
+
+                # Apply same lock window
+                if should_persist_ml:
+                    try:
+                        from datetime import timezone
+                        st = event.get('start_time')
+                        if st is not None:
+                            if isinstance(st, str):
+                                st = datetime.fromisoformat(st.replace('Z', '+00:00'))
+                            if getattr(st, 'tzinfo', None) is None:
+                                st = st.replace(tzinfo=timezone.utc)
+                            now_dt = datetime.now(timezone.utc)
+                            if now_dt >= (st - timedelta(minutes=10)):
+                                should_persist_ml = False
+                    except Exception:
+                        pass
+
+                if persist and should_persist_ml:
+                    import uuid
+                    edge_prob = None
+                    try:
+                        ip = implied_prob_american(price)
+                        edge_prob = (float(wp) - float(ip)) if ip is not None else None
+                    except Exception:
+                        edge_prob = None
+
+                    doc_ml = {
+                        **{k: res.get(k) for k in ("event_id", "user_id", "analyzed_at", "model_version", "mu_market", "mu_torvik", "mu_final", "sigma", "inputs_json", "outputs_json", "narrative_json", "context_json")},
+                        "id": str(uuid.uuid4()),
+                        "market_type": "MONEYLINE",
+                        "pick": team,
+                        "bet_line": None,
+                        "bet_price": price,
+                        "book": book,
+                        "win_prob": float(wp),
+                        "ev_per_unit": float(ev),
+                        "confidence_0_100": int(float(ev) * 100 * 5),
+                        "selection": str(team),
+                        "price": price,
+                        # Store probability edge as edge_points for ML (not points).
+                        "edge_points": (round(float(edge_prob), 4) if edge_prob is not None else None),
+                        "open_line": None,
+                        "open_price": price,
+                        "clv_method": "odds_selector_v1",
+                    }
+                    insert_model_prediction(doc_ml)
+        except Exception as e:
+            # never block analyze() on ML persistence
+            try:
+                print(f"[MODEL] ML persistence skipped: {e}")
+            except Exception:
+                pass
 
         return res
 
