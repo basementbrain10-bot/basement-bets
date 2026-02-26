@@ -107,21 +107,72 @@ class OracleAgent(BaseAgent):
         """
 
         try:
-            self.log_trace(f"Synthesizing debate for {len(events)} matchups", {"event_ids": [ev.event_id for ev in events]})
-            response_text = generate_content(
+            self.log_trace(f"Pass 1: Initial Synthesis for {len(events)} matchups", {"event_ids": [ev.event_id for ev in events]})
+            
+            # Pass 1: Initial Debate
+            initial_response = generate_content(
                 model="gemini-2.0-flash",
                 system_prompt=system_prompt,
                 json_mode=True,
                 max_tokens=8192
             )
-            clean_text = response_text.strip()
+            
+            # Pass 2: The Contrarian Critique
+            critique_prompt = f"""
+            You are the 'Council Auditor', a contrarian sports analyst. 
+            Review the following initial AI council debate for {len(events)} matchups:
+            
+            {initial_response}
+            
+            TASK:
+            1. Identify any "groupthink" or overly optimistic assumptions in the verdicts.
+            2. For each matchup, find ONE major risk or contradiction that the initial council ignored.
+            3. CRITICAL: If a 'historical_lesson' or 'extracted_fact' was misinterpreted, flag it clearly.
+            4. Return a JSON dict keyed by event_id with a concise 'critique' and a 'risk_score' (0.0 to 1.0).
+            """
+            
+            self.log_trace("Pass 2: Contrarian Critique initiated")
+            critique_response = generate_content(
+                model="gemini-2.0-flash",
+                system_prompt=critique_prompt,
+                json_mode=True,
+                max_tokens=4096
+            )
+            
+            # Pass 3: Final Synthesis (Injecting Critique back into the Oracle)
+            final_prompt = f"""
+            You are 'The Oracle'. You have completed an initial debate and received a critique from the Council Auditor.
+            
+            INITIAL DEBATE:
+            {initial_response}
+            
+            CONTRARIAN CRITIQUE:
+            {critique_response}
+            
+            TASK:
+            1. Produce the FINAL councils_narrative JSON.
+            2. Integrate the 'Critique' into a new agent role called "Contrarian Auditor" in the debate.
+            3. Adjust the 'oracle_verdict' and 'signals.confidence' if the critique identified valid risks.
+            4. If the critique was insightful, add its points to `signals.red_flags`.
+            
+            Keep the exact same JSON format as the initial debate.
+            """
+            
+            self.log_trace("Pass 3: Final Synthesis initiated")
+            final_text = generate_content(
+                model="gemini-2.0-flash",
+                system_prompt=final_prompt,
+                json_mode=True,
+                max_tokens=8192
+            )
+            
+            clean_text = final_text.strip()
             if clean_text.startswith("```json"):
                 clean_text = clean_text[7:]
             if clean_text.endswith("```"):
                 clean_text = clean_text[:-3]
             clean_text = clean_text.strip()
             
-            self.log_trace("Oracle response received", {"raw_json": clean_text})
             council_output = json.loads(clean_text)
             
             # Map back to results ensuring all events have an entry
@@ -132,14 +183,13 @@ class OracleAgent(BaseAgent):
                         "verdict": results[ev.event_id].get('oracle_verdict'),
                         "confidence": results[ev.event_id].get('signals', {}).get('confidence')
                     }
-                    self.log_trace(f"Oracle verdict generated for {ev.away_team} at {ev.home_team}", trace_data)
+                    self.log_trace(f"Oracle final verdict generated for {ev.away_team} at {ev.home_team}", trace_data)
                 else:
                     results[ev.event_id] = {
-                        "debate": [{"agent": "System", "message": "Oracle omitted this event in batch response."}],
-                        "oracle_verdict": "Omitted from batch.",
+                        "debate": [{"agent": "System", "message": "Oracle omitted this event in final synthesis."}],
+                        "oracle_verdict": "Omitted.",
                         "signals": {"confidence": 0.0, "data_points": [], "sources": [], "red_flags": []}
                     }
-                    self.log_trace(f"Oracle omitted event: {ev.event_id}")
 
             # Persist structured signals to council_signals table
             self._persist_signals(events, results, run_id)
