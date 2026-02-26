@@ -10,6 +10,7 @@ import Research from './pages/Research';
 import Picks from './pages/Picks';
 import Bankroll from './pages/Bankroll';
 import AgentCouncil from './pages/AgentCouncil';
+import Cockpit from './pages/Cockpit';
 import { PasteSlipContainer } from './components/PasteSlipContainer';
 import TransactionView from './components/TransactionView';
 import ManualAddBetModal from './components/ManualAddBetModal';
@@ -104,7 +105,7 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
-    const [page, setPage] = useState('today'); // today | model | actuals | council
+    const [page, setPage] = useState('cockpit'); // cockpit | today | model | actuals | council
     // Actuals sub-tabs
     const [actualsTab, setActualsTab] = useState('transactions'); // transactions | performance | bankroll
 
@@ -429,6 +430,14 @@ function App() {
                             {/* Primary nav (segmented control) */}
                             <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
                                 <button
+                                    onClick={() => setPage('cockpit')}
+                                    className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${page === 'cockpit' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                                >
+                                    <LayoutDashboard size={18} />
+                                    <span className="hidden sm:inline">Cockpit</span>
+                                    <span className="sm:hidden">Cockpit</span>
+                                </button>
+                                <button
                                     onClick={() => setPage('today')}
                                     className={`px-3 md:px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition ${page === 'today' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                                 >
@@ -551,7 +560,9 @@ function App() {
                         </div>
                     )}
 
-                    {page === 'today' ? (
+                    {page === 'cockpit' ? (
+                        <Cockpit />
+                    ) : page === 'today' ? (
                         <Research
                             onAddBet={(prefill) => {
                                 // If a pick row is passed, open manual add-bet prefilled.

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { Search, Brain, Gavel, FileText, ChevronRight, Activity, Clock, ShieldAlert } from 'lucide-react';
+import AgentCouncilDebate, { getAgentIcon } from '../components/AgentCouncilDebate';
 
 export default function AgentCouncil() {
     const [events, setEvents] = useState([]);
@@ -80,15 +81,6 @@ export default function AgentCouncil() {
         }
     };
 
-    // Agent Avatar Mapping
-    const getAgentIcon = (agentName) => {
-        const name = agentName.toLowerCase();
-        if (name.includes('stat') || name.includes('quant')) return <Activity className="text-blue-400" />;
-        if (name.includes('news') || name.includes('injury') || name.includes('qualitative')) return <FileText className="text-orange-400" />;
-        if (name.includes('memory') || name.includes('rag')) return <Brain className="text-purple-400" />;
-        if (name.includes('executive') || name.includes('summary')) return <Gavel className="text-violet-400" />;
-        return <Search className="text-slate-400" />;
-    };
 
     if (loading) {
         return (
@@ -308,20 +300,9 @@ export default function AgentCouncil() {
                                     <p className="text-xs text-red-500/70 mt-2">The orchestrator must run `mode=agents` to generate debates.</p>
                                 </div>
                             ) : activeTab === 'debate' ? (
-                                <div className="space-y-6">
                                     {/* The Debate Transcript */}
                                     <div className="space-y-6">
-                                        {(councilData?.narrative?.debate || councilData?.debate)?.map((msg, idx) => (
-                                            <div key={idx} className="flex gap-4">
-                                                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 shrink-0">
-                                                    {getAgentIcon(msg.agent)}
-                                                </div>
-                                                <div className="flex-1 bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-sm p-4">
-                                                    <div className="font-bold text-sm text-slate-300 mb-1">{msg.agent}</div>
-                                                    <div className="text-slate-400 text-sm leading-relaxed whitespace-pre-wrap">{msg.message}</div>
-                                                </div>
-                                            </div>
-                                        ))}
+                                        <AgentCouncilDebate debate={councilData?.narrative?.debate || councilData?.debate} />
                                     </div>
 
                                     {/* The Oracle's Verdict */}
