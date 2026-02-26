@@ -22,7 +22,7 @@ export default function ParlayRecommendations() {
     setLoading(true);
     setErr(null);
     try {
-      const res = await api.get('/api/ncaam/parlays/today', { params: { min_ev_per_unit: 0.02, odds_lo: -120, odds_hi: 300 } });
+      const res = await api.get('/api/ncaam/parlays/today', { params: { min_ev_per_unit: 0.02, parlay_odds_lo: -120, parlay_odds_hi: 300 } });
       setData(res.data);
     } catch (e) {
       setErr(e?.response?.data?.detail || e?.message || 'Failed to load parlays');

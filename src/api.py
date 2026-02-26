@@ -3435,10 +3435,10 @@ async def get_ncaam_analytics(days: int = 30, min_ev_per_unit: float = 0.02):
 @app.get("/api/ncaam/parlays/today")
 async def get_ncaam_parlays_today(
     min_ev_per_unit: float = 0.02,
-    odds_lo: int = -120,
-    odds_hi: int = 300,
+    parlay_odds_lo: int = -120,
+    parlay_odds_hi: int = 300,
     max_legs: int = 2,
-    limit_legs: int = 30,
+    limit_legs: int = 80,
 ):
     """2-leg ML parlay recommendations for today's NCAAM slate.
 
@@ -3493,13 +3493,12 @@ async def get_ncaam_parlays_today(
         AND (m.analyzed_at AT TIME ZONE 'America/New_York')::date = (NOW() AT TIME ZONE 'America/New_York')::date
         AND COALESCE(m.ev_per_unit, 0) >= %(min_ev)s
         AND COALESCE(m.bet_price, m.price) IS NOT NULL
-        AND COALESCE(m.bet_price, m.price) BETWEEN %(lo)s AND %(hi)s
       ORDER BY COALESCE(m.ev_per_unit, 0) DESC
       LIMIT %(lim)s
     """
 
     with get_db_connection() as conn:
-        legs = [dict(r) for r in _exec(conn, q, {"min_ev": float(min_ev_per_unit), "lo": int(odds_lo), "hi": int(odds_hi), "lim": int(limit_legs)}).fetchall()]
+        legs = [dict(r) for r in _exec(conn, q, {"min_ev": float(min_ev_per_unit), "lim": int(limit_legs)}).fetchall()]
 
     # Build normalized leg objects
     norm_legs = []
@@ -3548,15 +3547,21 @@ async def get_ncaam_parlays_today(
                 "ev": ev,
             })
 
-    # High confidence shortlist
-    high_conf = sorted(combos, key=lambda x: (x['p_win'], x['ev']), reverse=True)[:5]
+    # Filter combos by TOTAL parlay odds band (user spec)
+    def in_parlay_band(c):
+        try:
+            a = int(c.get('american_odds') or 0)
+        except Exception:
+            return False
+        return a >= int(parlay_odds_lo) and a <= int(parlay_odds_hi)
 
-    # Payout band shortlist (pretty good odds; adjustable)
-    # Using a broad default band since user wants -120..+300 legs; parlay can vary.
-    band_lo = 1.8  # ~ -125
-    band_hi = 4.0  # +300
-    payout_band = [c for c in combos if c['decimal_odds'] >= band_lo and c['decimal_odds'] <= band_hi]
-    payout_band = sorted(payout_band, key=lambda x: (x['ev'], x['p_win']), reverse=True)[:5]
+    combos_in_band = [c for c in combos if in_parlay_band(c)]
+
+    # High confidence shortlist (within band)
+    high_conf = sorted(combos_in_band, key=lambda x: (x['p_win'], x['ev']), reverse=True)[:5]
+
+    # Payout band shortlist (within band; best EV)
+    payout_band = sorted(combos_in_band, key=lambda x: (x['ev'], x['p_win']), reverse=True)[:5]
 
     return {
         "status": "success",
