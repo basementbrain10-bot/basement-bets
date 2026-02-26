@@ -629,7 +629,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 council_adjustment_total = -abs(float(total_lean.get('points', 1.5)))
 
         # Apply council_adjustment_spread (gated by COUNCIL_ADJUSTMENTS_ENABLED)
-        council_adj_gated = not COUNCIL_ADJUSTMENTS_ENABLED
+        potential_adjustment_spread = council_adjustment_spread
         if COUNCIL_ADJUSTMENTS_ENABLED:
             mu_spread_final += council_adjustment_spread
         else:
@@ -672,6 +672,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         mu_total_final = mu_market_total + (w_base * (mu_torvik_total - mu_market_total)) + (self.W_KENPOM * (mu_kenpom_total - mu_market_total))
         mu_total_final += kp_player_total_adj
+        potential_adjustment_total = council_adjustment_total
         if COUNCIL_ADJUSTMENTS_ENABLED:
             mu_total_final += council_adjustment_total
         else:
@@ -693,6 +694,25 @@ class NCAAMMarketFirstModelV2(BaseModel):
         
         sigma_spread = (base_sigma_spread * tempo_factor) + 0.1 * abs(diff_torvik)
         sigma_total = (base_sigma_total * tempo_factor) + 0.1 * abs(mu_torvik_total - mu_market_total)
+
+        # --- Feature: Dynamic Sigma Inflation ---
+        # If the Council identifies roster instability or significant red flags, 
+        # inflate sigma to represent increased uncertainty (wider bell curve).
+        if council_verdict:
+            instability_found = False
+            red_flags = council_verdict.get('signals', {}).get('red_flags', [])
+            data_points = council_verdict.get('signals', {}).get('data_points', [])
+            
+            if red_flags: instability_found = True
+            for dp in data_points:
+                if dp.get('type') in ['injury', 'rotation']:
+                    instability_found = True
+                    break
+            
+            if instability_found:
+                self.log_trace("Inflating sigma due to qualitative instability signals", {"event_id": event_id})
+                sigma_spread *= 1.15
+                sigma_total *= 1.15
 
         # Possessions validation: compare Torvik game_tempo vs KenPom team tempo (AdjT) average.
         kp_tempo = None
@@ -1127,7 +1147,17 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "kelly": best_rec['kelly'] if best_rec else 0.0,
             "confidence_0_100": int(best_rec['ev'] * 100 * 5) if best_rec else 0, # Crude scale
             "inputs_json": json.dumps({"market": market_snapshot, "torvik": torvik_view, "kenpom": kenpom_adj, "news": news_context}, default=str),
-            "outputs_json": json.dumps({"mu_spread": mu_spread_final, "mu_total": mu_total_final, "recommendations": recs, "debug": debug_info}, default=str),
+            "outputs_json": json.dumps({
+                "mu_spread": mu_spread_final, 
+                "mu_total": mu_total_final, 
+                "recommendations": recs, 
+                "debug": debug_info,
+                "potential_adjustment": {
+                    "spread": potential_adjustment_spread,
+                    "total": potential_adjustment_total,
+                    "gated": not COUNCIL_ADJUSTMENTS_ENABLED
+                }
+            }, default=str),
             "narrative": narrative, 
             "narrative_json": json.dumps(narrative, default=str),
             "context_json": json.dumps(ctx, default=str),
@@ -1139,6 +1169,11 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "game_script": game_script,
             "kenpom_data": kenpom_adj,
             "news_summary": self.news_service.summarize_impact(news_context),
+            "potential_adjustment": {
+                "spread": potential_adjustment_spread,
+                "total": potential_adjustment_total,
+                "gated": not COUNCIL_ADJUSTMENTS_ENABLED
+            },
             "key_factors": narrative.get('key_factors') or [],
             "risks": narrative.get('risks') or [],
             "selection": persisted_selection,

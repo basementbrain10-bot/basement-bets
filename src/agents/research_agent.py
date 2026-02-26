@@ -55,11 +55,36 @@ class ResearchAgent(BaseAgent):
                         self.log_trace(f"Found search result: {title}", {"url": url})
 
                 batch_citations[ev.event_id] = citations
+                
+                # DEEP SCRAPING: Fetch actual content for the top 3 results to give LLM full context
+                scraped_context = []
+                for cite in citations[:3]:
+                    url = cite['url']
+                    try:
+                        self.log_trace(f"Deep scraping: {url}")
+                        c_resp = requests.get(url, headers=headers, timeout=5)
+                        c_resp.raise_for_status()
+                        c_soup = BeautifulSoup(c_resp.text, 'html.parser')
+                        
+                        # Remove script/style noise
+                        for script in c_soup(["script", "style"]):
+                            script.decompose()
+                            
+                        text = c_soup.get_text(separator=' ', strip=True)
+                        # Cap at 1500 chars per page to avoid token blowup
+                        scraped_context.append({
+                            "url": url,
+                            "content": text[:1500]
+                        })
+                    except Exception as ce:
+                        self.log_trace(f"Scrape failed for {url}: {ce}")
+
                 research_results[ev.event_id] = {
                     "query": query,
                     "articles_found": len(citations),
                     "summary": f"Found {len(citations)} raw search results for analysis.",
                     "citations": citations,
+                    "deep_context": scraped_context,
                     "facts": []
                 }
             except Exception as e:
@@ -69,6 +94,7 @@ class ResearchAgent(BaseAgent):
                     "articles_found": 0,
                     "summary": f"Search failed: {str(e)}",
                     "citations": [],
+                    "deep_context": [],
                     "facts": []
                 }
 
@@ -82,16 +108,18 @@ class ResearchAgent(BaseAgent):
                 extraction_input = []
                 for ev in events_with_citations:
                     cites = batch_citations.get(ev.event_id, [])
+                    deep = research_results[ev.event_id].get("deep_context", [])
                     extraction_input.append({
                         "event_id": ev.event_id,
                         "matchup": f"{ev.away_team} at {ev.home_team}",
-                        "snippets": cites
+                        "snippets": cites,
+                        "deep_context": deep
                     })
 
                 extract_prompt = f"""
-You are a sports reporter extracting ONLY verifiable facts from search result snippets.
+You are a sports reporter extracting ONLY verifiable facts from search result snippets and scraped article context.
 
-Here are raw search snippets for multiple college basketball matchups:
+Here is raw research data for multiple college basketball matchups:
 {json.dumps(extraction_input, indent=2)}
 
 For EACH matchup, extract concrete facts. Return ONLY a JSON dict keyed by event_id.
@@ -105,7 +133,7 @@ Each value is a list of facts with this exact schema:
 }}
 
 RULES:
-- Only include claims directly stated in the snippets. NO INFERENCE.
+- Only include claims directly stated in the snippets or content. NO INFERENCE.
 - If no concrete facts exist for a matchup, return an empty list for that event_id.
 - Do NOT invent injuries or roster changes.
 - Keep detail to one sentence.
