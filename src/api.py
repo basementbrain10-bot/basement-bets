@@ -3432,6 +3432,151 @@ async def get_ncaam_analytics(days: int = 30, min_ev_per_unit: float = 0.02):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/ncaam/parlays/today")
+async def get_ncaam_parlays_today(
+    min_ev_per_unit: float = 0.02,
+    parlay_odds_lo: int = -120,
+    parlay_odds_hi: int = 300,
+    max_legs: int = 2,
+    limit_legs: int = 80,
+):
+    """2-leg ML parlay recommendations for today's NCAAM slate.
+
+    Source: model_predictions (Moneyline only). Read-only.
+
+    Returns two lists:
+    - high_confidence: highest P(win) combos
+    - payout_band: best EV combos within a reasonable payout range
+    """
+    if int(max_legs) != 2:
+        raise HTTPException(status_code=400, detail="Only 2-leg parlays supported in v1")
+
+    from src.database import get_db_connection, _exec
+
+    def dec_from_american(a: int) -> float:
+        a = int(a)
+        return 1.0 + (a / 100.0) if a > 0 else 1.0 + (100.0 / abs(a))
+
+    def implied_prob(a: int) -> float:
+        a = int(a)
+        return 100.0 / (a + 100.0) if a > 0 else abs(a) / (abs(a) + 100.0)
+
+    def american_from_dec(d: float) -> int:
+        # d is decimal odds
+        if d <= 1.0:
+            return 0
+        x = d - 1.0
+        if x >= 1.0:
+            return int(round(x * 100))
+        return int(round(-100 / x))
+
+    # Today ET date filter
+    q = """
+      SELECT
+        m.event_id,
+        m.model_version,
+        m.market_type,
+        m.pick,
+        m.bet_line,
+        COALESCE(m.bet_price, m.price) AS price,
+        m.win_prob,
+        m.ev_per_unit,
+        m.selection,
+        e.away_team,
+        e.home_team,
+        e.start_time,
+        (m.analyzed_at AT TIME ZONE 'America/New_York')::date::text AS day_et
+      FROM model_predictions m
+      JOIN events e ON m.event_id = e.id
+      WHERE e.league = 'NCAAM'
+        AND UPPER(COALESCE(m.market_type,'')) IN ('MONEYLINE','ML')
+        AND (m.analyzed_at AT TIME ZONE 'America/New_York')::date = (NOW() AT TIME ZONE 'America/New_York')::date
+        AND COALESCE(m.ev_per_unit, 0) >= %(min_ev)s
+        AND COALESCE(m.bet_price, m.price) IS NOT NULL
+      ORDER BY COALESCE(m.ev_per_unit, 0) DESC
+      LIMIT %(lim)s
+    """
+
+    with get_db_connection() as conn:
+        legs = [dict(r) for r in _exec(conn, q, {"min_ev": float(min_ev_per_unit), "lim": int(limit_legs)}).fetchall()]
+
+    # Build normalized leg objects
+    norm_legs = []
+    for r in legs:
+        try:
+            price = int(r.get('price'))
+        except Exception:
+            continue
+        wp = r.get('win_prob')
+        try:
+            wp = float(wp) if wp is not None else None
+        except Exception:
+            wp = None
+        if wp is None or not (0 < wp < 1.0):
+            continue
+        norm_legs.append({
+            "event_id": r.get('event_id'),
+            "matchup": f"{r.get('away_team')} @ {r.get('home_team')}",
+            "team_pick": r.get('selection') or r.get('pick'),
+            "price": price,
+            "win_prob": wp,
+            "ev_per_unit": float(r.get('ev_per_unit') or 0),
+            "model_version": r.get('model_version'),
+            "start_time": str(r.get('start_time') or ''),
+        })
+
+    # Enumerate all 2-leg combos (different events)
+    combos = []
+    for i in range(len(norm_legs)):
+        for j in range(i + 1, len(norm_legs)):
+            a = norm_legs[i]
+            b = norm_legs[j]
+            if not a.get('event_id') or a.get('event_id') == b.get('event_id'):
+                continue
+
+            p = float(a['win_prob']) * float(b['win_prob'])
+            dec = dec_from_american(a['price']) * dec_from_american(b['price'])
+            amer = american_from_dec(dec)
+            # EV approximation using independent p
+            ev = p * (dec - 1.0) - (1.0 - p)
+            combos.append({
+                "legs": [a, b],
+                "p_win": p,
+                "decimal_odds": dec,
+                "american_odds": amer,
+                "ev": ev,
+            })
+
+    # Filter combos by TOTAL parlay odds band (user spec)
+    def in_parlay_band(c):
+        try:
+            a = int(c.get('american_odds') or 0)
+        except Exception:
+            return False
+        return a >= int(parlay_odds_lo) and a <= int(parlay_odds_hi)
+
+    combos_in_band = [c for c in combos if in_parlay_band(c)]
+
+    # High confidence shortlist (within band)
+    high_conf = sorted(combos_in_band, key=lambda x: (x['p_win'], x['ev']), reverse=True)[:5]
+
+    # Payout band shortlist (within band; best EV)
+    payout_band = sorted(combos_in_band, key=lambda x: (x['ev'], x['p_win']), reverse=True)[:5]
+
+    return {
+        "status": "success",
+        "legs_considered": len(norm_legs),
+        "combos_considered": len(combos),
+        "params": {
+            "min_ev_per_unit": float(min_ev_per_unit),
+            "odds_lo": int(parlay_odds_lo),
+            "odds_hi": int(parlay_odds_hi),
+        },
+        "high_confidence": high_conf,
+        "payout_band": payout_band,
+    }
+
+
 @app.get("/api/ncaam/model-performance/series")
 async def get_ncaam_model_performance_series(days: int = 30, min_ev_per_unit: float = 0.02):
     """Daily model performance series for *recommended bets only*.

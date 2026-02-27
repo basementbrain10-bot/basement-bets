@@ -4,6 +4,7 @@ import { loadCache } from '../utils/httpCache';
 import { ArrowUpDown, ChevronUp, ChevronDown, Filter, RefreshCw, CheckCircle, AlertCircle, Info, Shield, ShieldAlert, ShieldCheck, PlusCircle } from 'lucide-react';
 import ModelPerformanceAnalytics from '../components/ModelPerformanceAnalytics';
 import OpenBetsPanel from '../components/OpenBetsPanel';
+import ParlayRecommendations from '../components/ParlayRecommendations';
 
 const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, formatDateMDY }) => {
     const [edges, setEdges] = useState([]);
@@ -945,6 +946,11 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
                         {!loading && edges.length > 0 && boardTab === 'recommended' && (
                             <div className="p-6">
+
+                                {/* 2-leg ML Parlay recommendations (read-only; sourced from model_predictions) */}
+                                {leagueFilter === 'NCAAM' && String(selectedDate) === String(getTodayStr()) && (
+                                    <ParlayRecommendations />
+                                )}
 
                                 {(() => {
                                     const isSameEtDay = (ts, ymd) => {
