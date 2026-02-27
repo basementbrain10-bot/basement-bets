@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { loadCache } from '../utils/httpCache';
-import { ArrowUpDown, ChevronUp, ChevronDown, Filter, RefreshCw, CheckCircle, AlertCircle, Info, Shield, ShieldAlert, ShieldCheck, PlusCircle } from 'lucide-react';
+import { ArrowUpDown, ChevronUp, ChevronDown, Filter, RefreshCw, CheckCircle, AlertCircle, Info, Shield, ShieldAlert, ShieldCheck, PlusCircle, TrendingUp } from 'lucide-react';
 import ModelPerformanceAnalytics from '../components/ModelPerformanceAnalytics';
 import OpenBetsPanel from '../components/OpenBetsPanel';
 import ParlayRecommendations from '../components/ParlayRecommendations';
@@ -1046,30 +1046,79 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
                                     return (
                                         <>
-                                            <div className="hidden sm:block mb-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <div className="text-[11px] font-black text-emerald-200">Top 5 Plays</div>
-                                                    <div className="text-[10px] text-slate-500">{selectedDate} • Sorted by EV% (1dp)</div>
+                                            <div className="hidden sm:block mb-6">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <TrendingUp className="text-emerald-400" size={18} />
+                                                    <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Top 5 Plays Today</div>
+                                                    <div className="text-[10px] text-slate-500 ml-auto">{selectedDate} • Sorted by EV%</div>
                                                 </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                    {top6.map(({ edge, top }, i) => (
-                                                        <div key={edge.id} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-900/30 border border-slate-700/50">
-                                                            <div className="min-w-0">
-                                                                <div className="text-xs text-slate-200 font-black whitespace-normal break-words">{i + 1}. {edge.away_team} @ {edge.home_team}</div>
-                                                                <div className="text-xs text-slate-400 whitespace-normal break-words">{top.bet_type} • {fmtPick(edge, top)} • {top.confidence || '—'}</div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                    {top6.map(({ edge, top }, i) => {
+                                                        const date = edge.start_time ? new Date(edge.start_time) : null;
+                                                        const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
+                                                        const pickText = fmtPick(edge, top);
+                                                        const evRaw = String(top.edge || '').replace('%', '').trim();
+                                                        const evNum = Number(evRaw);
+                                                        const evFormatted = `${evNum >= 0 ? '+' : ''}${evNum.toFixed(1)}%`;
+
+                                                        return (
+                                                            <div key={edge.id} className="relative overflow-hidden p-4 rounded-xl border border-slate-700/60 bg-gradient-to-br from-slate-900 to-slate-950 shadow-lg flex flex-col gap-3 transition hover:border-slate-500/50">
+                                                                {/* Top bar: Rank and EV */}
+                                                                <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-black">{i + 1}</span>
+                                                                        <span className="text-xs font-bold text-slate-300">NCAAM Pick</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1 bg-green-500/10 px-2 py-1 rounded-md border border-green-500/20">
+                                                                        <TrendingUp size={12} className="text-green-400" />
+                                                                        <span className="text-[11px] font-black text-green-400">{evFormatted} EV</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Pick details */}
+                                                                <div className="flex flex-col gap-1 min-w-0">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-[10px] text-slate-500 font-bold uppercase">{timeStr}</span>
+                                                                        <span className="text-xs text-slate-400 font-medium truncate">{edge.away_team} @ {edge.home_team}</span>
+                                                                    </div>
+                                                                    <div className="flex items-baseline justify-between gap-4">
+                                                                        <div className="flex flex-col min-w-0">
+                                                                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{top.bet_type}</span>
+                                                                            <span className="text-sm font-bold text-slate-100 whitespace-normal leading-tight">{pickText}</span>
+                                                                        </div>
+                                                                        <div className="flex flex-col items-end shrink-0">
+                                                                            <span className="text-xs font-mono font-bold text-slate-400">{(top.price !== null && top.price !== undefined) ? fmtSigned(top.price, 0) : '—'}</span>
+                                                                            <span className="text-[10px] text-slate-500 uppercase font-bold">{top.confidence}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Quick Actions */}
+                                                                <div className="flex gap-2 mt-auto pt-2 border-t border-slate-800/40">
+                                                                    <button
+                                                                        onClick={() => onAddBet?.({
+                                                                            sport: edge.sport,
+                                                                            game: `${edge.away_team} @ ${edge.home_team}`,
+                                                                            market: top.bet_type,
+                                                                            pick: pickText,
+                                                                            line: top.market_line,
+                                                                            odds: top.price,
+                                                                            book: top.book,
+                                                                        })}
+                                                                        className="flex-1 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[10px] font-black border border-emerald-500/20 transition-colors uppercase tracking-widest"
+                                                                    >
+                                                                        Add
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => analyzeGame(edge)}
+                                                                        className="flex-1 py-1.5 rounded-lg bg-slate-800/40 hover:bg-slate-700/40 text-slate-300 text-[10px] font-black border border-slate-700/50 transition-colors uppercase tracking-widest"
+                                                                    >
+                                                                        Details
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                            <div className="text-right shrink-0">
-                                                                <div className="text-xs font-mono font-black text-emerald-300">{(() => {
-                                                                    const raw = String(top.edge || '').replace('%', '').trim();
-                                                                    const n = Number(raw);
-                                                                    if (!Number.isFinite(n)) return top.edge;
-                                                                    const s = `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
-                                                                    return s;
-                                                                })()}</div>
-                                                                <div className="text-[10px] text-slate-500 font-mono">{(top.price !== null && top.price !== undefined) ? fmtSigned(top.price, 0) : '—'}</div>
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
 

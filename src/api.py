@@ -3436,7 +3436,7 @@ async def get_ncaam_analytics(days: int = 30, min_ev_per_unit: float = 0.02):
 async def get_ncaam_parlays_today(
     min_ev_per_unit: float = 0.02,
     parlay_odds_lo: int = -120,
-    parlay_odds_hi: int = 300,
+    parlay_odds_hi: int = 800,
     max_legs: int = 2,
     limit_legs: int = 80,
 ):
