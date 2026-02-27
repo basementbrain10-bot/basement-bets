@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { Search, Brain, Gavel, FileText, ChevronRight, Activity, Clock, ShieldAlert, RefreshCw } from 'lucide-react';
+import { Search, Brain, Gavel, FileText, ChevronRight, Activity, Clock, ShieldAlert, RefreshCw, AlertTriangle } from 'lucide-react';
 
 export default function AgentCouncil() {
     const [events, setEvents] = useState([]);
@@ -113,6 +113,7 @@ export default function AgentCouncil() {
         if (name.includes('news') || name.includes('injury') || name.includes('qualitative')) return <FileText className="text-orange-400" />;
         if (name.includes('memory') || name.includes('rag')) return <Brain className="text-purple-400" />;
         if (name.includes('executive') || name.includes('summary')) return <Gavel className="text-violet-400" />;
+        if (name.includes('contrarian') || name.includes('auditor')) return <AlertTriangle className="text-rose-400" />;
         return <Search className="text-slate-400" />;
     };
 
@@ -137,8 +138,8 @@ export default function AgentCouncil() {
                             onClick={triggerJobs}
                             disabled={isRunningJob}
                             className={`p-1.5 rounded-lg border transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider ${isRunningJob
-                                    ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
-                                    : 'bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20 hover:border-blue-500/50'
+                                ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
+                                : 'bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20 hover:border-blue-500/50'
                                 }`}
                             title="Manually trigger backend grading and council runs"
                         >
@@ -202,6 +203,13 @@ export default function AgentCouncil() {
                             <div>
                                 <div className="text-sm font-bold text-slate-200">Memory Agent</div>
                                 <div className="text-xs text-slate-500 leading-tight mt-0.5 break-words">Recalls lessons learned from past model failures.</div>
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <AlertTriangle className="text-rose-400 shrink-0 mt-1" size={18} />
+                            <div>
+                                <div className="text-sm font-bold text-slate-200">Contrarian Auditor</div>
+                                <div className="text-xs text-slate-500 leading-tight mt-0.5 break-words">Identifies groupthink, stresses model assumptions, and flags ignored risks.</div>
                             </div>
                         </div>
                         <div className="flex gap-3">

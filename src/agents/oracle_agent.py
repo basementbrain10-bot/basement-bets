@@ -75,10 +75,11 @@ class OracleAgent(BaseAgent):
         
         OUTPUT FORMAT MUST BE VALID JSON:
         Return a single dictionary where keys are the exact `event_id` strings.
-        Each entry must include a "debate" with these four specific agent roles:
+        Each entry must include a "debate" with these five specific agent roles:
         - "Executive Summary": High-level view combining quant edge + news context.
         - "Research & Roster": Factual news and injury analysis from extracted_facts only.
         - "Historical Context": Deep dive into historical_lessons and how they apply here.
+        - "Contrarian Auditor": A summary of the contrarian critique, risks, and misinterpretations.
         - "Verdict": Final synthesizing decision across Spread, Moneyline, and Totals.
         {{
             "event_id_1": {{
@@ -86,6 +87,7 @@ class OracleAgent(BaseAgent):
                     {{"agent": "Executive Summary", "message": "..."}},
                     {{"agent": "Research & Roster", "message": "..."}},
                     {{"agent": "Historical Context", "message": "..."}},
+                    {{"agent": "Contrarian Auditor", "message": "..."}},
                     {{"agent": "Verdict", "message": "..."}}
                 ],
                 "oracle_verdict": "...",
@@ -155,11 +157,11 @@ class OracleAgent(BaseAgent):
             
             TASK:
             1. Produce the FINAL councils_narrative JSON.
-            2. Integrate the 'Critique' into a new agent role called "Contrarian Auditor" in the debate.
+            2. Integrate the 'Critique' into a new agent role called "Contrarian Auditor" in the debate array. This agent should summarize the auditor's key findings.
             3. Adjust the 'oracle_verdict' and 'signals.confidence' if the critique identified valid risks.
             4. If the critique was insightful, add its points to `signals.red_flags`.
             
-            Keep the exact same JSON format as the initial debate.
+            Keep the exact same JSON format as the initial debate, but with the 5th agent "Contrarian Auditor" added to the debate array.
             """
             
             self.log_trace("Pass 3: Final Synthesis initiated")

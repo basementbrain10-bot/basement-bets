@@ -148,11 +148,11 @@ RULES:
                     extracted = {}
                 else:
                     clean = raw.strip()
-                if clean.startswith("```json"):
-                    clean = clean[7:]
-                if clean.endswith("```"):
-                    clean = clean[:-3]
-                extracted = json.loads(clean.strip())
+                    if clean.startswith("```json"):
+                        clean = clean[7:]
+                    if clean.endswith("```"):
+                        clean = clean[:-3]
+                    extracted = json.loads(clean.strip())
 
                 for ev in events_with_citations:
                     eid = ev.event_id

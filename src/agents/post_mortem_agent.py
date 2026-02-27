@@ -122,13 +122,13 @@ Rules:
                     parsed_lessons = {}
                 else:
                     clean_text = response_text.strip()
-                if clean_text.startswith("```json"):
-                    clean_text = clean_text[7:]
-                if clean_text.endswith("```"):
-                    clean_text = clean_text[:-3]
+                    if clean_text.startswith("```json"):
+                        clean_text = clean_text[7:]
+                    if clean_text.endswith("```"):
+                        clean_text = clean_text[:-3]
 
-                self.log_trace("Post-mortem response received", {"raw_json": clean_text.strip()})
-                parsed_lessons = json.loads(clean_text.strip())
+                    self.log_trace("Post-mortem response received", {"raw_json": clean_text.strip()})
+                    parsed_lessons = json.loads(clean_text.strip())
 
                 for key, lesson_obj in parsed_lessons.items():
                     if key not in unreviewed_raw:
