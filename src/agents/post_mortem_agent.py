@@ -118,7 +118,10 @@ Rules:
                     json_mode=True,
                     max_tokens=4000
                 )
-                clean_text = response_text.strip()
+                if not response_text:
+                    parsed_lessons = {}
+                else:
+                    clean_text = response_text.strip()
                 if clean_text.startswith("```json"):
                     clean_text = clean_text[7:]
                 if clean_text.endswith("```"):

@@ -144,7 +144,10 @@ RULES:
                     json_mode=True,
                     max_tokens=2048
                 )
-                clean = raw.strip()
+                if not raw:
+                    extracted = {}
+                else:
+                    clean = raw.strip()
                 if clean.startswith("```json"):
                     clean = clean[7:]
                 if clean.endswith("```"):

@@ -278,7 +278,7 @@ class GradingService:
         query = """
         SELECT m.id, m.market_type, m.pick, m.bet_line, m.book,
                m.selection, m.analyzed_at, m.narrative_json,
-               e.home_team, e.away_team,
+               e.home_team, e.away_team, e.start_time,
                gr.home_score, gr.away_score, gr.final
         FROM model_predictions m
         JOIN events e ON m.event_id = e.id
@@ -319,7 +319,7 @@ class GradingService:
                         "oracle_prediction": row_dict.get('oracle_verdict') or row_dict.get('narrative_json') or "N/A",
                         "recommended_bet": row_dict.get('selection') or f"{row_dict['pick']} {row_dict['bet_line']}",
                         "actual_result": f"{row_dict['home_team']} {row_dict['home_score']} - {row_dict['away_team']} {row_dict['away_score']}",
-                        "game_date": row_dict.get('analyzed_at').strftime("%Y-%m-%d") if row_dict.get('analyzed_at') else None,
+                        "game_date": row_dict.get('start_time').strftime("%Y-%m-%d") if row_dict.get('start_time') else (row_dict.get('analyzed_at').strftime("%Y-%m-%d") if row_dict.get('analyzed_at') else None),
                         "final": row_dict.get('final')
                     })
                     from src.database import update_model_prediction_result
@@ -338,7 +338,7 @@ class GradingService:
         query = """
         SELECT m.id, m.event_id, m.market_type, m.pick, m.bet_line, m.book,
                m.selection, m.analyzed_at, m.narrative_json,
-               e.home_team, e.away_team,
+               e.home_team, e.away_team, e.start_time,
                gr.home_score, gr.away_score, gr.final
         FROM model_predictions m
         JOIN events e ON m.event_id = e.id
@@ -368,7 +368,7 @@ class GradingService:
                         "oracle_prediction": row_dict.get('oracle_verdict') or row_dict.get('narrative_json') or "N/A",
                         "recommended_bet": row_dict.get('selection') or f"{row_dict['pick']} {row_dict['bet_line']}",
                         "actual_result": f"{row_dict['home_team']} {row_dict['home_score']} - {row_dict['away_team']} {row_dict['away_score']}",
-                        "game_date": row_dict.get('analyzed_at').strftime("%Y-%m-%d") if row_dict.get('analyzed_at') else None,
+                        "game_date": row_dict.get('start_time').strftime("%Y-%m-%d") if row_dict.get('start_time') else (row_dict.get('analyzed_at').strftime("%Y-%m-%d") if row_dict.get('analyzed_at') else None),
                         "final": row_dict.get('final')
                     })
         except Exception as e:

@@ -1235,9 +1235,9 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 ml_price_away = market_snapshot.get('moneyline_price_away')
 
             # Compute home win prob from margin distribution: P(margin_home > 0)
-            # mu_s is home-perspective margin mean.
+            # mu_spread_final is home-perspective margin mean.
             if ml_price_home is not None and ml_price_away is not None:
-                prob_home_raw = 1.0 - self._normal_cdf(0.0, float(mu_s), float(sig_s))
+                prob_home_raw = 1.0 - self._normal_cdf(0.0, float(mu_spread_final), float(sigma_spread))
                 prob_home = self._calibrate_win_prob(prob_home_raw)
                 prob_away = self._calibrate_win_prob(1.0 - prob_home_raw)
 

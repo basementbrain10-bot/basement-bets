@@ -116,6 +116,8 @@ class OracleAgent(BaseAgent):
                 json_mode=True,
                 max_tokens=8192
             )
+            if not initial_response:
+                raise ValueError("Oracle Pass 1 returned empty response")
             
             # Pass 2: The Contrarian Critique
             critique_prompt = f"""
@@ -138,6 +140,8 @@ class OracleAgent(BaseAgent):
                 json_mode=True,
                 max_tokens=4096
             )
+            if not critique_response:
+                raise ValueError("Oracle Pass 2 (Critique) returned empty response")
             
             # Pass 3: Final Synthesis (Injecting Critique back into the Oracle)
             final_prompt = f"""
@@ -166,6 +170,9 @@ class OracleAgent(BaseAgent):
                 max_tokens=8192
             )
             
+            if not final_text:
+                raise ValueError("Oracle Pass 3 (Synthesis) returned empty response")
+                
             clean_text = final_text.strip()
             if clean_text.startswith("```json"):
                 clean_text = clean_text[7:]
