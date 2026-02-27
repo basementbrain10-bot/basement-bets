@@ -64,7 +64,11 @@ def generate_content(model: str, system_prompt: str, json_mode: bool = False, ma
             
             resp.raise_for_status()
             data = resp.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"]
+            try:
+                text = data["candidates"][0]["content"]["parts"][0]["text"]
+                return text if text is not None else ""
+            except (KeyError, IndexError):
+                return ""
             
         except requests.exceptions.RequestException as e:
             if attempt < retries - 1:

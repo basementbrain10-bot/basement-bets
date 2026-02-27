@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { Search, Brain, Gavel, FileText, ChevronRight, Activity, Clock, ShieldAlert } from 'lucide-react';
+import { Search, Brain, Gavel, FileText, ChevronRight, Activity, Clock, ShieldAlert, RefreshCw, AlertTriangle } from 'lucide-react';
 
 export default function AgentCouncil() {
     const [events, setEvents] = useState([]);
@@ -10,6 +10,7 @@ export default function AgentCouncil() {
     const [loading, setLoading] = useState(true);
     const [loadingCouncil, setLoadingCouncil] = useState(false);
     const [activeTab, setActiveTab] = useState('debate');
+    const [isRunningJob, setIsRunningJob] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -80,6 +81,31 @@ export default function AgentCouncil() {
         }
     };
 
+    const triggerJobs = async () => {
+        if (!window.confirm("Trigger manual background jobs? This will run grading and regenerate the council slate. It may take 1-2 minutes.")) return;
+
+        setIsRunningJob(true);
+        try {
+            // We use the password as the CRON_SECRET which is supported by the backend
+            const password = localStorage.getItem('basement_password');
+            const headers = { 'Authorization': `Bearer ${password}` };
+
+            // 1. Grade Predictions
+            await api.post('/api/jobs/grade_predictions', {}, { headers, params: { backfill_days: 5 } });
+
+            // 2. Run Council
+            await api.post('/api/jobs/run_council_today', {}, { headers });
+
+            alert("Jobs triggered successfully! They are running in the background. Data will refresh in a few moments.");
+            setTimeout(loadData, 5000);
+        } catch (err) {
+            console.error("Job trigger failed", err);
+            alert("Failed to trigger jobs. Check console.");
+        } finally {
+            setIsRunningJob(false);
+        }
+    };
+
     // Agent Avatar Mapping
     const getAgentIcon = (agentName) => {
         const name = agentName.toLowerCase();
@@ -87,6 +113,7 @@ export default function AgentCouncil() {
         if (name.includes('news') || name.includes('injury') || name.includes('qualitative')) return <FileText className="text-orange-400" />;
         if (name.includes('memory') || name.includes('rag')) return <Brain className="text-purple-400" />;
         if (name.includes('executive') || name.includes('summary')) return <Gavel className="text-violet-400" />;
+        if (name.includes('contrarian') || name.includes('auditor')) return <AlertTriangle className="text-rose-400" />;
         return <Search className="text-slate-400" />;
     };
 
@@ -103,9 +130,23 @@ export default function AgentCouncil() {
             {/* Left Sidebar: Daily Slate & Global Memories */}
             <div className="lg:col-span-1 space-y-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                    <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                        <Gavel className="text-blue-500" /> Today's Docket
-                    </h2>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                            <Gavel className="text-blue-500" /> Today's Docket
+                        </h2>
+                        <button
+                            onClick={triggerJobs}
+                            disabled={isRunningJob}
+                            className={`p-1.5 rounded-lg border transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider ${isRunningJob
+                                ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
+                                : 'bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20 hover:border-blue-500/50'
+                                }`}
+                            title="Manually trigger backend grading and council runs"
+                        >
+                            <RefreshCw size={12} className={isRunningJob ? 'animate-spin' : ''} />
+                            {isRunningJob ? 'Running...' : 'Refresh'}
+                        </button>
+                    </div>
                     {events.length === 0 ? (
                         <p className="text-sm text-slate-500 italic">No games on the slate.</p>
                     ) : (
@@ -162,6 +203,13 @@ export default function AgentCouncil() {
                             <div>
                                 <div className="text-sm font-bold text-slate-200">Memory Agent</div>
                                 <div className="text-xs text-slate-500 leading-tight mt-0.5 break-words">Recalls lessons learned from past model failures.</div>
+                            </div>
+                        </div>
+                        <div className="flex gap-3">
+                            <AlertTriangle className="text-rose-400 shrink-0 mt-1" size={18} />
+                            <div>
+                                <div className="text-sm font-bold text-slate-200">Contrarian Auditor</div>
+                                <div className="text-xs text-slate-500 leading-tight mt-0.5 break-words">Identifies groupthink, stresses model assumptions, and flags ignored risks.</div>
                             </div>
                         </div>
                         <div className="flex gap-3">
