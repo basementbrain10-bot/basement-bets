@@ -3569,8 +3569,8 @@ async def get_ncaam_parlays_today(
         "combos_considered": len(combos),
         "params": {
             "min_ev_per_unit": float(min_ev_per_unit),
-            "odds_lo": int(odds_lo),
-            "odds_hi": int(odds_hi),
+            "odds_lo": int(parlay_odds_lo),
+            "odds_hi": int(parlay_odds_hi),
         },
         "high_confidence": high_conf,
         "payout_band": payout_band,
