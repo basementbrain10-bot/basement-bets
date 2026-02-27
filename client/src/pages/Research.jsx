@@ -289,7 +289,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                     headline: (apiData?.headline || 'Cached pick (daily_top_picks)')
                         + ' — live analyze returned no recommendations',
                     _cached_fallback: true,
-                  }
+                }
                 : apiData;
 
             setAnalysisResult(merged);
@@ -598,28 +598,25 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
             {/* Tabs */}
             {showModelPerformanceTab && (
-            <div className="inline-flex gap-1 mb-6 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
-                <button
-                    onClick={() => setActiveTab('live')}
-                    className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${activeTab === 'live' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
-                >
-                    Board
-                </button>
-                <button
-                    onClick={() => setActiveTab('history')}
-                    className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${activeTab === 'history' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
-                >
-                    Model Performance
-                </button>
-            </div>
+                <div className="inline-flex gap-1 mb-6 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
+                    <button
+                        onClick={() => setActiveTab('live')}
+                        className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${activeTab === 'live' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                    >
+                        Board
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('history')}
+                        className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${activeTab === 'history' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                    >
+                        Model Performance
+                    </button>
+                </div>
             )}
 
 
             {activeTab === 'live' && (
                 <>
-                    <div className="mb-6">
-                        <OpenBetsPanel formatCurrency={formatCurrency} formatDateMDY={formatDateMDY} />
-                    </div>
                     <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-4">
                         <div className="flex flex-wrap items-center gap-3">
                             {/* League Filter */}
@@ -806,7 +803,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                         const x = Math.max(pad, Math.min(r.left, window.innerWidth - maxW - pad));
                                                         const y = Math.max(pad, Math.min(r.bottom + 8, window.innerHeight - 320));
                                                         if (dhHideTimer) { clearTimeout(dhHideTimer); setDhHideTimer(null); }
-                                                setDhTip({ open: true, pinned: false, x, y, text: tooltip });
+                                                        setDhTip({ open: true, pinned: false, x, y, text: tooltip });
                                                     } catch {
                                                         if (dhHideTimer) { clearTimeout(dhHideTimer); setDhHideTimer(null); }
                                                         setDhTip({ open: true, pinned: false, x: 16, y: 16, text: tooltip });
@@ -1311,224 +1308,224 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                     : getProcessedEdges();
 
                                                 return boardEdges.map((edge, idx) => {
-                                                const date = edge.start_time ? new Date(edge.start_time) : null;
-                                                const dateStr = date ? date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', timeZone: 'America/New_York' }) : '-';
-                                                const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
-                                                const isEdge = edge.is_actionable;
+                                                    const date = edge.start_time ? new Date(edge.start_time) : null;
+                                                    const dateStr = date ? date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', timeZone: 'America/New_York' }) : '-';
+                                                    const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
+                                                    const isEdge = edge.is_actionable;
 
-                                                return (
-                                                    <tr key={idx} className={`group hover:bg-slate-700/30 transition-all border-b border-slate-700/30`}>
-                                                        <td className="py-3 px-4 text-slate-400 text-xs whitespace-nowrap">
-                                                            {edge.final ? (
-                                                                <div className="flex flex-col">
-                                                                    <span className="font-bold text-slate-500 uppercase tracking-wider">Final</span>
-                                                                    <span className="text-white font-mono">{edge.home_score}-{edge.away_score}</span>
-                                                                </div>
+                                                    return (
+                                                        <tr key={idx} className={`group hover:bg-slate-700/30 transition-all border-b border-slate-700/30`}>
+                                                            <td className="py-3 px-4 text-slate-400 text-xs whitespace-nowrap">
+                                                                {edge.final ? (
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-bold text-slate-500 uppercase tracking-wider">Final</span>
+                                                                        <span className="text-white font-mono">{edge.home_score}-{edge.away_score}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <>
+                                                                        <div className="font-bold text-slate-300">{dateStr}</div>
+                                                                        <div>{timeStr}</div>
+                                                                    </>
+                                                                )}
+                                                            </td>
+                                                            <td className="py-3 px-4">
+                                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded tracking-tighter uppercase
+                                                                ${edge.sport === 'NFL' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/20' :
+                                                                        edge.sport === 'NCAAM' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/20' :
+                                                                            edge.sport === 'NCAAF' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20' :
+                                                                                'bg-slate-700/50 text-slate-400 border border-slate-600'
+                                                                    }`}>
+                                                                    {edge.sport}
+                                                                </span>
+                                                            </td>
+                                                            <td className="py-3 px-4 font-bold text-slate-100 text-sm tracking-tight">{edge.away_team} @ {edge.home_team}</td>
+                                                            {leagueFilter === 'EPL' ? (
+                                                                <>
+                                                                    <td className="py-3 px-4">
+                                                                        {(edge.ml_home_odds !== null && edge.ml_home_odds !== undefined) || (edge.ml_away_odds !== null && edge.ml_away_odds !== undefined) || (edge.ml_draw_odds !== null && edge.ml_draw_odds !== undefined) ? (
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <div className="flex justify-between gap-2 text-xs">
+                                                                                    <span className="text-slate-400 truncate">HOME</span>
+                                                                                    <span className="text-white font-mono font-bold whitespace-nowrap">{fmtSigned(edge.ml_home_odds)}</span>
+                                                                                </div>
+                                                                                <div className="flex justify-between gap-2 text-xs">
+                                                                                    <span className="text-slate-400 truncate">DRAW</span>
+                                                                                    <span className="text-white font-mono font-bold whitespace-nowrap">{fmtSigned(edge.ml_draw_odds)}</span>
+                                                                                </div>
+                                                                                <div className="flex justify-between gap-2 text-xs">
+                                                                                    <span className="text-slate-400 truncate">AWAY</span>
+                                                                                    <span className="text-white font-mono font-bold whitespace-nowrap">{fmtSigned(edge.ml_away_odds)}</span>
+                                                                                </div>
+                                                                                <div className="text-[10px] text-slate-600">1X2 market odds</div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="text-slate-600 font-mono text-xs">No moneyline</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="py-3 px-4">
+                                                                        {edge.total_line !== null && edge.total_line !== undefined ? (
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <div className="flex justify-between gap-2 text-xs">
+                                                                                    <span className="text-slate-400">OVER</span>
+                                                                                    <span className="text-white font-mono font-bold whitespace-nowrap">{Number(edge.total_line).toFixed(1)}</span>
+                                                                                    <span className="text-slate-500 font-mono whitespace-nowrap">{fmtSigned(edge.total_over_odds)}</span>
+                                                                                </div>
+                                                                                <div className="flex justify-between gap-2 text-xs">
+                                                                                    <span className="text-slate-400">UNDER</span>
+                                                                                    <span className="text-white font-mono font-bold whitespace-nowrap">{Number(edge.total_line).toFixed(1)}</span>
+                                                                                    <span className="text-slate-500 font-mono whitespace-nowrap">{fmtSigned(edge.total_under_odds)}</span>
+                                                                                </div>
+                                                                                <div className="text-[10px] text-slate-600">goals total (O/U)</div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="text-slate-600 font-mono text-xs">No total</span>
+                                                                        )}
+                                                                    </td>
+                                                                </>
                                                             ) : (
                                                                 <>
-                                                                    <div className="font-bold text-slate-300">{dateStr}</div>
-                                                                    <div>{timeStr}</div>
+                                                                    <td className="py-3 px-4">
+                                                                        {(edge.home_spread !== null && edge.home_spread !== undefined) || (edge.away_spread !== null && edge.away_spread !== undefined) ? (
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <div className="flex justify-between gap-2 text-xs">
+                                                                                    <span className="text-slate-400 truncate">{edge.away_team}</span>
+                                                                                    <span className="text-white font-mono font-bold whitespace-nowrap">
+                                                                                        {fmtSigned(edge.away_spread ?? (edge.home_spread != null ? -Number(edge.home_spread) : null), 1)}
+                                                                                    </span>
+                                                                                    <span className="text-slate-500 font-mono whitespace-nowrap">
+                                                                                        {fmtSigned(edge.spread_away_odds)}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <div className="flex justify-between gap-2 text-xs">
+                                                                                    <span className="text-slate-400 truncate">{edge.home_team}</span>
+                                                                                    <span className="text-white font-mono font-bold whitespace-nowrap">
+                                                                                        {fmtSigned(edge.home_spread, 1)}
+                                                                                    </span>
+                                                                                    <span className="text-slate-500 font-mono whitespace-nowrap">
+                                                                                        {fmtSigned(edge.spread_home_odds ?? edge.moneyline_home)}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <div className="text-[10px] text-slate-600">team • line • odds</div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="text-slate-600 font-mono text-xs">No spread</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="py-3 px-4">
+                                                                        {edge.total_line !== null && edge.total_line !== undefined ? (
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <div className="flex justify-between gap-2 text-xs">
+                                                                                    <span className="text-slate-400">OVER</span>
+                                                                                    <span className="text-white font-mono font-bold whitespace-nowrap">{Number(edge.total_line).toFixed(1)}</span>
+                                                                                    <span className="text-slate-500 font-mono whitespace-nowrap">{fmtSigned(edge.total_over_odds ?? edge.moneyline_away)}</span>
+                                                                                </div>
+                                                                                <div className="flex justify-between gap-2 text-xs">
+                                                                                    <span className="text-slate-400">UNDER</span>
+                                                                                    <span className="text-white font-mono font-bold whitespace-nowrap">{Number(edge.total_line).toFixed(1)}</span>
+                                                                                    <span className="text-slate-500 font-mono whitespace-nowrap">{fmtSigned(edge.total_under_odds)}</span>
+                                                                                </div>
+                                                                                <div className="text-[10px] text-slate-600">side • line • odds</div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="text-slate-600 font-mono text-xs">No total</span>
+                                                                        )}
+                                                                    </td>
                                                                 </>
                                                             )}
-                                                        </td>
-                                                        <td className="py-3 px-4">
-                                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded tracking-tighter uppercase
-                                                                ${edge.sport === 'NFL' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/20' :
-                                                                    edge.sport === 'NCAAM' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/20' :
-                                                                        edge.sport === 'NCAAF' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20' :
-                                                                            'bg-slate-700/50 text-slate-400 border border-slate-600'
-                                                                }`}>
-                                                                {edge.sport}
-                                                            </span>
-                                                        </td>
-                                                        <td className="py-3 px-4 font-bold text-slate-100 text-sm tracking-tight">{edge.away_team} @ {edge.home_team}</td>
-                                                        {leagueFilter === 'EPL' ? (
-                                                            <>
-                                                                <td className="py-3 px-4">
-                                                                    {(edge.ml_home_odds !== null && edge.ml_home_odds !== undefined) || (edge.ml_away_odds !== null && edge.ml_away_odds !== undefined) || (edge.ml_draw_odds !== null && edge.ml_draw_odds !== undefined) ? (
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <div className="flex justify-between gap-2 text-xs">
-                                                                                <span className="text-slate-400 truncate">HOME</span>
-                                                                                <span className="text-white font-mono font-bold whitespace-nowrap">{fmtSigned(edge.ml_home_odds)}</span>
+                                                            <td className="py-3 px-4 text-center">
+                                                                {(() => {
+                                                                    const meta = rowTopPicks?.[edge.id] || null;
+                                                                    const top = meta?.rec || null;
+                                                                    if (top) {
+                                                                        return (
+                                                                            <div className="flex flex-col items-center gap-2">
+                                                                                <div className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-widest">
+                                                                                    Top pick
+                                                                                </div>
+                                                                                <div className="text-xs font-bold text-white max-w-[180px] truncate" title={top.selection}>
+                                                                                    {top.selection}
+                                                                                </div>
+                                                                                <div className="text-[11px] text-green-300 font-mono font-bold">+{top.edge}</div>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <button
+                                                                                        onClick={() => onAddBet?.({
+                                                                                            sport: edge.sport,
+                                                                                            game: `${edge.away_team} @ ${edge.home_team}`,
+                                                                                            market: top.bet_type,
+                                                                                            pick: top.selection,
+                                                                                            line: top.market_line,
+                                                                                            odds: top.price,
+                                                                                            book: top.book,
+                                                                                        })}
+                                                                                        className="px-3 py-1 bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-500/30 rounded text-xs font-bold transition-colors"
+                                                                                    >
+                                                                                        Add
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => analyzeGame(edge)}
+                                                                                        className="px-3 py-1 bg-slate-800/60 text-slate-200 hover:bg-slate-800 border border-slate-700 rounded text-xs font-bold transition-colors"
+                                                                                    >
+                                                                                        Details
+                                                                                    </button>
+                                                                                </div>
                                                                             </div>
-                                                                            <div className="flex justify-between gap-2 text-xs">
-                                                                                <span className="text-slate-400 truncate">DRAW</span>
-                                                                                <span className="text-white font-mono font-bold whitespace-nowrap">{fmtSigned(edge.ml_draw_odds)}</span>
-                                                                            </div>
-                                                                            <div className="flex justify-between gap-2 text-xs">
-                                                                                <span className="text-slate-400 truncate">AWAY</span>
-                                                                                <span className="text-white font-mono font-bold whitespace-nowrap">{fmtSigned(edge.ml_away_odds)}</span>
-                                                                            </div>
-                                                                            <div className="text-[10px] text-slate-600">1X2 market odds</div>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <span className="text-slate-600 font-mono text-xs">No moneyline</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="py-3 px-4">
-                                                                    {edge.total_line !== null && edge.total_line !== undefined ? (
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <div className="flex justify-between gap-2 text-xs">
-                                                                                <span className="text-slate-400">OVER</span>
-                                                                                <span className="text-white font-mono font-bold whitespace-nowrap">{Number(edge.total_line).toFixed(1)}</span>
-                                                                                <span className="text-slate-500 font-mono whitespace-nowrap">{fmtSigned(edge.total_over_odds)}</span>
-                                                                            </div>
-                                                                            <div className="flex justify-between gap-2 text-xs">
-                                                                                <span className="text-slate-400">UNDER</span>
-                                                                                <span className="text-white font-mono font-bold whitespace-nowrap">{Number(edge.total_line).toFixed(1)}</span>
-                                                                                <span className="text-slate-500 font-mono whitespace-nowrap">{fmtSigned(edge.total_under_odds)}</span>
-                                                                            </div>
-                                                                            <div className="text-[10px] text-slate-600">goals total (O/U)</div>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <span className="text-slate-600 font-mono text-xs">No total</span>
-                                                                    )}
-                                                                </td>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <td className="py-3 px-4">
-                                                                    {(edge.home_spread !== null && edge.home_spread !== undefined) || (edge.away_spread !== null && edge.away_spread !== undefined) ? (
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <div className="flex justify-between gap-2 text-xs">
-                                                                                <span className="text-slate-400 truncate">{edge.away_team}</span>
-                                                                                <span className="text-white font-mono font-bold whitespace-nowrap">
-                                                                                    {fmtSigned(edge.away_spread ?? (edge.home_spread != null ? -Number(edge.home_spread) : null), 1)}
-                                                                                </span>
-                                                                                <span className="text-slate-500 font-mono whitespace-nowrap">
-                                                                                    {fmtSigned(edge.spread_away_odds)}
-                                                                                </span>
-                                                                            </div>
-                                                                            <div className="flex justify-between gap-2 text-xs">
-                                                                                <span className="text-slate-400 truncate">{edge.home_team}</span>
-                                                                                <span className="text-white font-mono font-bold whitespace-nowrap">
-                                                                                    {fmtSigned(edge.home_spread, 1)}
-                                                                                </span>
-                                                                                <span className="text-slate-500 font-mono whitespace-nowrap">
-                                                                                    {fmtSigned(edge.spread_home_odds ?? edge.moneyline_home)}
-                                                                                </span>
-                                                                            </div>
-                                                                            <div className="text-[10px] text-slate-600">team • line • odds</div>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <span className="text-slate-600 font-mono text-xs">No spread</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="py-3 px-4">
-                                                                    {edge.total_line !== null && edge.total_line !== undefined ? (
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <div className="flex justify-between gap-2 text-xs">
-                                                                                <span className="text-slate-400">OVER</span>
-                                                                                <span className="text-white font-mono font-bold whitespace-nowrap">{Number(edge.total_line).toFixed(1)}</span>
-                                                                                <span className="text-slate-500 font-mono whitespace-nowrap">{fmtSigned(edge.total_over_odds ?? edge.moneyline_away)}</span>
-                                                                            </div>
-                                                                            <div className="flex justify-between gap-2 text-xs">
-                                                                                <span className="text-slate-400">UNDER</span>
-                                                                                <span className="text-white font-mono font-bold whitespace-nowrap">{Number(edge.total_line).toFixed(1)}</span>
-                                                                                <span className="text-slate-500 font-mono whitespace-nowrap">{fmtSigned(edge.total_under_odds)}</span>
-                                                                            </div>
-                                                                            <div className="text-[10px] text-slate-600">side • line • odds</div>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <span className="text-slate-600 font-mono text-xs">No total</span>
-                                                                    )}
-                                                                </td>
-                                                            </>
-                                                        )}
-                                                        <td className="py-3 px-4 text-center">
-                                                            {(() => {
-                                                                const meta = rowTopPicks?.[edge.id] || null;
-                                                                const top = meta?.rec || null;
-                                                                if (top) {
-                                                                    return (
-                                                                        <div className="flex flex-col items-center gap-2">
-                                                                            <div className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-widest">
-                                                                                Top pick
-                                                                            </div>
-                                                                            <div className="text-xs font-bold text-white max-w-[180px] truncate" title={top.selection}>
-                                                                                {top.selection}
-                                                                            </div>
-                                                                            <div className="text-[11px] text-green-300 font-mono font-bold">+{top.edge}</div>
-                                                                            <div className="flex items-center gap-2">
-                                                                                <button
-                                                                                    onClick={() => onAddBet?.({
-                                                                                        sport: edge.sport,
-                                                                                        game: `${edge.away_team} @ ${edge.home_team}`,
-                                                                                        market: top.bet_type,
-                                                                                        pick: top.selection,
-                                                                                        line: top.market_line,
-                                                                                        odds: top.price,
-                                                                                        book: top.book,
-                                                                                    })}
-                                                                                    className="px-3 py-1 bg-green-500/20 text-green-300 hover:bg-green-500/30 border border-green-500/30 rounded text-xs font-bold transition-colors"
-                                                                                >
-                                                                                    Add
-                                                                                </button>
+                                                                        );
+                                                                    }
+
+                                                                    // If server computed a No-Bet state, show it.
+                                                                    if (meta && meta.isActionable === false) {
+                                                                        return (
+                                                                            <div className="flex flex-col items-center gap-2">
+                                                                                <div className="px-2 py-0.5 rounded bg-slate-800/60 text-slate-300 text-[10px] font-black uppercase tracking-widest border border-slate-700/60">
+                                                                                    No Bet
+                                                                                </div>
+                                                                                <div className="text-[11px] text-slate-400 max-w-[220px] truncate" title={meta.reason || ''}>
+                                                                                    {meta.reason || 'Blocked'}
+                                                                                </div>
                                                                                 <button
                                                                                     onClick={() => analyzeGame(edge)}
-                                                                                    className="px-3 py-1 bg-slate-800/60 text-slate-200 hover:bg-slate-800 border border-slate-700 rounded text-xs font-bold transition-colors"
+                                                                                    disabled={leagueFilter !== 'NCAAM' || (isAnalyzing && selectedGame?.id === edge.id)}
+                                                                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg ring-1 ring-white/10 flex items-center justify-center mx-auto ${(isAnalyzing && selectedGame?.id === edge.id)
+                                                                                        ? 'bg-slate-700 text-slate-400'
+                                                                                        : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                                                                                        }`}
                                                                                 >
-                                                                                    Details
+                                                                                    {isAnalyzing && selectedGame?.id === edge.id ? <RefreshCw className="animate-spin" size={14} /> : 'Details'}
                                                                                 </button>
                                                                             </div>
-                                                                        </div>
-                                                                    );
-                                                                }
+                                                                        );
+                                                                    }
 
-                                                                // If server computed a No-Bet state, show it.
-                                                                if (meta && meta.isActionable === false) {
+                                                                    // Default: show quick-pick + analyze
                                                                     return (
                                                                         <div className="flex flex-col items-center gap-2">
-                                                                            <div className="px-2 py-0.5 rounded bg-slate-800/60 text-slate-300 text-[10px] font-black uppercase tracking-widest border border-slate-700/60">
-                                                                                No Bet
-                                                                            </div>
-                                                                            <div className="text-[11px] text-slate-400 max-w-[220px] truncate" title={meta.reason || ''}>
-                                                                                {meta.reason || 'Blocked'}
-                                                                            </div>
+                                                                            <button
+                                                                                onClick={() => quickPick(edge)}
+                                                                                disabled={leagueFilter !== 'NCAAM' || rowPickingId === edge.id}
+                                                                                className={`px-3 py-1 rounded text-xs font-bold transition-colors border ${rowPickingId === edge.id
+                                                                                    ? 'bg-slate-700 text-slate-400 border-slate-600'
+                                                                                    : 'bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 border-indigo-500/30'
+                                                                                    }`}
+                                                                            >
+                                                                                {rowPickingId === edge.id ? 'Picking…' : 'Quick pick'}
+                                                                            </button>
                                                                             <button
                                                                                 onClick={() => analyzeGame(edge)}
                                                                                 disabled={leagueFilter !== 'NCAAM' || (isAnalyzing && selectedGame?.id === edge.id)}
                                                                                 className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg ring-1 ring-white/10 flex items-center justify-center mx-auto ${(isAnalyzing && selectedGame?.id === edge.id)
                                                                                     ? 'bg-slate-700 text-slate-400'
-                                                                                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                                                                                    : 'bg-indigo-600 hover:bg-indigo-500 text-white'
                                                                                     }`}
                                                                             >
-                                                                                {isAnalyzing && selectedGame?.id === edge.id ? <RefreshCw className="animate-spin" size={14} /> : 'Details'}
+                                                                                {isAnalyzing && selectedGame?.id === edge.id ? <RefreshCw className="animate-spin" size={14} /> : 'Analyze'}
                                                                             </button>
                                                                         </div>
                                                                     );
-                                                                }
-
-                                                                // Default: show quick-pick + analyze
-                                                                return (
-                                                                    <div className="flex flex-col items-center gap-2">
-                                                                        <button
-                                                                            onClick={() => quickPick(edge)}
-                                                                            disabled={leagueFilter !== 'NCAAM' || rowPickingId === edge.id}
-                                                                            className={`px-3 py-1 rounded text-xs font-bold transition-colors border ${rowPickingId === edge.id
-                                                                                ? 'bg-slate-700 text-slate-400 border-slate-600'
-                                                                                : 'bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 border-indigo-500/30'
-                                                                                }`}
-                                                                        >
-                                                                            {rowPickingId === edge.id ? 'Picking…' : 'Quick pick'}
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => analyzeGame(edge)}
-                                                                            disabled={leagueFilter !== 'NCAAM' || (isAnalyzing && selectedGame?.id === edge.id)}
-                                                                            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg ring-1 ring-white/10 flex items-center justify-center mx-auto ${(isAnalyzing && selectedGame?.id === edge.id)
-                                                                                ? 'bg-slate-700 text-slate-400'
-                                                                                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                                                                                }`}
-                                                                        >
-                                                                            {isAnalyzing && selectedGame?.id === edge.id ? <RefreshCw className="animate-spin" size={14} /> : 'Analyze'}
-                                                                        </button>
-                                                                    </div>
-                                                                );
-                                                            })()}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            });
+                                                                })()}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                });
                                             })()
                                         )}
                                     </tbody>
@@ -1760,148 +1757,148 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                 });
 
                                                 return histAll.map((item, idx) => {
-                                                // Robust Recommendation Parsing
-                                                let recs = [];
-                                                try {
-                                                    if (item.outputs_json) {
-                                                        const out = JSON.parse(item.outputs_json);
-                                                        if (out.recommendations) recs = out.recommendations;
+                                                    // Robust Recommendation Parsing
+                                                    let recs = [];
+                                                    try {
+                                                        if (item.outputs_json) {
+                                                            const out = JSON.parse(item.outputs_json);
+                                                            if (out.recommendations) recs = out.recommendations;
+                                                        }
+                                                        if (recs.length === 0 && item.recommendation_json) {
+                                                            recs = JSON.parse(item.recommendation_json);
+                                                        }
+                                                        // Fallback to legacy fields if needed
+                                                        if (recs.length === 0 && item.pick) {
+                                                            recs = [{ side: item.pick, line: item.bet_line, edge: item.ev_per_unit || item.edge }];
+                                                        }
+                                                    } catch (e) {
+                                                        console.warn('Failed to parse history recs', e);
                                                     }
-                                                    if (recs.length === 0 && item.recommendation_json) {
-                                                        recs = JSON.parse(item.recommendation_json);
-                                                    }
-                                                    // Fallback to legacy fields if needed
-                                                    if (recs.length === 0 && item.pick) {
-                                                        recs = [{ side: item.pick, line: item.bet_line, edge: item.ev_per_unit || item.edge }];
-                                                    }
-                                                } catch (e) {
-                                                    console.warn('Failed to parse history recs', e);
-                                                }
 
-                                                const recRank = rankByKey[keyFor(item)] || null;
+                                                    const recRank = rankByKey[keyFor(item)] || null;
 
-                                                const mainRec = recs[0] || {};
+                                                    const mainRec = recs[0] || {};
 
-                                                // Result Logic
-                                                const resultStatus = item.graded_result || item.outcome || 'Pending';
+                                                    // Result Logic
+                                                    const resultStatus = item.graded_result || item.outcome || 'Pending';
 
-                                                return (
-                                                    <tr key={item.id || `${item.event_id || 'evt'}:${idx}`} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-                                                        <td className="py-2 px-4 text-slate-400 text-xs whitespace-nowrap">
-                                                            <div className="font-bold text-slate-300">
-                                                                {new Date(item.analyzed_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
-                                                            </div>
-                                                            <div className="opacity-70">
-                                                                {new Date(item.analyzed_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                                                            </div>
-                                                        </td>
-                                                        <td className="py-2 px-4 text-xs text-slate-300 font-mono">
-                                                            {recRank ? `#${recRank}` : '—'}
-                                                        </td>
-                                                        <td className="py-2 px-4">
-                                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded tracking-tighter uppercase
+                                                    return (
+                                                        <tr key={item.id || `${item.event_id || 'evt'}:${idx}`} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                                                            <td className="py-2 px-4 text-slate-400 text-xs whitespace-nowrap">
+                                                                <div className="font-bold text-slate-300">
+                                                                    {new Date(item.analyzed_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
+                                                                </div>
+                                                                <div className="opacity-70">
+                                                                    {new Date(item.analyzed_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-2 px-4 text-xs text-slate-300 font-mono">
+                                                                {recRank ? `#${recRank}` : '—'}
+                                                            </td>
+                                                            <td className="py-2 px-4">
+                                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded tracking-tighter uppercase
                                                         ${item.league === 'NFL' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/20' :
-                                                                    item.league === 'NCAAM' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/20' :
-                                                                        item.league === 'NCAAF' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20' :
-                                                                            'bg-slate-700/50 text-slate-400 border border-slate-600'}`}>
-                                                                {item.league}
-                                                            </span>
-                                                        </td>
-                                                        <td className="py-2 px-4 font-medium text-sm text-slate-200">{item.away_team} @ {item.home_team}</td>
-                                                        <td className="py-2 px-4 text-white font-bold">
-                                                            {(() => {
-                                                                const rawSide = mainRec.side;
-                                                                const sideStr = String(rawSide || '').trim();
-                                                                const sideKey = sideStr.toLowerCase();
+                                                                        item.league === 'NCAAM' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/20' :
+                                                                            item.league === 'NCAAF' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20' :
+                                                                                'bg-slate-700/50 text-slate-400 border border-slate-600'}`}>
+                                                                    {item.league}
+                                                                </span>
+                                                            </td>
+                                                            <td className="py-2 px-4 font-medium text-sm text-slate-200">{item.away_team} @ {item.home_team}</td>
+                                                            <td className="py-2 px-4 text-white font-bold">
+                                                                {(() => {
+                                                                    const rawSide = mainRec.side;
+                                                                    const sideStr = String(rawSide || '').trim();
+                                                                    const sideKey = sideStr.toLowerCase();
 
-                                                                // Map HOME/AWAY to actual team names for readability.
-                                                                const side = (sideKey === 'home' || sideKey === 'h')
-                                                                    ? item.home_team
-                                                                    : (sideKey === 'away' || sideKey === 'a')
-                                                                        ? item.away_team
-                                                                        : sideStr;
+                                                                    // Map HOME/AWAY to actual team names for readability.
+                                                                    const side = (sideKey === 'home' || sideKey === 'h')
+                                                                        ? item.home_team
+                                                                        : (sideKey === 'away' || sideKey === 'a')
+                                                                            ? item.away_team
+                                                                            : sideStr;
 
-                                                                const line = mainRec.line;
-                                                                if (side && line !== null && line !== undefined && String(line).trim() !== '') {
-                                                                    const num = Number(line);
-                                                                    if (!Number.isNaN(num)) {
-                                                                        const signed = num > 0 ? `+${num}` : `${num}`;
-                                                                        return `${side} ${signed}`;
+                                                                    const line = mainRec.line;
+                                                                    if (side && line !== null && line !== undefined && String(line).trim() !== '') {
+                                                                        const num = Number(line);
+                                                                        if (!Number.isNaN(num)) {
+                                                                            const signed = num > 0 ? `+${num}` : `${num}`;
+                                                                            return `${side} ${signed}`;
+                                                                        }
                                                                     }
-                                                                }
-                                                                return `${side || ''} ${line || ''}`.trim();
-                                                            })()}
-                                                        </td>
-                                                        <td className="py-2 px-4 text-slate-400 text-xs">
-                                                            <div className="flex flex-col">
-                                                                <span>Mkt: <span className="text-slate-300 font-mono">{(() => {
-                                                                    const v = mainRec.market_line;
-                                                                    if (v === null || v === undefined || v === '') return '-';
-                                                                    const num = Number(v);
-                                                                    if (Number.isNaN(num)) return String(v);
-                                                                    return num > 0 ? `+${num}` : `${num}`;
-                                                                })()}</span></span>
-                                                                <span>Fair: <span className="text-slate-500 font-mono">{(() => {
-                                                                    const v = (mainRec.fair_line || item.bet_line);
-                                                                    if (v === null || v === undefined || v === '') return '-';
-                                                                    const num = Number(v);
-                                                                    if (Number.isNaN(num)) return String(v);
-                                                                    return num > 0 ? `+${num}` : `${num}`;
-                                                                })()}</span></span>
-                                                            </div>
-                                                        </td>
-                                                        <td className={`py-2 px-4 font-bold ${getEdgeColor(item.edge ?? mainRec.edge ?? item.ev_per_unit, item.league)}`}>
-                                                            {(() => {
-                                                                const v = item.edge ?? mainRec.edge;
-                                                                const ev = Number(item.ev_per_unit ?? mainRec.ev_per_unit ?? item.ev ?? (v && !String(v).includes('%') ? v : null));
-                                                                if (Number.isFinite(ev)) {
-                                                                    const val = ev > 1 ? ev / 100 : ev; // Handle internal 0.1 vs 10 diffs if any
-                                                                    // Most likely ev_per_unit is 0.05 for 5%.
-                                                                    const pct = val * 100;
-                                                                    return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
-                                                                }
-                                                                if (v && String(v).includes('%')) return v;
-                                                                return '—';
-                                                            })()}
-                                                        </td>
-                                                        <td className="py-2 px-4 text-right sm:text-left">
-                                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest
+                                                                    return `${side || ''} ${line || ''}`.trim();
+                                                                })()}
+                                                            </td>
+                                                            <td className="py-2 px-4 text-slate-400 text-xs">
+                                                                <div className="flex flex-col">
+                                                                    <span>Mkt: <span className="text-slate-300 font-mono">{(() => {
+                                                                        const v = mainRec.market_line;
+                                                                        if (v === null || v === undefined || v === '') return '-';
+                                                                        const num = Number(v);
+                                                                        if (Number.isNaN(num)) return String(v);
+                                                                        return num > 0 ? `+${num}` : `${num}`;
+                                                                    })()}</span></span>
+                                                                    <span>Fair: <span className="text-slate-500 font-mono">{(() => {
+                                                                        const v = (mainRec.fair_line || item.bet_line);
+                                                                        if (v === null || v === undefined || v === '') return '-';
+                                                                        const num = Number(v);
+                                                                        if (Number.isNaN(num)) return String(v);
+                                                                        return num > 0 ? `+${num}` : `${num}`;
+                                                                    })()}</span></span>
+                                                                </div>
+                                                            </td>
+                                                            <td className={`py-2 px-4 font-bold ${getEdgeColor(item.edge ?? mainRec.edge ?? item.ev_per_unit, item.league)}`}>
+                                                                {(() => {
+                                                                    const v = item.edge ?? mainRec.edge;
+                                                                    const ev = Number(item.ev_per_unit ?? mainRec.ev_per_unit ?? item.ev ?? (v && !String(v).includes('%') ? v : null));
+                                                                    if (Number.isFinite(ev)) {
+                                                                        const val = ev > 1 ? ev / 100 : ev; // Handle internal 0.1 vs 10 diffs if any
+                                                                        // Most likely ev_per_unit is 0.05 for 5%.
+                                                                        const pct = val * 100;
+                                                                        return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+                                                                    }
+                                                                    if (v && String(v).includes('%')) return v;
+                                                                    return '—';
+                                                                })()}
+                                                            </td>
+                                                            <td className="py-2 px-4 text-right sm:text-left">
+                                                                <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest
                                                         ${resultStatus === 'WON' || resultStatus === 'Win' ? 'bg-green-500/20 text-green-400 border border-green-500/20' :
-                                                                    resultStatus === 'LOST' || resultStatus === 'Loss' ? 'bg-red-500/20 text-red-400 border border-red-500/20' :
-                                                                        resultStatus === 'PUSH' || resultStatus === 'Push' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/20' :
-                                                                            'bg-slate-700/50 text-slate-400 border border-slate-600'}`}>
-                                                                {resultStatus === 'PENDING' ? 'Analyzed' : resultStatus}
-                                                            </span>
-                                                        </td>
-                                                        <td className="py-2 px-4 text-slate-300 font-mono text-xs">
-                                                            {(() => {
-                                                                const hs = item.final_score_home ?? item.home_score ?? item.score_home ?? item.home_points;
-                                                                const as = item.final_score_away ?? item.away_score ?? item.score_away ?? item.away_points;
+                                                                        resultStatus === 'LOST' || resultStatus === 'Loss' ? 'bg-red-500/20 text-red-400 border border-red-500/20' :
+                                                                            resultStatus === 'PUSH' || resultStatus === 'Push' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/20' :
+                                                                                'bg-slate-700/50 text-slate-400 border border-slate-600'}`}>
+                                                                    {resultStatus === 'PENDING' ? 'Analyzed' : resultStatus}
+                                                                </span>
+                                                            </td>
+                                                            <td className="py-2 px-4 text-slate-300 font-mono text-xs">
+                                                                {(() => {
+                                                                    const hs = item.final_score_home ?? item.home_score ?? item.score_home ?? item.home_points;
+                                                                    const as = item.final_score_away ?? item.away_score ?? item.score_away ?? item.away_points;
 
-                                                                // If backend ever sends a single string like "72-68".
-                                                                const fs = item.final_score || item.score_final;
-                                                                if ((hs === null || hs === undefined) && (as === null || as === undefined) && fs) {
-                                                                    return <span className="text-white font-bold">{String(fs)}</span>;
-                                                                }
+                                                                    // If backend ever sends a single string like "72-68".
+                                                                    const fs = item.final_score || item.score_final;
+                                                                    if ((hs === null || hs === undefined) && (as === null || as === undefined) && fs) {
+                                                                        return <span className="text-white font-bold">{String(fs)}</span>;
+                                                                    }
 
-                                                                const hsn = Number(hs);
-                                                                const asn = Number(as);
-                                                                if (Number.isFinite(hsn) && Number.isFinite(asn)) {
-                                                                    return (
-                                                                        <div className="flex flex-col">
-                                                                            <span className="text-white font-bold">{hsn}-{asn}</span>
-                                                                            <span className="text-[10px] text-slate-500">T: {hsn + asn}</span>
-                                                                        </div>
-                                                                    );
-                                                                }
+                                                                    const hsn = Number(hs);
+                                                                    const asn = Number(as);
+                                                                    if (Number.isFinite(hsn) && Number.isFinite(asn)) {
+                                                                        return (
+                                                                            <div className="flex flex-col">
+                                                                                <span className="text-white font-bold">{hsn}-{asn}</span>
+                                                                                <span className="text-[10px] text-slate-500">T: {hsn + asn}</span>
+                                                                            </div>
+                                                                        );
+                                                                    }
 
-                                                                return '-';
-                                                            })()}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            });
-                                        })()}
+                                                                    return '-';
+                                                                })()}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                });
+                                            })()}
                                         </tbody>
                                     </table>
                                 </div>
@@ -2452,7 +2449,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                                                             {analysisResult?.net_data?.home?.rank ? ` • NET #${analysisResult.net_data.home.rank}` : ''}
                                                                         </div>
 
-                                                                        {rows.map((r) => { 
+                                                                        {rows.map((r) => {
                                                                             const dec = (r.k === 'Luck' || r.k === 'Continuity') ? 2 : 1;
                                                                             return (
                                                                                 <React.Fragment key={r.k}>

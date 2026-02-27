@@ -197,7 +197,7 @@ def main():
             diag['total_events'] += 1
             try:
                 # Use strict gates for cached picks so we don't surface negative/no-edge plays.
-                res = model.analyze(eid, relax_gates=False, persist=False)
+                res = model.analyze(eid, relax_gates=False, persist=True)
 
                 # Diagnose outcome
                 try:
