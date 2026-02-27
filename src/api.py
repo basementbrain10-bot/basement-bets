@@ -3560,8 +3560,19 @@ async def get_ncaam_parlays_today(
     # High confidence shortlist (within band)
     high_conf = sorted(combos_in_band, key=lambda x: (x['p_win'], x['ev']), reverse=True)[:5]
 
-    # Payout band shortlist (within band; best EV)
-    payout_band = sorted(combos_in_band, key=lambda x: (x['ev'], x['p_win']), reverse=True)[:5]
+    # Deduplicate: Track event pairs used in high_conf
+    def get_combo_key(c):
+        e1 = c['legs'][0].get('event_id', '')
+        e2 = c['legs'][1].get('event_id', '')
+        return tuple(sorted([e1, e2]))
+    
+    high_conf_keys = {get_combo_key(c) for c in high_conf}
+    remaining_combos = [c for c in combos_in_band if get_combo_key(c) not in high_conf_keys]
+
+    # Payout band shortlist: prioritize odds >= +150, then sort by EV
+    value_combos = sorted([c for c in remaining_combos if (c.get('american_odds') or 0) >= 150], key=lambda x: (x['ev'], x['p_win']), reverse=True)
+    other_combos = sorted([c for c in remaining_combos if (c.get('american_odds') or 0) < 150], key=lambda x: (x['ev'], x['p_win']), reverse=True)
+    payout_band = (value_combos + other_combos)[:5]
 
     return {
         "status": "success",
