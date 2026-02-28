@@ -186,6 +186,44 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
     if errors and show_errors:
         print(f"[WARN] {errors} games errored during analyze().")
 
+    # Persist a run marker so the web dashboard can explain mismatches between
+    # cached daily_top_picks and the latest full run.
+    try:
+        status = 'NO_BETS' if recs == 0 else 'OK'
+        with get_db_connection() as conn:
+            _exec(conn, """
+              CREATE TABLE IF NOT EXISTS model_run_log (
+                id SERIAL PRIMARY KEY,
+                league TEXT NOT NULL,
+                date_et TEXT NOT NULL,
+                run_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                scanned INTEGER,
+                recs INTEGER,
+                notes TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+              );
+            """)
+            _exec(conn, """
+              INSERT INTO model_run_log (league, date_et, run_type, status, scanned, recs, notes)
+              VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (
+                'NCAAM',
+                today_str,
+                'full',
+                status,
+                int(scanned),
+                int(recs),
+                f"predict_today_v2 window={int(window_hours)}h lookback={int(lookback_hours)}h",
+            ))
+            try:
+                conn.commit()
+            except Exception:
+                pass
+    except Exception as e:
+        if show_errors:
+            print(f"[predict_today_v2] run-log insert failed: {e}")
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()

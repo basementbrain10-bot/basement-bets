@@ -2580,11 +2580,33 @@ async def get_ncaam_top_picks(request: Request, date: Optional[str] = None, days
                     'is_actionable': bool(d.get('is_actionable')),
                     'reason': d.get('reason'),
                 }
+            # Attach latest full-run status when available so the UI can show:
+            # "Stale slate — latest full run produced NO BETS. Showing last cached picks." (option 2)
+            run_meta = None
+            try:
+                with get_db_connection() as conn2:
+                    rm = _exec(conn2, """
+                      SELECT status, run_type, scanned, recs, created_at
+                      FROM model_run_log
+                      WHERE league='NCAAM' AND date_et=%s AND run_type='full'
+                      ORDER BY created_at DESC
+                      LIMIT 1
+                    """, (date,)).fetchone()
+                if rm:
+                    rmd = dict(rm)
+                    ca = rmd.get('created_at')
+                    if hasattr(ca, 'isoformat'):
+                        rmd['created_at'] = ca.isoformat().replace('+00:00', 'Z')
+                    run_meta = rmd
+            except Exception:
+                run_meta = None
+
             data = {
                 'generated_at': datetime.utcnow().isoformat() + 'Z',
                 'date': date,
                 'days': days,
                 'limit_games': limit_games,
+                'run_meta': run_meta,
                 'stats': {
                     'events_total': len(event_ids),
                     'scanned': len(event_ids),
