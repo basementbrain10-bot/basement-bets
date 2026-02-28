@@ -420,9 +420,9 @@ function App() {
                     {/* Header */}
                     <header className="mb-6 md:mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                         <div>
-                            <div className="flex items-center gap-3">
-                                <img src="/logo.png" alt="Basement Bets Logo" className="h-10 md:h-12 w-auto object-contain" />
-                                <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
+                            <div className="flex items-center gap-4">
+                                <img src="/logo.png" alt="Basement Bets Logo" className="h-16 md:h-20 w-auto object-contain" />
+                                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent leading-none">
                                     Basement Bets
                                 </h1>
                             </div>
