@@ -3436,7 +3436,7 @@ async def get_ncaam_analytics(days: int = 30, min_ev_per_unit: float = 0.02):
 async def get_ncaam_parlays_today(
     min_ev_per_unit: float = 0.02,
     parlay_odds_lo: int = -120,
-    parlay_odds_hi: int = 300,
+    parlay_odds_hi: int = 800,
     max_legs: int = 2,
     limit_legs: int = 80,
 ):
@@ -3819,34 +3819,48 @@ async def trigger_dedupe_model_predictions(request: Request, authorized: bool = 
 
 
 @app.api_route("/api/jobs/grade_predictions", methods=["GET", "POST"])
-async def trigger_prediction_grading(request: Request, fast: bool = True, backfill_days: int = 3, max_clv_rows: int = 250, max_grade_rows: int = 500, skip_clv: bool = False, authorized: bool = Depends(verify_cron_secret)):
+async def trigger_prediction_grading(
+    request: Request, 
+    background_tasks: BackgroundTasks,
+    fast: bool = True, 
+    backfill_days: int = 10, 
+    max_clv_rows: int = 250, 
+    max_grade_rows: int = 500, 
+    skip_clv: bool = False, 
+    authorized: bool = Depends(verify_cron_secret)
+):
     """Cron/manual: grade model_predictions using local game_results.
 
-    Default mode is **fast/bounded** to avoid Vercel function timeouts.
-
-    Params:
-    - fast: if true, uses bounded defaults
-    - backfill_days: results/CLV lookback window
-    - max_clv_rows: max CLV updates per run
-    - max_grade_rows: max outcome grades per run
-    - skip_clv: skip CLV step (outcome-only)
+    Uses BackgroundTasks to avoid Vercel 60s timeout limits.
     """
-    try:
-        from src.services.grading_service import GradingService
-        svc = GradingService()
-        if fast:
-            res = svc.grade_predictions(backfill_days=backfill_days, max_clv_rows=max_clv_rows, max_grade_rows=max_grade_rows, skip_clv=skip_clv)
-        else:
-            # Unbounded legacy behavior (use carefully)
-            res = svc.grade_predictions(backfill_days=10, max_clv_rows=2000, max_grade_rows=5000, skip_clv=skip_clv)
-        return {
-            "status": "success",
-            "message": "Prediction grading completed",
-            "results": res
+    def do_grade():
+        try:
+            from src.services.grading_service import GradingService
+            import time
+            start_t = time.time()
+            svc = GradingService()
+            if fast:
+                res = svc.grade_predictions(backfill_days=backfill_days, max_clv_rows=max_clv_rows, max_grade_rows=max_grade_rows, skip_clv=skip_clv)
+            else:
+                # Unbounded legacy behavior (use carefully)
+                res = svc.grade_predictions(backfill_days=10, max_clv_rows=2000, max_grade_rows=5000, skip_clv=skip_clv)
+            print(f"[JOB DONE] grade_predictions finished in {time.time() - start_t:.1f}s. Updates: {res}")
+        except Exception as e:
+            print(f"[JOB ERROR] Grading failed: {e}")
+
+    background_tasks.add_task(do_grade)
+    
+    return JSONResponse(
+        status_code=202,
+        content={
+            "status": "accepted",
+            "message": "Prediction grading pushed to background task.",
+            "params": {
+                "fast": fast,
+                "backfill_days": backfill_days
+            }
         }
-    except Exception as e:
-        print(f"[JOB ERROR] Grading failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    )
 
 
 @app.api_route("/api/jobs/build_daily_top_picks", methods=["GET", "POST"])

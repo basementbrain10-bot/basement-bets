@@ -40,6 +40,17 @@ export default function ParlayRecommendations() {
     const legs = c?.legs || [];
     const a = legs[0] || {};
     const b = legs[1] || {};
+
+    const fmtTime = (ts) => {
+      if (!ts) return '';
+      try {
+        const d = new Date(ts);
+        return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+      } catch (e) {
+        return '';
+      }
+    };
+
     return (
       <div key={idx} className="relative overflow-hidden p-4 rounded-xl border border-slate-700/60 bg-gradient-to-br from-slate-900 to-slate-950 shadow-lg flex flex-col gap-3 transition hover:border-slate-500/50">
         {/* Top bar: Odds and EV */}
@@ -63,19 +74,25 @@ export default function ParlayRecommendations() {
         {/* Legs container */}
         <div className="flex flex-col gap-3 w-full">
           {/* Leg 1 */}
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-xs text-slate-400 font-medium truncate max-w-[200px] sm:max-w-[240px]">{a.matchup}</span>
-              <span className="text-sm font-bold text-slate-200">{a.team_pick}</span>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">{fmtTime(a.start_time)}</span>
+                <span className="text-xs text-slate-400 font-medium whitespace-normal">{a.matchup}</span>
+              </div>
+              <span className="text-sm font-bold text-slate-200 whitespace-normal leading-tight">{a.team_pick}</span>
             </div>
             <span className="text-sm font-mono font-bold text-slate-500 shrink-0">{fmtOdds(a.price)}</span>
           </div>
 
           {/* Leg 2 */}
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-xs text-slate-400 font-medium truncate max-w-[200px] sm:max-w-[240px]">{b.matchup}</span>
-              <span className="text-sm font-bold text-slate-200">{b.team_pick}</span>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-500 font-bold uppercase">{fmtTime(b.start_time)}</span>
+                <span className="text-xs text-slate-400 font-medium whitespace-normal">{b.matchup}</span>
+              </div>
+              <span className="text-sm font-bold text-slate-200 whitespace-normal leading-tight">{b.team_pick}</span>
             </div>
             <span className="text-sm font-mono font-bold text-slate-500 shrink-0">{fmtOdds(b.price)}</span>
           </div>
