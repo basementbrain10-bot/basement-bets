@@ -103,8 +103,23 @@ class ErrorBoundary extends React.Component {
     }
 }
 
+// --- Logo Icon Component ---
+const LogoIcon = ({ className }) => (
+    <svg viewBox="0 0 100 80" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* House Roof */}
+        <path d="M10 40L50 10L90 40" stroke="white" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M75 30V15H82V35" stroke="white" strokeWidth="6" strokeLinecap="round" />
+        {/* BB Initials as the house body */}
+        <text x="50" y="70" textAnchor="middle" fontSize="45" fontWeight="900" fill="white" fontFamily="sans-serif" style={{ letterSpacing: '-2px' }}>BB</text>
+        {/* Door */}
+        <rect x="44" y="55" width="12" height="20" stroke="white" strokeWidth="2" fill="none" />
+        <circle cx="53" cy="65" r="1" fill="white" />
+    </svg>
+);
+
 function App() {
     const [page, setPage] = useState('today'); // today | model | actuals | council
+
     // Actuals sub-tabs
     const [actualsTab, setActualsTab] = useState('transactions'); // transactions | performance | bankroll
 
@@ -421,7 +436,7 @@ function App() {
                     <header className="mb-6 md:mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                         <div>
                             <div className="flex items-center gap-4">
-                                <img src="/logo.png" alt="Basement Bets Logo" className="h-16 md:h-20 w-auto object-contain" />
+                                <LogoIcon className="h-16 md:h-20 w-auto" />
                                 <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent leading-none">
                                     Basement Bets
                                 </h1>
