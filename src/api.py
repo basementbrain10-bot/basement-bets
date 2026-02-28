@@ -3461,6 +3461,7 @@ async def get_ncaam_parlays_today(
     parlay_odds_hi: int = 800,
     max_legs: int = 2,
     limit_legs: int = 80,
+    persist: bool = False,
 ):
     """2-leg ML parlay recommendations for today's NCAAM slate.
 
@@ -3596,6 +3597,79 @@ async def get_ncaam_parlays_today(
     other_combos = sorted([c for c in remaining_combos if (c.get('american_odds') or 0) < 150], key=lambda x: (x['ev'], x['p_win']), reverse=True)
     payout_band = (value_combos + other_combos)[:5]
 
+    # Optional: persist the single recommended parlay so performance/grading can track it.
+    # (UI can call with persist=1; duplicates are avoided via unique key.)
+    try:
+        if persist and (high_conf or payout_band):
+            from src.database import get_admin_db_connection
+            import hashlib
+
+            # prefer the highest confidence combo; fallback to best EV in band
+            chosen = (high_conf[0] if high_conf else payout_band[0])
+            eids = sorted([str(chosen['legs'][0].get('event_id') or ''), str(chosen['legs'][1].get('event_id') or '')])
+            pair_key = "|".join(eids)
+            # Unique ID for this parlay on this ET date
+            ukey = hashlib.sha256(("NCAAM|ML2|" + pair_key).encode()).hexdigest()
+
+            # Create table if missing
+            ddl = """
+              CREATE TABLE IF NOT EXISTS recommended_parlays (
+                id TEXT PRIMARY KEY,
+                league TEXT NOT NULL,
+                date_et TEXT NOT NULL,
+                kind TEXT NOT NULL, -- e.g. 'ML2'
+                bucket TEXT,        -- e.g. 'high_confidence' | 'payout_band'
+                american_odds INTEGER,
+                p_win REAL,
+                ev REAL,
+                event_id_1 TEXT,
+                event_id_2 TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(league, date_et, kind, event_id_1, event_id_2)
+              );
+            """
+            with get_admin_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(ddl)
+                conn.commit()
+
+            # Determine ET date
+            date_et = None
+            try:
+                with get_db_connection() as conn:
+                    date_et = _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text").fetchone()[0]
+            except Exception:
+                date_et = None
+            if not date_et:
+                date_et = datetime.utcnow().date().isoformat()
+
+            bucket = 'high_confidence' if high_conf else 'payout_band'
+            # Incorporate ET date into id so the same event-pair can be recommended again on another day.
+            pid = hashlib.sha256((str(date_et) + "|" + ukey).encode()).hexdigest()
+
+            with get_db_connection() as conn:
+                _exec(conn, """
+                  INSERT INTO recommended_parlays (id, league, date_et, kind, bucket, american_odds, p_win, ev, event_id_1, event_id_2)
+                  VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                  ON CONFLICT (league, date_et, kind, event_id_1, event_id_2) DO UPDATE SET
+                    american_odds=EXCLUDED.american_odds,
+                    p_win=EXCLUDED.p_win,
+                    ev=EXCLUDED.ev,
+                    bucket=EXCLUDED.bucket
+                """, (
+                    pid, 'NCAAM', str(date_et), 'ML2', bucket,
+                    int(chosen.get('american_odds') or 0),
+                    float(chosen.get('p_win') or 0.0),
+                    float(chosen.get('ev') or 0.0),
+                    eids[0], eids[1],
+                ))
+                conn.commit()
+    except Exception as e:
+        try:
+            print(f"[parlays] persist failed: {e}")
+        except Exception:
+            pass
+
     return {
         "status": "success",
         "legs_considered": len(norm_legs),
@@ -3607,6 +3681,130 @@ async def get_ncaam_parlays_today(
         },
         "high_confidence": high_conf,
         "payout_band": payout_band,
+    }
+
+
+@app.get("/api/ncaam/parlays/performance-report")
+async def ncaam_parlay_performance_report(days: int = 30):
+    """Performance for *recommended* 2-leg ML parlays.
+
+    Uses recommended_parlays table (populated by /api/ncaam/parlays/today?persist=1).
+    """
+    from src.database import get_db_connection, _exec
+
+    def payout_per_unit(price: int) -> float:
+        if price is None:
+            return 0.0
+        p = int(price)
+        # payout when risking 1u
+        return (p / 100.0) if p > 0 else (100.0 / abs(p))
+
+    def parlay_outcome(o1: str, o2: str):
+        a = (o1 or '').upper()
+        b = (o2 or '').upper()
+        decided = {'WON','LOST','PUSH'}
+        if a not in decided or b not in decided:
+            return 'PENDING'
+        if a == 'LOST' or b == 'LOST':
+            return 'LOST'
+        # ML legs generally don't push; keep PUSH logic for completeness
+        if a == 'PUSH' and b == 'PUSH':
+            return 'PUSH'
+        if a == 'PUSH' or b == 'PUSH':
+            return 'PUSH'
+        return 'WON'
+
+    try:
+        days = int(days)
+    except Exception:
+        days = 30
+    days = max(3, min(days, 180))
+
+    with get_db_connection() as conn:
+        rows = _exec(conn, """
+          SELECT
+            p.id,
+            p.date_et,
+            p.american_odds,
+            p.p_win,
+            p.ev,
+            p.bucket,
+            p.event_id_1,
+            p.event_id_2,
+            e1.away_team AS away1,
+            e1.home_team AS home1,
+            e2.away_team AS away2,
+            e2.home_team AS home2,
+            m1.outcome AS o1,
+            m2.outcome AS o2
+          FROM recommended_parlays p
+          JOIN events e1 ON e1.id=p.event_id_1
+          JOIN events e2 ON e2.id=p.event_id_2
+          LEFT JOIN LATERAL (
+            SELECT outcome
+            FROM model_predictions
+            WHERE event_id=p.event_id_1 AND UPPER(COALESCE(market_type,'')) IN ('MONEYLINE','ML')
+            ORDER BY analyzed_at DESC
+            LIMIT 1
+          ) m1 ON TRUE
+          LEFT JOIN LATERAL (
+            SELECT outcome
+            FROM model_predictions
+            WHERE event_id=p.event_id_2 AND UPPER(COALESCE(market_type,'')) IN ('MONEYLINE','ML')
+            ORDER BY analyzed_at DESC
+            LIMIT 1
+          ) m2 ON TRUE
+          WHERE p.league='NCAAM' AND p.kind='ML2'
+            AND p.created_at > NOW() - (%(d)s || ' days')::interval
+          ORDER BY p.created_at DESC
+          LIMIT 1000
+        """, {"d": int(days)}).fetchall()
+
+    items = []
+    for r in rows or []:
+        d = dict(r)
+        out = parlay_outcome(d.get('o1'), d.get('o2'))
+        price = d.get('american_odds')
+        roi = None
+        if out == 'WON':
+            roi = payout_per_unit(price)
+        elif out == 'LOST':
+            roi = -1.0
+        elif out == 'PUSH':
+            roi = 0.0
+
+        items.append({
+            "date_et": d.get('date_et'),
+            "bucket": d.get('bucket'),
+            "legs": [
+                f"{d.get('away1')} @ {d.get('home1')}",
+                f"{d.get('away2')} @ {d.get('home2')}",
+            ],
+            "american_odds": d.get('american_odds'),
+            "p_win": float(d.get('p_win') or 0.0),
+            "ev": float(d.get('ev') or 0.0),
+            "outcome": out,
+            "roi_per_unit": roi,
+        })
+
+    decided = [x for x in items if x['outcome'] in ('WON','LOST','PUSH')]
+    won = sum(1 for x in decided if x['outcome'] == 'WON')
+    lost = sum(1 for x in decided if x['outcome'] == 'LOST')
+    push = sum(1 for x in decided if x['outcome'] == 'PUSH')
+    pending = sum(1 for x in items if x['outcome'] == 'PENDING')
+
+    roi_vals = [x['roi_per_unit'] for x in decided if x['roi_per_unit'] is not None]
+    roi_pct = (sum(roi_vals) / len(roi_vals) * 100.0) if roi_vals else 0.0
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + 'Z',
+        "league": "NCAAM",
+        "kind": "ML2",
+        "days": int(days),
+        "record": {"won": won, "lost": lost, "push": push},
+        "pending": pending,
+        "roi_pct": round(roi_pct, 2),
+        "items": items[:50],
     }
 
 

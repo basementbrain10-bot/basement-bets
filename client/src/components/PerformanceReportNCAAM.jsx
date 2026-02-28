@@ -19,19 +19,22 @@ export default function PerformanceReportNCAAM() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
   const [scatter, setScatter] = useState(null);
+  const [parlayPerf, setParlayPerf] = useState(null);
 
   const load = async () => {
     setLoading(true);
     setErr(null);
     try {
-      const [rep, ser, sc] = await Promise.all([
+      const [rep, ser, sc, parl] = await Promise.all([
         api.get('/api/ncaam/performance-report', { params: { days: 30 } }),
         api.get('/api/ncaam/model-performance/series', { params: { days: 30, min_ev_per_unit: 0.02 } }),
         api.get('/api/model/performance/scatter', { params: { days: 120, min_ev_per_unit: 0.02 } }),
+        api.get('/api/ncaam/parlays/performance-report', { params: { days: 30 } }).catch(() => ({ data: null })),
       ]);
       setData(rep.data);
       setSeries(ser.data);
       setScatter(sc.data);
+      setParlayPerf(parl.data);
     } catch (e) {
       setErr(e?.response?.data?.detail || e?.message || 'Failed to load report');
     } finally {
@@ -116,6 +119,35 @@ export default function PerformanceReportNCAAM() {
                 </div>
               );
             })}
+          </div>
+
+          {/* 2-leg ML parlay performance (separate from straight bets) */}
+          <div className="mt-4 bg-slate-800/40 border border-slate-700 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-slate-500 font-black">2-leg ML parlay performance (recommended)</div>
+                <div className="text-xs text-slate-500 mt-1">Tracked separately from straight bets.</div>
+              </div>
+              <div className="text-xs text-slate-500">Source: recommended_parlays</div>
+            </div>
+            {!parlayPerf ? (
+              <div className="mt-2 text-slate-500 text-sm">No parlay recommendations logged yet.</div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-6 text-sm">
+                <div>
+                  <div className="text-slate-400 text-xs">Record</div>
+                  <div className="text-white font-bold">{parlayPerf?.record?.won ?? 0}-{parlayPerf?.record?.lost ?? 0}-{parlayPerf?.record?.push ?? 0}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400 text-xs">ROI</div>
+                  <div className={`font-bold ${(parlayPerf?.roi_pct ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>{fmtPct(parlayPerf?.roi_pct ?? 0)}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400 text-xs">Pending</div>
+                  <div className="text-white font-mono font-bold">{parlayPerf?.pending ?? 0}</div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">

@@ -430,14 +430,14 @@ function App() {
         <ErrorBoundary>
             {showLogin && <LoginModal onSubmit={handleLogin} />}
             {/* <StagingBanner /> */}
-            <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 font-sans selection:bg-green-500 selection:text-black">
+            <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 font-sans selection:bg-brand-blue/30">
                 <div className="max-w-7xl mx-auto">
                     {/* Header */}
                     <header className="mb-6 md:mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                         <div>
                             <div className="flex items-center gap-4">
                                 <LogoIcon className="h-16 md:h-20 w-auto" />
-                                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent leading-none">
+                                <h1 className="text-3xl md:text-4xl font-semibold tracking-tight leading-none text-gradient from-blue-400 to-green-400">
                                     Basement Bets
                                 </h1>
                             </div>
