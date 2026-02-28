@@ -9,6 +9,14 @@ export default {
             colors: {
                 background: "hsl(var(--background))",
                 foreground: "hsl(var(--foreground))",
+                brand: {
+                    navy: '#051024',
+                    blue: '#4A89DC',
+                    gray: '#DEE2E6',
+                }
+            },
+            fontFamily: {
+                sans: ['Montserrat', 'sans-serif'],
             }
         },
     },

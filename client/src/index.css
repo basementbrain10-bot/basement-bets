@@ -9,17 +9,37 @@
   }
 
   /* Global typography + color normalization (Apple-ish: consistent, not shouty) */
-  h1 { @apply text-2xl md:text-3xl font-semibold text-slate-100 tracking-tight; }
-  h2 { @apply text-lg md:text-xl font-semibold text-slate-100 tracking-tight; }
-  h3 { @apply text-base font-semibold text-slate-100; }
-  h4 { @apply text-sm font-semibold text-slate-200; }
+  h1 {
+    @apply text-2xl md:text-3xl font-semibold text-slate-100 tracking-tight;
+  }
 
-  p { @apply text-sm text-slate-200 leading-relaxed; }
-  small { @apply text-[11px] text-slate-400; }
+  h2 {
+    @apply text-lg md:text-xl font-semibold text-slate-100 tracking-tight;
+  }
 
-  button { @apply text-sm font-medium; }
+  h3 {
+    @apply text-base font-semibold text-slate-100;
+  }
 
-  input, select, textarea {
+  h4 {
+    @apply text-sm font-semibold text-slate-200;
+  }
+
+  p {
+    @apply text-sm text-slate-200 leading-relaxed;
+  }
+
+  small {
+    @apply text-[11px] text-slate-400;
+  }
+
+  button {
+    @apply text-sm font-medium;
+  }
+
+  input,
+  select,
+  textarea {
     @apply text-sm text-slate-100 placeholder:text-slate-500;
   }
 }
@@ -28,7 +48,7 @@
   .glass {
     @apply bg-gray-900/40 backdrop-blur-md border border-white/5;
   }
-  
+
   .glass-card {
     @apply bg-slate-900/60 backdrop-blur-xl border border-slate-800/50 shadow-2xl;
   }
@@ -37,12 +57,15 @@
   .ui-card {
     @apply bg-slate-900/40 border border-slate-700/40 rounded-2xl;
   }
+
   .ui-card-header {
     @apply px-6 py-4 border-b border-slate-700/40;
   }
+
   .ui-label {
     @apply text-[11px] text-slate-400;
   }
+
   .ui-muted {
     @apply text-slate-400;
   }
@@ -55,16 +78,16 @@
     width: 6px;
     height: 6px;
   }
-  
+
   .scrollbar-refined::-webkit-scrollbar-track {
     @apply bg-transparent;
   }
-  
+
   .scrollbar-refined::-webkit-scrollbar-thumb {
     @apply bg-slate-700/50 rounded-full hover:bg-slate-600/50;
   }
 }
 
 body {
-  @apply bg-[#030712] text-slate-200 antialiased selection:bg-green-500/30;
+  @apply text-slate-200 selection:bg-brand-blue/30;
 }
