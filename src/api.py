@@ -3997,7 +3997,7 @@ async def trigger_run_council_today(
     request: Request,
     background_tasks: BackgroundTasks,
     date: Optional[str] = None,
-    mode: str = "default",
+    mode: str = "agents",
     authorized: bool = Depends(verify_cron_secret),
 ):
     """Cron/manual: Runs the Agent Council on today's actionable top picks.
