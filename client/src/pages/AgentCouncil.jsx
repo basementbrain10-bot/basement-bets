@@ -75,14 +75,14 @@ export default function AgentCouncil() {
                 setCouncilData({ error: res.data.message });
             }
         } catch (err) {
-            setCouncilData({ error: 'Failed to find a debate for this event. Ensure the Orchestrator has run.' });
+            setCouncilData({ error: 'Debate not found for this event. Click "Refresh" to trigger the Agent Council.' });
         } finally {
             setLoadingCouncil(false);
         }
     };
 
     const triggerJobs = async () => {
-        if (!window.confirm("Trigger manual background jobs? This will run grading and regenerate the council slate. It may take 1-2 minutes.")) return;
+        if (!window.confirm("Trigger the Agent Council to analyze today's slate? This process uses LLM agents to research and debate games, which may take 1-2 minutes.")) return;
 
         setIsRunningJob(true);
         try {
@@ -93,8 +93,8 @@ export default function AgentCouncil() {
             // 1. Grade Predictions
             await api.post('/api/jobs/grade_predictions', {}, { headers, params: { backfill_days: 5 } });
 
-            // 2. Run Council
-            await api.post('/api/jobs/run_council_today', {}, { headers });
+            // 2. Run Council with mode=agents to trigger the orchestrator
+            await api.post('/api/jobs/run_council_today', {}, { headers, params: { mode: 'agents' } });
 
             alert("Jobs triggered successfully! They are running in the background. Data will refresh in a few moments.");
             setTimeout(loadData, 5000);
