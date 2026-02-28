@@ -18,13 +18,18 @@ export default function ParlayRecommendations() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
   const [data, setData] = useState(null);
+  const [anchors, setAnchors] = useState(null);
 
   const load = async () => {
     setLoading(true);
     setErr(null);
     try {
-      const res = await api.get('/api/ncaam/parlays/today', { params: { min_ev_per_unit: 0.02, parlay_odds_lo: -120, parlay_odds_hi: 300 } });
+      const [res, anc] = await Promise.all([
+        api.get('/api/ncaam/parlays/today', { params: { min_ev_per_unit: 0.02, parlay_odds_lo: -120, parlay_odds_hi: 300 } }),
+        api.get('/api/ncaam/anchors/today', { params: { min_edge_prob: 0.03, odds_lo: -450, odds_hi: -220, limit: 3 } }).catch(() => ({ data: null }))
+      ]);
       setData(res.data);
+      setAnchors(anc.data);
     } catch (e) {
       setErr(e?.response?.data?.detail || e?.message || 'Failed to load parlays');
     } finally {
@@ -119,6 +124,37 @@ export default function ParlayRecommendations() {
       </div>
 
       {err && <div className="text-xs text-red-400 bg-red-900/20 border border-red-900/50 p-3 rounded-xl mb-4">{err}</div>}
+
+      {/* Anchor ML (heavy favorites) */}
+      {!err && anchors && (
+        <div className="mb-4 bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Anchor ML (heavy favorites)</div>
+              <div className="text-[11px] text-slate-500">Parlay-safe legs. Requires win% edge vs implied (default ≥3%).</div>
+            </div>
+            <div className="text-[11px] text-slate-500">Odds band: {fmtOdds(anchors?.params?.odds_lo)} to {fmtOdds(anchors?.params?.odds_hi)}</div>
+          </div>
+
+          {(anchors?.anchors || []).length === 0 ? (
+            <div className="text-sm text-slate-500 bg-slate-950/50 rounded-xl p-4 text-center border border-slate-800/50 font-medium">No anchors cleared the gates today.</div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              {(anchors.anchors || []).map((a, idx) => (
+                <div key={idx} className="p-4 rounded-xl border border-slate-700/60 bg-gradient-to-br from-slate-900 to-slate-950 shadow-lg">
+                  <div className="text-xs text-slate-400 font-medium whitespace-normal">{a.matchup}</div>
+                  <div className="mt-1 text-sm font-bold text-slate-200 whitespace-normal leading-tight">{a.team_pick}</div>
+                  <div className="mt-2 flex items-center justify-between text-xs">
+                    <div className="text-slate-500 font-mono">{fmtOdds(a.price)}</div>
+                    <div className="text-blue-300 font-bold">Edge {(Number(a.edge_prob || 0) * 100).toFixed(1)}%</div>
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-500">Model {(Number(a.win_prob || 0) * 100).toFixed(1)}% vs implied {(Number(a.implied_prob || 0) * 100).toFixed(1)}%</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {!err && data && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
