@@ -3997,6 +3997,7 @@ async def trigger_run_council_today(
     request: Request,
     background_tasks: BackgroundTasks,
     date: Optional[str] = None,
+    mode: str = "default",
     authorized: bool = Depends(verify_cron_secret),
 ):
     """Cron/manual: Runs the Agent Council on today's actionable top picks.
@@ -4004,6 +4005,10 @@ async def trigger_run_council_today(
     This invokes the Oracle Agent, Memory Agent, and Research Agent on games where
     the quantitative model found an edge, stores the qualitative debate to decision_runs,
     and then re-runs the Top Picks builder to apply the qualitative adjustments.
+
+    Modes:
+    - default: Runs the legacy run_council_today script.
+    - agents: Runs the full DecisionOrchestrator pipeline.
     """
     if not settings.GEMINI_API_KEY:
         error_msg = "GEMINI_API_KEY missing. Please add to Vercel Dashboard and REDEPLOY."
@@ -4011,21 +4016,60 @@ async def trigger_run_council_today(
         raise HTTPException(status_code=401, detail=error_msg)
 
     try:
-        from src.scripts.run_council_today import main as run_council
-        
-        def do_run():
-            try:
-                run_council()
-                print(f"[JOB SUCCESS] Agent Council completed for date={date or 'today'}")
-            except Exception as e:
-                print(f"[JOB ERROR] Background run_council_today failed: {e}")
+        if mode == "agents":
+            from src.agents.orchestrator import DecisionOrchestrator
+            from src.agents.event_ops_agent import EventOpsAgent
+            from src.agents.market_data_agent import MarketDataAgent
+            from src.agents.pricing_agent_ncaam import PricingAgentNCAAM
+            from src.agents.edge_ev_agent import EdgeEVAgent
+            from src.agents.risk_manager_agent import RiskManagerAgent
+            from src.agents.bet_builder_agent import BetBuilderAgent
+            from src.agents.journal_agent import JournalAgent
+            from src.agents.research_agent import ResearchAgent
+            from src.agents.memory_agent import MemoryAgent
+            from src.agents.oracle_agent import OracleAgent
 
-        background_tasks.add_task(do_run)
+            def do_run_orchestrator():
+                try:
+                    orchestrator = DecisionOrchestrator(league="NCAAM", model_version="agent_v1")
+                    orchestrator.run_pipeline(
+                        event_ops_agent=EventOpsAgent(),
+                        market_data_agent=MarketDataAgent(),
+                        pricing_agent=PricingAgentNCAAM(),
+                        edge_ev_agent=EdgeEVAgent(),
+                        risk_manager_agent=RiskManagerAgent(),
+                        bet_builder_agent=BetBuilderAgent(),
+                        research_agent=ResearchAgent(),
+                        memory_agent=MemoryAgent(),
+                        oracle_agent=OracleAgent(),
+                        journal_agent=JournalAgent(),
+                        parameters={"mode": "manual_trigger", "date": date}
+                    )
+                    print(f"[JOB SUCCESS] DecisionOrchestrator completed for date={date or 'today'}")
+                except Exception as e:
+                    print(f"[JOB ERROR] Background DecisionOrchestrator failed: {e}")
 
-        return {
-            "status": "success",
-            "message": "Agent Council job queued in background."
-        }
+            background_tasks.add_task(do_run_orchestrator)
+            return {
+                "status": "success",
+                "message": "Full Agent Orchestrator job queued in background."
+            }
+        else:
+            from src.scripts.run_council_today import main as run_council
+            
+            def do_run():
+                try:
+                    run_council()
+                    print(f"[JOB SUCCESS] Agent Council completed for date={date or 'today'}")
+                except Exception as e:
+                    print(f"[JOB ERROR] Background run_council_today failed: {e}")
+
+            background_tasks.add_task(do_run)
+
+            return {
+                "status": "success",
+                "message": "Agent Council job queued in background."
+            }
     except Exception as e:
         print(f"[JOB ERROR] run_council_today failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
