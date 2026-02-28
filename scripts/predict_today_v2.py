@@ -12,7 +12,7 @@ except Exception:
 # Add repo root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.database import get_db_connection, _exec
+from src.database import get_db_connection, _exec, ensure_recommended_slates_tables
 from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
 from src.services.grading_service import GradingService
 
@@ -71,6 +71,10 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
     scanned = 0
     recs = 0
     errors = 0
+
+    # Track persisted picks so we can store the exact "recommended" slate.
+    # Each entry: {prediction_id, ev_per_unit, selection, price, event_id, matchup}
+    persisted = []
 
     print(f"{'MATCHUP':<40} | {'MKT':<8} | {'LINE':<8} | {'ODDS':<6} | {'EV%':<6} | {'REC'}")
     print("-" * 130)
@@ -172,6 +176,23 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
                     f"{matchup:<40} | {mkt:<8} | {fmt_line(line):<8} | {fmt_odds(price):<6} | {fmt_ev(ev):<6} | {selection}{conf_s}{book_s}"
                 )
                 recs += 1
+
+                # If the model chose to persist this pick (recommended bets), it has an id.
+                # Use it to build a slate for grading.
+                try:
+                    pid = res.get('id')
+                    evu = res.get('ev_per_unit')
+                    if pid and evu is not None:
+                        persisted.append({
+                            'prediction_id': str(pid),
+                            'ev_per_unit': float(evu),
+                            'selection': str(selection),
+                            'price': price,
+                            'event_id': str(game_id),
+                            'matchup': matchup,
+                        })
+                except Exception:
+                    pass
         except Exception as e:
             errors += 1
             if show_errors:
@@ -223,6 +244,30 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
     except Exception as e:
         if show_errors:
             print(f"[predict_today_v2] run-log insert failed: {e}")
+
+    # Persist the exact recommended slate (Top 6 by EV/u among persisted picks).
+    try:
+        ensure_recommended_slates_tables()
+        top = sorted(persisted, key=lambda x: float(x.get('ev_per_unit') or 0.0), reverse=True)[:6]
+        if top:
+            import uuid
+            slate_id = str(uuid.uuid4())
+            with get_db_connection() as conn:
+                _exec(conn, """
+                  INSERT INTO recommended_slates (id, league, date_et, source)
+                  VALUES (%s, %s, %s, %s)
+                """, (slate_id, 'NCAAM', today_str, 'full'))
+                for i, it in enumerate(top, start=1):
+                    _exec(conn, """
+                      INSERT INTO recommended_slate_items (slate_id, prediction_id, rank)
+                      VALUES (%s, %s, %s)
+                      ON CONFLICT (slate_id, prediction_id) DO NOTHING
+                    """, (slate_id, it['prediction_id'], int(i)))
+                conn.commit()
+            print(f"[recommended_slate] id={slate_id} items={len(top)}")
+    except Exception as e:
+        if show_errors:
+            print(f"[predict_today_v2] recommended_slate persist failed: {e}")
 
 
 if __name__ == "__main__":

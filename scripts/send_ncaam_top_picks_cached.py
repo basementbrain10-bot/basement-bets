@@ -17,7 +17,7 @@ from typing import Optional
 # Allow running from repo root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.database import get_db_connection, _exec
+from src.database import get_db_connection, _exec, ensure_recommended_slates_tables
 
 
 def _ev_from_rec(rec: dict) -> Optional[float]:
@@ -86,7 +86,56 @@ def main():
             print("Diagnostics: daily_top_picks table has 0 rows for this date (ingestion/build job may not have run).")
         return
 
+    # Persist the exact slate we are about to send.
+    slate_id = None
+    try:
+        ensure_recommended_slates_tables()
+        import uuid
+        slate_id = str(uuid.uuid4())
+        with get_db_connection() as conn:
+            _exec(conn, """
+              INSERT INTO recommended_slates (id, league, date_et, source)
+              VALUES (%s, %s, %s, %s)
+            """, (slate_id, 'NCAAM', date_et, 'cached'))
+
+            # Attempt to map each daily_top_picks row to a concrete model_predictions id.
+            # Best-effort: match on event_id + (selection OR line/price) and take the latest.
+            for i, r in enumerate(rows, start=1):
+                rec = r['rec_json'] or {}
+                sel = rec.get('selection')
+                line = rec.get('market_line')
+                price = rec.get('price')
+
+                pid = None
+                try:
+                    q = """
+                      SELECT id
+                      FROM model_predictions
+                      WHERE event_id=%s
+                        AND (selection=%s OR (bet_line=%s AND bet_price=%s))
+                      ORDER BY analyzed_at DESC
+                      LIMIT 1
+                    """
+                    row = _exec(conn, q, (r['event_id'], sel, line, price)).fetchone()
+                    if row:
+                        pid = (row['id'] if isinstance(row, dict) else row[0])
+                except Exception:
+                    pid = None
+
+                if pid:
+                    _exec(conn, """
+                      INSERT INTO recommended_slate_items (slate_id, prediction_id, rank)
+                      VALUES (%s, %s, %s)
+                      ON CONFLICT (slate_id, prediction_id) DO NOTHING
+                    """, (slate_id, str(pid), int(i)))
+            conn.commit()
+    except Exception:
+        slate_id = None
+
     print(f"Top {min(len(rows), int(args.limit))} Plays {date_et} • Sorted by EV%")
+    if slate_id:
+        print(f"[recommended_slate] id={slate_id} items={min(len(rows), int(args.limit))}")
+
     for i, r in enumerate(rows, start=1):
         rec = r['rec_json'] or {}
         start_et = r.get('start_et')
