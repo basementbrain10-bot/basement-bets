@@ -114,25 +114,53 @@ export default function Picks() {
     return (history || []).filter((h) => dayKey(h) === yesterdayEt);
   }, [history, yesterdayEt]);
 
+  const classify = (h) => {
+    const mt = String(h?.market_type || h?.market || h?.bet_type || '').toUpperCase();
+    const isParlay = Boolean(h?.is_parlay) || String(h?.bet_type || '').toLowerCase().includes('parlay');
+    if (isParlay) return 'PARLAY';
+    if (mt.includes('SPREAD')) return 'SPREAD';
+    if (mt.includes('TOTAL')) return 'TOTAL';
+    if (mt.includes('MONEYLINE') || mt === 'ML') return 'MONEYLINE';
+    return mt || 'OTHER';
+  };
+
   const gradedYesterday = useMemo(() => {
     const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
     return (yesterdaySlate || []).filter((h) => isGraded(res(h)));
   }, [yesterdaySlate]);
+
+  const gradedYesterdayStraight = useMemo(() => {
+    return (gradedYesterday || []).filter((h) => {
+      const c = classify(h);
+      return c === 'SPREAD' || c === 'TOTAL';
+    });
+  }, [gradedYesterday]);
+
+  const gradedYesterdayMlParlay = useMemo(() => {
+    return (gradedYesterday || []).filter((h) => {
+      const c = classify(h);
+      return c === 'MONEYLINE' || c === 'PARLAY';
+    });
+  }, [gradedYesterday]);
 
   const pendingYesterday = useMemo(() => {
     const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
     return (yesterdaySlate || []).filter((h) => !isGraded(res(h))).length;
   }, [yesterdaySlate]);
 
-  const yRecord = useMemo(() => {
+  const recordFor = (rows) => {
     const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
-    const w = gradedYesterday.filter((h) => res(h) === 'WON' || res(h) === 'WIN').length;
-    const l = gradedYesterday.filter((h) => res(h) === 'LOST' || res(h) === 'LOSS').length;
-    const p = gradedYesterday.filter((h) => res(h) === 'PUSH').length;
+    const w = (rows || []).filter((h) => res(h) === 'WON' || res(h) === 'WIN').length;
+    const l = (rows || []).filter((h) => res(h) === 'LOST' || res(h) === 'LOSS').length;
+    const p = (rows || []).filter((h) => res(h) === 'PUSH').length;
     const decided = w + l;
     const winRate = decided > 0 ? (w / decided) * 100 : 0;
     return { w, l, p, decided, winRate };
-  }, [gradedYesterday]);
+  };
+
+  const yRecord = useMemo(() => recordFor(gradedYesterday), [gradedYesterday]);
+  const yRecordStraight = useMemo(() => recordFor(gradedYesterdayStraight), [gradedYesterdayStraight]);
+  const yRecordMlParlay = useMemo(() => recordFor(gradedYesterdayMlParlay), [gradedYesterdayMlParlay]);
 
   const top6RankPerformance = useMemo(() => {
     // Compute win% by rank for the daily Top 6 recommended picks (ranked by EV/u).
@@ -402,11 +430,11 @@ export default function Picks() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Yesterday graded results */}
+        {/* Yesterday graded results — Straight bets (Spreads/Totals) */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
           <div className="flex items-center gap-2 mb-2">
             <BarChart3 size={18} className="text-emerald-300" />
-            <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Yesterday (graded)</div>
+            <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Yesterday (graded) — Spreads & Totals</div>
             <div className="ml-auto flex items-center gap-2">
               <div className="text-xs text-slate-500">{yesterdayEt}</div>
               {pendingYesterday > 0 && (
@@ -424,15 +452,15 @@ export default function Picks() {
           <div className="flex flex-wrap gap-6 text-sm">
             <div>
               <div className="text-slate-400 text-xs">Record</div>
-              <div className="text-white font-black">{yRecord.w}-{yRecord.l}-{yRecord.p}</div>
+              <div className="text-white font-black">{yRecordStraight.w}-{yRecordStraight.l}-{yRecordStraight.p}</div>
             </div>
             <div>
               <div className="text-slate-400 text-xs">Win rate</div>
-              <div className="text-white font-black">{yRecord.decided ? `${yRecord.winRate.toFixed(1)}%` : '—'}</div>
+              <div className="text-white font-black">{yRecordStraight.decided ? `${yRecordStraight.winRate.toFixed(1)}%` : '—'}</div>
             </div>
             <div>
               <div className="text-slate-400 text-xs">Graded picks</div>
-              <div className="text-white font-black">{gradedYesterday.length}</div>
+              <div className="text-white font-black">{gradedYesterdayStraight.length}</div>
             </div>
           </div>
 
@@ -446,7 +474,7 @@ export default function Picks() {
             };
             const res = (h) => String(h.graded_result || h.outcome || h.result || '').toUpperCase();
             const norm = (r) => (r === 'WIN') ? 'WON' : (r === 'LOSS') ? 'LOST' : r;
-            const rows = (gradedYesterday || []).map((h) => ({ b: bucket(h), r: norm(res(h)) }));
+            const rows = (gradedYesterdayStraight || []).map((h) => ({ b: bucket(h), r: norm(res(h)) }));
             const by = { High: { w: 0, l: 0, p: 0 }, Medium: { w: 0, l: 0, p: 0 }, Low: { w: 0, l: 0, p: 0 } };
             rows.forEach(({ b, r }) => {
               if (r === 'WON') by[b].w += 1;
@@ -454,7 +482,7 @@ export default function Picks() {
               else if (r === 'PUSH') by[b].p += 1;
             });
             const tiles = ['High', 'Medium', 'Low'].map((k) => ({ k, ...by[k] }));
-            if (!gradedYesterday || gradedYesterday.length === 0) return null;
+            if (!gradedYesterdayStraight || gradedYesterdayStraight.length === 0) return null;
             return (
               <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
                 {tiles.map((t) => (
@@ -471,11 +499,11 @@ export default function Picks() {
             if ((yesterdaySlate || []).length === 0) {
               return <div className="mt-3 text-xs text-slate-500">No recommended picks found for yesterday.</div>;
             }
-            if (gradedYesterday.length === 0 && pending > 0) {
+            if (gradedYesterdayStraight.length === 0 && pending > 0) {
               return <div className="mt-3 text-xs text-slate-500">Yesterday has {pending} pick(s) still pending / ungraded. Click “Grade now”.</div>;
             }
-            if (gradedYesterday.length === 0) {
-              return <div className="mt-3 text-xs text-slate-500">No graded recommended picks found for yesterday yet.</div>;
+            if (gradedYesterdayStraight.length === 0) {
+              return <div className="mt-3 text-xs text-slate-500">No graded spreads/totals found for yesterday yet.</div>;
             }
             if (pending > 0) {
               return <div className="mt-3 text-xs text-slate-500">Also pending: {pending}</div>;
@@ -483,16 +511,15 @@ export default function Picks() {
             return null;
           })()}
 
-          {/* Quick list (yesterday slate) */}
-          {(yesterdaySlate || []).length > 0 && (
+          {/* Quick list (yesterday slate) — spreads & totals only */}
+          {gradedYesterdayStraight.length > 0 && (
             <div className="mt-4 space-y-2">
               {(() => {
-                // Show the recommendation order as rank (Top-6 by EV/u, same ordering as texts).
                 const getEv = (h) => {
                   const ev = Number(h?.ev_per_unit ?? h?.ev);
                   return Number.isFinite(ev) ? ev : 0;
                 };
-                const rows = (yesterdaySlate || []).slice().sort((a, b) => getEv(b) - getEv(a));
+                const rows = (gradedYesterdayStraight || []).slice().sort((a, b) => getEv(b) - getEv(a));
                 return rows.slice(0, 6).map((h, idx) => {
                   const out = String(h.graded_result || h.outcome || h.result || 'PENDING').toUpperCase();
                   const cls = out === 'WON' || out === 'WIN' ? 'text-green-300' : out === 'LOST' || out === 'LOSS' ? 'text-red-300' : out === 'PUSH' ? 'text-slate-300' : 'text-slate-500';
@@ -510,7 +537,61 @@ export default function Picks() {
                   );
                 });
               })()}
-              {(yesterdaySlate || []).length > 6 && <div className="text-[11px] text-slate-500">Showing first 6 picks.</div>}
+              {gradedYesterdayStraight.length > 6 && <div className="text-[11px] text-slate-500">Showing first 6.</div>}
+            </div>
+          )}
+        </div>
+
+        {/* Yesterday graded results — Moneyline & Parlays */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <BarChart3 size={18} className="text-blue-300" />
+            <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Yesterday (graded) — Moneyline & Parlays</div>
+            <div className="ml-auto flex items-center gap-2">
+              <div className="text-xs text-slate-500">{yesterdayEt}</div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-6 text-sm">
+            <div>
+              <div className="text-slate-400 text-xs">Record</div>
+              <div className="text-white font-black">{yRecordMlParlay.w}-{yRecordMlParlay.l}-{yRecordMlParlay.p}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 text-xs">Win rate</div>
+              <div className="text-white font-black">{yRecordMlParlay.decided ? `${yRecordMlParlay.winRate.toFixed(1)}%` : '—'}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 text-xs">Graded picks</div>
+              <div className="text-white font-black">{gradedYesterdayMlParlay.length}</div>
+            </div>
+          </div>
+
+          {gradedYesterdayMlParlay.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {(() => {
+                const getEv = (h) => {
+                  const ev = Number(h?.ev_per_unit ?? h?.ev);
+                  return Number.isFinite(ev) ? ev : 0;
+                };
+                const rows = (gradedYesterdayMlParlay || []).slice().sort((a, b) => getEv(b) - getEv(a));
+                return rows.slice(0, 6).map((h, idx) => {
+                  const out = String(h.graded_result || h.outcome || h.result || 'PENDING').toUpperCase();
+                  const cls = out === 'WON' || out === 'WIN' ? 'text-green-300' : out === 'LOST' || out === 'LOSS' ? 'text-red-300' : out === 'PUSH' ? 'text-slate-300' : 'text-slate-500';
+                  return (
+                    <div key={idx} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/20">
+                      <div className="min-w-0">
+                        <div className="text-xs font-black text-slate-100 whitespace-normal break-words leading-snug">
+                          <span className="text-slate-400 mr-2">#{idx + 1}</span>
+                          {h.sport || '—'} • {(h.away_team && h.home_team) ? `${h.away_team} @ ${h.home_team}` : (h.matchup || '—')}
+                        </div>
+                        <div className="text-xs text-slate-400 whitespace-normal break-words leading-snug">{h.market_type || h.bet_type || '—'} • {h.selection || '—'}</div>
+                      </div>
+                      <div className={`text-xs font-mono font-black ${cls}`}>{out}</div>
+                    </div>
+                  );
+                });
+              })()}
+              {gradedYesterdayMlParlay.length > 6 && <div className="text-[11px] text-slate-500">Showing first 6.</div>}
             </div>
           )}
         </div>
