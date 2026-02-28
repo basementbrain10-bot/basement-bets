@@ -1096,6 +1096,38 @@ def update_model_prediction_result(pid: str, outcome: str):
         _exec(conn, query, {"outcome": outcome, "id": pid})
         conn.commit()
 
+
+def ensure_recommended_slates_tables():
+    """Create tables used to persist the exact slate that was *recommended to the user*.
+
+    This allows grading/analytics to match the Telegram recommendations instead of
+    "whatever model_predictions exist for the day".
+    """
+    sql = """
+    CREATE TABLE IF NOT EXISTS recommended_slates (
+      id TEXT PRIMARY KEY,
+      league TEXT NOT NULL,
+      date_et TEXT NOT NULL,
+      source TEXT NOT NULL, -- e.g. 'cached' (daily_top_picks) or 'full' (predict_today_v2)
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS recommended_slate_items (
+      slate_id TEXT NOT NULL REFERENCES recommended_slates(id) ON DELETE CASCADE,
+      prediction_id TEXT NOT NULL,
+      rank INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY(slate_id, prediction_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS ix_reco_slates_date ON recommended_slates(league, date_et, created_at DESC);
+    CREATE INDEX IF NOT EXISTS ix_reco_items_slate ON recommended_slate_items(slate_id, rank);
+    """
+    with get_admin_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+        conn.commit()
+
 # ----------------------------------------------------------------------------
 # LOGIC / QUERIES (Appending to end of file)
 # ----------------------------------------------------------------------------
