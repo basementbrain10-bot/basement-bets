@@ -420,9 +420,13 @@ function App() {
                     {/* Header */}
                     <header className="mb-6 md:mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                         <div>
-                            <div>
-                                <img src="/logo.png" alt="Basement Bets" className="h-10 md:h-12 w-auto object-contain" />
-                            </div>        </div>
+                            <div className="flex items-center gap-3">
+                                <img src="/logo.png" alt="Basement Bets Logo" className="h-10 md:h-12 w-auto object-contain" />
+                                <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
+                                    Basement Bets
+                                </h1>
+                            </div>
+                        </div>
                         <div className="flex flex-wrap gap-2 items-center">
                             {/* Primary nav (segmented control) */}
                             <div className="inline-flex gap-1 p-1 rounded-2xl bg-slate-900/40 border border-slate-700/40">
