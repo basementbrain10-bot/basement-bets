@@ -3454,6 +3454,104 @@ async def get_ncaam_analytics(days: int = 30, min_ev_per_unit: float = 0.02):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/ncaam/anchors/today")
+async def get_ncaam_anchor_ml_today(
+    min_edge_prob: float = 0.03,
+    odds_lo: int = -450,
+    odds_hi: int = -220,
+    limit: int = 3,
+):
+    """Anchor ML picks for today (heavy favorites) for parlay construction.
+
+    Philosophy: low-variance legs, but still require the model to beat the implied probability.
+
+    Filters:
+    - Moneyline-only model_predictions (today ET)
+    - American odds between [odds_lo, odds_hi] (negative favorites)
+    - edge_prob = win_prob - implied_prob >= min_edge_prob
+
+    Returns: {date_et, anchors:[...]}
+    """
+    from src.database import get_db_connection, _exec
+    from src.utils.ev import implied_prob_american
+
+    with get_db_connection() as conn:
+        date_et = _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text").fetchone()[0]
+
+        rows = _exec(conn, """
+          SELECT
+            m.event_id,
+            COALESCE(m.bet_price, m.price) AS price,
+            m.win_prob,
+            m.ev_per_unit,
+            m.selection,
+            m.model_version,
+            e.away_team,
+            e.home_team,
+            e.start_time
+          FROM model_predictions m
+          JOIN events e ON e.id=m.event_id
+          WHERE e.league='NCAAM'
+            AND UPPER(COALESCE(m.market_type,'')) IN ('MONEYLINE','ML')
+            AND (m.analyzed_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York')::date = %s::date
+            AND COALESCE(m.bet_price, m.price) IS NOT NULL
+            AND m.win_prob IS NOT NULL
+          ORDER BY m.analyzed_at DESC
+          LIMIT 500
+        """, (date_et,)).fetchall()
+
+    cands = []
+    for r in rows or []:
+        d = dict(r)
+        try:
+            price = int(d.get('price'))
+            wp = float(d.get('win_prob'))
+        except Exception:
+            continue
+        if not (0.0 < wp < 1.0):
+            continue
+        if price >= 0:
+            continue
+        if price < int(odds_lo) or price > int(odds_hi):
+            continue
+
+        ip = implied_prob_american(price)
+        if ip is None:
+            continue
+        edge_prob = wp - float(ip)
+        if edge_prob < float(min_edge_prob):
+            continue
+
+        cands.append({
+            "event_id": d.get('event_id'),
+            "matchup": f"{d.get('away_team')} @ {d.get('home_team')}",
+            "team_pick": d.get('selection'),
+            "price": price,
+            "win_prob": wp,
+            "implied_prob": float(ip),
+            "edge_prob": float(edge_prob),
+            "ev_per_unit": float(d.get('ev_per_unit') or 0.0),
+            "model_version": d.get('model_version'),
+            "start_time": str(d.get('start_time') or ''),
+        })
+
+    # Sort by edge_prob, then EV/u
+    cands.sort(key=lambda x: (x.get('edge_prob') or 0.0, x.get('ev_per_unit') or 0.0), reverse=True)
+    anchors = cands[: max(1, min(int(limit), 10))]
+
+    return {
+        "status": "success",
+        "date_et": date_et,
+        "params": {
+            "min_edge_prob": float(min_edge_prob),
+            "odds_lo": int(odds_lo),
+            "odds_hi": int(odds_hi),
+            "limit": int(limit),
+        },
+        "anchors": anchors,
+    }
+
+
 @app.get("/api/ncaam/parlays/today")
 async def get_ncaam_parlays_today(
     min_ev_per_unit: float = 0.02,
