@@ -177,20 +177,34 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
                 )
                 recs += 1
 
-                # If the model chose to persist this pick (recommended bets), it has an id.
-                # Use it to build a slate for grading.
+                # IMPORTANT: res['id'] is an analysis-run id, not necessarily a persisted DB row.
+                # To keep "recommended" aligned with grading, map to the actual model_predictions row id.
                 try:
-                    pid = res.get('id')
                     evu = res.get('ev_per_unit')
-                    if pid and evu is not None:
-                        persisted.append({
-                            'prediction_id': str(pid),
-                            'ev_per_unit': float(evu),
-                            'selection': str(selection),
-                            'price': price,
-                            'event_id': str(game_id),
-                            'matchup': matchup,
-                        })
+                    if evu is not None:
+                        mp_id = None
+                        with get_db_connection() as conn:
+                            row = _exec(conn, """
+                              SELECT id
+                              FROM model_predictions
+                              WHERE event_id=%s
+                                AND selection=%s
+                                AND COALESCE(bet_price, price) = %s
+                              ORDER BY analyzed_at DESC
+                              LIMIT 1
+                            """, (str(game_id), str(selection), int(price) if price is not None else None)).fetchone()
+                            if row:
+                                mp_id = row['id'] if isinstance(row, dict) else row[0]
+
+                        if mp_id:
+                            persisted.append({
+                                'prediction_id': str(mp_id),
+                                'ev_per_unit': float(evu),
+                                'selection': str(selection),
+                                'price': price,
+                                'event_id': str(game_id),
+                                'matchup': matchup,
+                            })
                 except Exception:
                     pass
         except Exception as e:
