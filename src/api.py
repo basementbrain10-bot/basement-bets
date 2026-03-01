@@ -3079,6 +3079,110 @@ async def ncaam_top6_rank_performance(days: int = 365):
     }
 
 
+@app.get("/api/ncaam/recommended-slate/yesterday")
+async def get_ncaam_recommended_slate_yesterday(user: dict = Depends(get_current_user)):
+    """Return the exact slate that was recommended yesterday (Top N) and its outcomes.
+
+    This is the source of truth for aligning "recommended" vs "graded".
+
+    Selection rule:
+    - Use latest recommended_slates row for yesterday (prefer source='full' if it exists), else latest of any source.
+
+    Returns:
+      { date_et, slate: {id,source,created_at}, straight: [...], ml_parlay: [...], record: {...} }
+    """
+    from src.database import get_db_connection, _exec
+
+    with get_db_connection() as conn:
+        yday = _exec(conn, "SELECT ((NOW() AT TIME ZONE 'America/New_York')::date - INTERVAL '1 day')::date::text").fetchone()[0]
+
+        # Pick the slate: prefer full.
+        s = _exec(conn, """
+          SELECT id, source, created_at
+          FROM recommended_slates
+          WHERE league='NCAAM' AND date_et=%s AND source='full'
+          ORDER BY created_at DESC
+          LIMIT 1
+        """, (yday,)).fetchone()
+        if not s:
+            s = _exec(conn, """
+              SELECT id, source, created_at
+              FROM recommended_slates
+              WHERE league='NCAAM' AND date_et=%s
+              ORDER BY created_at DESC
+              LIMIT 1
+            """, (yday,)).fetchone()
+
+        slate = dict(s) if s else None
+        if not slate:
+            return {"status": "success", "date_et": yday, "slate": None, "straight": [], "ml_parlay": [], "record": {"straight": None, "ml_parlay": None}}
+
+        rows = _exec(conn, """
+          SELECT r.rank, r.prediction_id,
+                 m.event_id, m.market_type, m.selection, COALESCE(m.bet_price, m.price) as price,
+                 m.ev_per_unit, m.confidence_0_100, m.outcome,
+                 e.away_team, e.home_team, e.start_time
+          FROM recommended_slate_items r
+          JOIN model_predictions m ON m.id=r.prediction_id
+          JOIN events e ON e.id=m.event_id
+          WHERE r.slate_id=%s
+          ORDER BY r.rank ASC
+        """, (slate['id'],)).fetchall()
+
+    def is_decided(o: str) -> bool:
+        return str(o or '').upper() in ('WON','LOST','PUSH','WIN','LOSS')
+
+    def norm_outcome(o: str) -> str:
+        s = str(o or '').upper()
+        if s == 'WIN':
+            return 'WON'
+        if s == 'LOSS':
+            return 'LOST'
+        return s
+
+    def classify(mt: str) -> str:
+        t = str(mt or '').upper()
+        if 'SPREAD' in t:
+            return 'SPREAD'
+        if 'TOTAL' in t:
+            return 'TOTAL'
+        if 'MONEYLINE' in t or t == 'ML':
+            return 'MONEYLINE'
+        return 'OTHER'
+
+    items = [dict(r) for r in rows]
+
+    straight = [x for x in items if classify(x.get('market_type')) in ('SPREAD','TOTAL')]
+    ml_parlay = [x for x in items if classify(x.get('market_type')) == 'MONEYLINE']
+
+    def record(xs):
+        decided = [x for x in xs if is_decided(x.get('outcome'))]
+        w = sum(1 for x in decided if norm_outcome(x.get('outcome')) == 'WON')
+        l = sum(1 for x in decided if norm_outcome(x.get('outcome')) == 'LOST')
+        p = sum(1 for x in decided if norm_outcome(x.get('outcome')) == 'PUSH')
+        return {"won": w, "lost": l, "push": p, "decided": len(decided)}
+
+    # JSON-friendly created_at
+    try:
+        ca = slate.get('created_at')
+        if hasattr(ca, 'isoformat'):
+            slate['created_at'] = ca.isoformat().replace('+00:00', 'Z')
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "date_et": yday,
+        "slate": slate,
+        "straight": straight,
+        "ml_parlay": ml_parlay,
+        "record": {
+            "straight": record(straight),
+            "ml_parlay": record(ml_parlay),
+        }
+    }
+
+
 @app.get("/api/ncaam/performance-report")
 async def ncaam_performance_report(days: int = 30):
     """NCAAM model performance report.
