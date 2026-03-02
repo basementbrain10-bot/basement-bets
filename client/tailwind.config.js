@@ -16,7 +16,7 @@ export default {
                 }
             },
             fontFamily: {
-                sans: ['Montserrat', 'sans-serif'],
+                sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
             }
         },
     },
