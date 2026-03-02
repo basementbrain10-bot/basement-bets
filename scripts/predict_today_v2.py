@@ -204,6 +204,8 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
                                 'price': price,
                                 'event_id': str(game_id),
                                 'matchup': matchup,
+                                'market_type': str(mkt) if mkt is not None else None,
+                                'bet_line': float(line_val) if line_val is not None else (float(line) if line is not None else None),
                             })
                 except Exception:
                     pass
@@ -273,10 +275,22 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
                 """, (slate_id, 'NCAAM', today_str, 'full'))
                 for i, it in enumerate(top, start=1):
                     _exec(conn, """
-                      INSERT INTO recommended_slate_items (slate_id, prediction_id, rank)
-                      VALUES (%s, %s, %s)
+                      INSERT INTO recommended_slate_items (
+                        slate_id, prediction_id, rank,
+                        event_id, selection, bet_price, bet_line, market_type
+                      )
+                      VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                       ON CONFLICT (slate_id, prediction_id) DO NOTHING
-                    """, (slate_id, it['prediction_id'], int(i)))
+                    """, (
+                        slate_id,
+                        str(it.get('prediction_id')),
+                        int(i),
+                        str(it.get('event_id')) if it.get('event_id') is not None else None,
+                        str(it.get('selection')) if it.get('selection') is not None else None,
+                        int(it.get('price')) if it.get('price') is not None else None,
+                        float(it.get('bet_line')) if it.get('bet_line') is not None else None,
+                        str(it.get('market_type')) if it.get('market_type') is not None else None,
+                    ))
                 conn.commit()
             print(f"[recommended_slate] id={slate_id} items={len(top)}")
     except Exception as e:

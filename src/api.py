@@ -3118,13 +3118,30 @@ async def get_ncaam_recommended_slate_yesterday(user: dict = Depends(get_current
             return {"status": "success", "date_et": yday, "slate": None, "straight": [], "ml_parlay": [], "record": {"straight": None, "ml_parlay": None}}
 
         rows = _exec(conn, """
-          SELECT r.rank, r.prediction_id,
-                 m.event_id, m.market_type, m.selection, COALESCE(m.bet_price, m.price) as price,
-                 m.ev_per_unit, m.confidence_0_100, m.outcome,
+          SELECT r.rank,
+                 r.prediction_id,
+                 COALESCE(m1.id, m2.id) as linked_prediction_id,
+                 COALESCE(m1.event_id, m2.event_id, r.event_id) as event_id,
+                 COALESCE(m1.market_type, m2.market_type, r.market_type) as market_type,
+                 COALESCE(m1.selection, m2.selection, r.selection) as selection,
+                 COALESCE(COALESCE(m1.bet_price, m1.price), COALESCE(m2.bet_price, m2.price), r.bet_price) as price,
+                 COALESCE(m1.ev_per_unit, m2.ev_per_unit) as ev_per_unit,
+                 COALESCE(m1.confidence_0_100, m2.confidence_0_100) as confidence_0_100,
+                 COALESCE(m1.outcome, m2.outcome) as outcome,
                  e.away_team, e.home_team, e.start_time
           FROM recommended_slate_items r
-          JOIN model_predictions m ON m.id=r.prediction_id
-          JOIN events e ON e.id=m.event_id
+          LEFT JOIN model_predictions m1 ON m1.id=r.prediction_id
+          LEFT JOIN LATERAL (
+            SELECT m.*
+            FROM model_predictions m
+            WHERE r.event_id IS NOT NULL
+              AND m.event_id=r.event_id
+              AND (r.selection IS NULL OR m.selection=r.selection)
+              AND (r.bet_price IS NULL OR COALESCE(m.bet_price, m.price)=r.bet_price)
+            ORDER BY m.analyzed_at DESC
+            LIMIT 1
+          ) m2 ON TRUE
+          JOIN events e ON e.id=COALESCE(m1.event_id, m2.event_id, r.event_id)
           WHERE r.slate_id=%s
           ORDER BY r.rank ASC
         """, (slate['id'],)).fetchall()
