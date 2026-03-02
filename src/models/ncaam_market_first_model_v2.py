@@ -1757,7 +1757,6 @@ class NCAAMMarketFirstModelV2(BaseModel):
                         score += 2
                         reasons.append(f"prob_gap={dp:+.2f}")
                         sigma_mult *= 1.35
-                        min_ev_bump += 0.01
 
                 # If best price is a wild outlier vs consensus, it's often bad ingest.
                 if cons_price is not None and best_price is not None:
