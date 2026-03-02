@@ -122,12 +122,26 @@ def main():
                 except Exception:
                     pid = None
 
-                if pid:
-                    _exec(conn, """
-                      INSERT INTO recommended_slate_items (slate_id, prediction_id, rank)
-                      VALUES (%s, %s, %s)
-                      ON CONFLICT (slate_id, prediction_id) DO NOTHING
-                    """, (slate_id, str(pid), int(i)))
+                # Always write an item row. If we can't map to a persisted prediction id,
+                # store a stable fallback key and rely on event_id/selection/price for later re-linking.
+                item_pid = str(pid) if pid else f"unlinked:{r['event_id']}:{int(i)}"
+                _exec(conn, """
+                  INSERT INTO recommended_slate_items (
+                    slate_id, prediction_id, rank,
+                    event_id, selection, bet_price, bet_line, market_type
+                  )
+                  VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                  ON CONFLICT (slate_id, prediction_id) DO NOTHING
+                """, (
+                    slate_id,
+                    item_pid,
+                    int(i),
+                    str(r['event_id']) if r.get('event_id') is not None else None,
+                    str(sel) if sel is not None else None,
+                    int(price) if price is not None else None,
+                    float(line) if line is not None else None,
+                    str(rec.get('market_type') or r.get('market_type') or '') or None,
+                ))
             conn.commit()
     except Exception:
         slate_id = None

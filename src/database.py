@@ -1120,8 +1120,16 @@ def ensure_recommended_slates_tables():
       PRIMARY KEY(slate_id, prediction_id)
     );
 
+    -- Forward-compatible metadata so we can re-link / audit slates even if prediction ids drift.
+    ALTER TABLE recommended_slate_items ADD COLUMN IF NOT EXISTS event_id TEXT;
+    ALTER TABLE recommended_slate_items ADD COLUMN IF NOT EXISTS selection TEXT;
+    ALTER TABLE recommended_slate_items ADD COLUMN IF NOT EXISTS bet_price INTEGER;
+    ALTER TABLE recommended_slate_items ADD COLUMN IF NOT EXISTS bet_line REAL;
+    ALTER TABLE recommended_slate_items ADD COLUMN IF NOT EXISTS market_type TEXT;
+
     CREATE INDEX IF NOT EXISTS ix_reco_slates_date ON recommended_slates(league, date_et, created_at DESC);
     CREATE INDEX IF NOT EXISTS ix_reco_items_slate ON recommended_slate_items(slate_id, rank);
+    CREATE INDEX IF NOT EXISTS ix_reco_items_event ON recommended_slate_items(event_id);
     """
     with get_admin_db_connection() as conn:
         with conn.cursor() as cur:
