@@ -2106,6 +2106,60 @@ async def trigger_torvik_ingestion(request: Request, authorized: bool = Depends(
         print(f"[Job] Torvik Ingestion Failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.api_route("/api/jobs/ingest_kenpom", methods=["GET", "POST"])
+async def trigger_kenpom_ingestion(request: Request, authorized: bool = Depends(verify_cron_secret)):
+    """
+    Cron Job: KenPom Ingestion.
+
+    Scrapes kenpom.com using the KENPOM_COOKIE env var for authentication.
+    Without a valid cookie the public homepage is returned (may be empty for
+    users behind the paywall) — the job will store whatever it gets.
+    """
+    import os
+    job_key = "ingest_kenpom"
+    from src.services.job_service import JobContext, JobLockedException
+    from src.services.kenpom_scraper import KenPomScraper
+
+    try:
+        with JobContext(job_key) as ctx:
+            last_run = ctx.state.get("last_run_date")
+            print(f"[Job] KenPom Ingest. Last Run: {last_run}")
+
+            scraper = KenPomScraper()
+
+            # Inject auth cookie if available so the session gets past the login wall
+            kenpom_cookie = os.environ.get("KENPOM_COOKIE", "").strip()
+            if kenpom_cookie:
+                scraper.session.headers.update({"Cookie": kenpom_cookie})
+                print("[Job] KENPOM_COOKIE injected into scraper session")
+            else:
+                print("[Job] KENPOM_COOKIE not set — attempting unauthenticated scrape")
+
+            teams = scraper.scrape_homepage_rankings()
+
+            if not teams:
+                return {"status": "warning", "message": "No teams scraped — KenPom may require login or cookie is expired"}
+
+            # Persist to DB
+            scraper.save_to_database(teams)
+
+            ctx.state["last_run_date"] = datetime.now().strftime("%Y-%m-%d")
+            ctx.state["teams_count"] = len(teams)
+
+            return {
+                "status": "success",
+                "message": f"Ingested {len(teams)} KenPom teams",
+                "teams_count": len(teams),
+                "authenticated": bool(kenpom_cookie),
+            }
+
+    except JobLockedException:
+        return {"status": "skipped", "reason": "Locked"}
+    except Exception as e:
+        print(f"[Job] KenPom Ingestion Failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/board")
 async def get_board(request: Request, league: str, date: Optional[str] = None, days: int = 1):
     """
