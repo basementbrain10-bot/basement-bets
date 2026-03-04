@@ -953,11 +953,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                         {!loading && edges.length > 0 && boardTab === 'recommended' && (
                             <div className="p-6">
 
-                                {/* 2-leg ML Parlay recommendations (read-only; sourced from model_predictions) */}
-                                {leagueFilter === 'NCAAM' && String(selectedDate) === String(getTodayStr()) && (
-                                    <ParlayRecommendations />
-                                )}
-
+                                {/* Top 5 Plays + full recommended table (IIFE) */}
                                 {(() => {
                                     const isSameEtDay = (ts, ymd) => {
                                         if (!ts || !ymd) return false;
@@ -1297,6 +1293,12 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         </>
                                     );
                                 })()}
+
+                                {/* 2-leg ML Parlay recommendations — below Top 5 Plays */}
+                                {leagueFilter === 'NCAAM' && String(selectedDate) === String(getTodayStr()) && (
+                                    <ParlayRecommendations />
+                                )}
+
                             </div>
                         )}
 
