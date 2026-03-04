@@ -21,16 +21,10 @@ const fmtTime = (ts) => {
   } catch { return ''; }
 };
 
-const TABS = [
-  { key: 'high_confidence', label: 'Highest Confidence', icon: Zap, color: 'amber' },
-  { key: 'payout_band', label: 'Value Matchups', icon: Target, color: 'purple' },
-  { key: 'home_fav', label: 'Home Favorites', icon: Home, color: 'orange' },
-];
-
 const ACCENT = {
-  amber: { text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', tab: 'border-amber-400 text-amber-300' },
-  purple: { text: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', tab: 'border-purple-400 text-purple-300' },
-  orange: { text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', tab: 'border-orange-400 text-orange-300' },
+  amber: { text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', head: 'border-amber-500/30 text-amber-300' },
+  purple: { text: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', head: 'border-purple-500/30 text-purple-300' },
+  orange: { text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', head: 'border-orange-500/30 text-orange-300' },
 };
 
 function ComboCard({ c, color = 'amber' }) {
@@ -79,12 +73,34 @@ function ComboCard({ c, color = 'amber' }) {
   );
 }
 
+function ParlayColumn({ title, icon: Icon, color, combos, loading }) {
+  const ac = ACCENT[color] || ACCENT.amber;
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Column header */}
+      <div className={`flex items-center gap-2 px-1 pb-2 border-b ${ac.head}`}>
+        <Icon size={14} className={ac.text} />
+        <span className={`text-xs font-black uppercase tracking-wider ${ac.text}`}>{title}</span>
+      </div>
+      {/* Cards */}
+      {loading ? (
+        <div className="text-xs text-slate-500 p-4 text-center">Loading…</div>
+      ) : combos.length === 0 ? (
+        <div className="text-xs text-slate-500 bg-slate-950/50 rounded-xl p-4 text-center border border-slate-800/50 font-medium">
+          No combos today
+        </div>
+      ) : (
+        combos.map((c, i) => <ComboCard key={i} c={c} color={color} />)
+      )}
+    </div>
+  );
+}
+
 export default function ParlayRecommendations() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
   const [allData, setAllData] = useState(null);
   const [homeFavData, setHomeFavData] = useState(null);
-  const [activeTab, setActiveTab] = useState('high_confidence');
 
   const load = async () => {
     setLoading(true);
@@ -105,29 +121,17 @@ export default function ParlayRecommendations() {
 
   useEffect(() => { load(); }, []);
 
-  const getCombos = (tabKey) => {
-    if (tabKey === 'high_confidence') return (allData?.high_confidence || []).slice(0, 3);
-    if (tabKey === 'payout_band') return (allData?.payout_band || []).slice(0, 3);
-    if (tabKey === 'home_fav') return (homeFavData?.high_confidence || []).slice(0, 3);
-    return [];
-  };
-
-  const getColor = (tabKey) => {
-    const tab = TABS.find(t => t.key === tabKey);
-    return tab?.color || 'amber';
-  };
-
-  const combos = getCombos(activeTab);
-  const color = getColor(activeTab);
-  const activeTabDef = TABS.find(t => t.key === activeTab);
+  const highConf = (allData?.high_confidence || []).slice(0, 2);
+  const valuePick = (allData?.payout_band || []).slice(0, 2);
+  const homeFav = (homeFavData?.high_confidence || []).slice(0, 2);
 
   return (
     <div className="mb-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <div className="text-sm font-black text-slate-100 uppercase tracking-wider">2-Leg ML Parlays</div>
-          <div className="text-[11px] text-slate-500">Sourced from model recommendations · today only</div>
+          <div className="text-[11px] text-slate-500">Model-sourced combinations · today only</div>
         </div>
         <button
           onClick={load}
@@ -141,45 +145,30 @@ export default function ParlayRecommendations() {
 
       {err && <div className="text-xs text-red-400 bg-red-900/20 border border-red-900/50 p-3 rounded-xl mb-3">{err}</div>}
 
-      {/* Tab bar */}
-      <div className="flex gap-1 mb-4 bg-slate-900/60 border border-slate-800/70 rounded-xl p-1">
-        {TABS.map(({ key, label, icon: Icon, color: tabColor }) => {
-          const isActive = activeTab === key;
-          const ac = ACCENT[tabColor];
-          return (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg text-xs font-bold transition-all
-                ${isActive
-                  ? `bg-slate-800 border ${ac.tab} shadow-sm`
-                  : 'text-slate-500 hover:text-slate-300 border border-transparent'
-                }`}
-            >
-              <Icon size={13} className={isActive ? ac.text : 'text-slate-600'} />
-              <span className="hidden sm:inline">{label}</span>
-              <span className="sm:hidden">{label.split(' ')[0]}</span>
-            </button>
-          );
-        })}
+      {/* 3-column always-visible layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <ParlayColumn
+          title="Highest Confidence"
+          icon={Zap}
+          color="amber"
+          combos={highConf}
+          loading={loading}
+        />
+        <ParlayColumn
+          title="Value Matchups"
+          icon={Target}
+          color="purple"
+          combos={valuePick}
+          loading={loading}
+        />
+        <ParlayColumn
+          title="Home Favorites"
+          icon={Home}
+          color="orange"
+          combos={homeFav}
+          loading={loading}
+        />
       </div>
-
-      {/* Active tab content */}
-      {!err && (
-        <>
-          {combos.length === 0 ? (
-            <div className="text-sm text-slate-500 bg-slate-950/50 rounded-xl p-6 text-center border border-slate-800/50 font-medium">
-              No {activeTabDef?.label?.toLowerCase()} combos found today.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-              {combos.map((c, i) => (
-                <ComboCard key={i} c={c} color={color} />
-              ))}
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 }
