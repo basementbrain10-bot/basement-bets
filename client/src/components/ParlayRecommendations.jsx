@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
-import { Zap, Target, TrendingUp, Percent, RefreshCw } from 'lucide-react';
+import { Zap, Target, TrendingUp, Percent, RefreshCw, Home } from 'lucide-react';
 
 const fmtPct = (x) => {
   const n = Number(x);
@@ -19,17 +19,20 @@ export default function ParlayRecommendations() {
   const [err, setErr] = useState(null);
   const [data, setData] = useState(null);
   const [anchors, setAnchors] = useState(null);
+  const [homeFavData, setHomeFavData] = useState(null);
 
   const load = async () => {
     setLoading(true);
     setErr(null);
     try {
-      const [res, anc] = await Promise.all([
+      const [res, anc, homeFav] = await Promise.all([
         api.get('/api/ncaam/parlays/today', { params: { min_ev_per_unit: 0.02, parlay_odds_lo: -120, parlay_odds_hi: 300 } }),
-        api.get('/api/ncaam/anchors/today', { params: { min_edge_prob: 0.03, odds_lo: -450, odds_hi: -220, limit: 3 } }).catch(() => ({ data: null }))
+        api.get('/api/ncaam/anchors/today', { params: { min_edge_prob: 0.03, odds_lo: -450, odds_hi: -220, limit: 3 } }).catch(() => ({ data: null })),
+        api.get('/api/ncaam/parlays/today', { params: { strategy: 'home_fav', parlay_odds_lo: -180, parlay_odds_hi: 250, min_ev_per_unit: 0.02 } }).catch(() => ({ data: null })),
       ]);
       setData(res.data);
       setAnchors(anc.data);
+      setHomeFavData(homeFav.data);
     } catch (e) {
       setErr(e?.response?.data?.detail || e?.message || 'Failed to load parlays');
     } finally {
@@ -41,7 +44,7 @@ export default function ParlayRecommendations() {
     load();
   }, []);
 
-  const renderRow = (c, idx) => {
+  const renderRow = (c, idx, accent = 'default') => {
     const legs = c?.legs || [];
     const a = legs[0] || {};
     const b = legs[1] || {};
@@ -56,6 +59,8 @@ export default function ParlayRecommendations() {
       }
     };
 
+    const isOrange = accent === 'orange';
+
     return (
       <div key={idx} className="relative overflow-hidden p-4 rounded-xl border border-slate-700/60 bg-gradient-to-br from-slate-900 to-slate-950 shadow-lg flex flex-col gap-3 transition hover:border-slate-500/50">
         {/* Top bar: Odds and EV */}
@@ -65,9 +70,9 @@ export default function ParlayRecommendations() {
             <span className="text-xs font-bold text-slate-500">Total Odds</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 bg-green-500/10 px-2 py-1 rounded-md border border-green-500/20">
-              <TrendingUp size={14} className="text-green-400" />
-              <span className="text-xs font-bold text-green-400">+{fmtPct(c?.ev)} EV</span>
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-md border ${isOrange ? 'bg-orange-500/10 border-orange-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
+              <TrendingUp size={14} className={isOrange ? 'text-orange-400' : 'text-green-400'} />
+              <span className={`text-xs font-bold ${isOrange ? 'text-orange-400' : 'text-green-400'}`}>+{fmtPct(c?.ev)} EV</span>
             </div>
             <div className="flex items-center gap-1 bg-blue-500/10 px-2 py-1 rounded-md border border-blue-500/20">
               <Percent size={14} className="text-blue-400" />
@@ -78,29 +83,21 @@ export default function ParlayRecommendations() {
 
         {/* Legs container */}
         <div className="flex flex-col gap-3 w-full">
-          {/* Leg 1 */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-500 font-bold uppercase">{fmtTime(a.start_time)}</span>
-                <span className="text-xs text-slate-400 font-medium whitespace-normal">{a.matchup}</span>
+          {[a, b].map((leg, li) => (
+            <div key={li} className="flex items-start justify-between gap-4">
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase">{fmtTime(leg.start_time)}</span>
+                  <span className="text-xs text-slate-400 font-medium whitespace-normal">{leg.matchup}</span>
+                  {isOrange && leg.is_home_pick && (
+                    <span className="text-[9px] font-bold text-orange-400 bg-orange-400/10 border border-orange-400/20 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Home Fav</span>
+                  )}
+                </div>
+                <span className="text-sm font-bold text-slate-200 whitespace-normal leading-tight">{leg.team_pick}</span>
               </div>
-              <span className="text-sm font-bold text-slate-200 whitespace-normal leading-tight">{a.team_pick}</span>
+              <span className="text-sm font-mono font-bold text-slate-500 shrink-0">{fmtOdds(leg.price)}</span>
             </div>
-            <span className="text-sm font-mono font-bold text-slate-500 shrink-0">{fmtOdds(a.price)}</span>
-          </div>
-
-          {/* Leg 2 */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-500 font-bold uppercase">{fmtTime(b.start_time)}</span>
-                <span className="text-xs text-slate-400 font-medium whitespace-normal">{b.matchup}</span>
-              </div>
-              <span className="text-sm font-bold text-slate-200 whitespace-normal leading-tight">{b.team_pick}</span>
-            </div>
-            <span className="text-sm font-mono font-bold text-slate-500 shrink-0">{fmtOdds(b.price)}</span>
-          </div>
+          ))}
         </div>
       </div>
     );
@@ -157,7 +154,7 @@ export default function ParlayRecommendations() {
       )}
 
       {!err && data && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
           <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <Zap className="text-amber-400" size={18} fill="currentColor" fillOpacity={0.2} />
@@ -167,7 +164,7 @@ export default function ParlayRecommendations() {
               {(data?.high_confidence || []).length === 0 ? (
                 <div className="text-sm text-slate-500 bg-slate-950/50 rounded-xl p-6 text-center border border-slate-800/50 font-medium">No high-confidence combos found today.</div>
               ) : (
-                (data.high_confidence || []).slice(0, 5).map(renderRow)
+                (data.high_confidence || []).slice(0, 5).map((c, i) => renderRow(c, i))
               )}
             </div>
           </div>
@@ -181,9 +178,40 @@ export default function ParlayRecommendations() {
               {(data?.payout_band || []).length === 0 ? (
                 <div className="text-sm text-slate-500 bg-slate-950/50 rounded-xl p-6 text-center border border-slate-800/50 font-medium">No value combos found today.</div>
               ) : (
-                (data.payout_band || []).slice(0, 5).map(renderRow)
+                (data.payout_band || []).slice(0, 5).map((c, i) => renderRow(c, i))
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Home Favorites Strategy (-180 to +250) */}
+      {!err && (
+        <div className="bg-slate-900/40 border border-orange-900/30 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Home className="text-orange-400" size={18} />
+              <div>
+                <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Home Favorites</div>
+                <div className="text-[11px] text-slate-500">2 favored home teams · combined odds -180 to +250</div>
+              </div>
+            </div>
+            {homeFavData && (
+              <div className="text-[11px] text-slate-500 text-right">
+                {homeFavData.legs_considered ?? 0} legs · {homeFavData.combos_considered ?? 0} combos
+              </div>
+            )}
+          </div>
+          <div className="space-y-3">
+            {!homeFavData || (homeFavData?.high_confidence || []).length === 0 ? (
+              <div className="text-sm text-slate-500 bg-slate-950/50 rounded-xl p-6 text-center border border-slate-800/50 font-medium">
+                No home-favorite combos cleared the -180 to +250 band today.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                {(homeFavData.high_confidence || []).slice(0, 3).map((c, i) => renderRow(c, i, 'orange'))}
+              </div>
+            )}
           </div>
         </div>
       )}

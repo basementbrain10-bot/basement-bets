@@ -3681,10 +3681,15 @@ async def get_ncaam_parlays_today(
     max_legs: int = 2,
     limit_legs: int = 80,
     persist: bool = False,
+    strategy: str = "all",  # 'all' | 'home_fav'
 ):
     """2-leg ML parlay recommendations for today's NCAAM slate.
 
     Source: model_predictions (Moneyline only). Read-only.
+
+    strategy='all'     : all ML picks that pass EV gate (default)
+    strategy='home_fav': only home-team favorites (pick==home_team, price<0)
+                         Combined odds band defaults to -180..+250
 
     Returns two lists:
     - high_confidence: highest P(win) combos
@@ -3692,6 +3697,17 @@ async def get_ncaam_parlays_today(
     """
     if int(max_legs) != 2:
         raise HTTPException(status_code=400, detail="Only 2-leg parlays supported in v1")
+
+    # For home_fav strategy, tighten the default odds band if caller did not override
+    _strategy = str(strategy or 'all').lower().strip()
+    if _strategy == 'home_fav':
+        # Only override defaults, not explicit caller params.
+        # FastAPI doesn't differentiate default vs explicit, so we use sentinel checks:
+        # If caller passed the global defaults (-120 / 800), apply home_fav tighter defaults.
+        if parlay_odds_lo == -120:
+            parlay_odds_lo = -180
+        if parlay_odds_hi == 800:
+            parlay_odds_hi = 250
 
     from src.database import get_db_connection, _exec
 
@@ -3756,6 +3772,11 @@ async def get_ncaam_parlays_today(
             wp = None
         if wp is None or not (0 < wp < 1.0):
             continue
+
+        home_team = r.get('home_team') or ''
+        pick = r.get('pick') or r.get('selection') or ''
+        is_home_pick = (pick.strip().lower() == home_team.strip().lower())
+
         norm_legs.append({
             "event_id": r.get('event_id'),
             "matchup": f"{r.get('away_team')} @ {r.get('home_team')}",
@@ -3765,7 +3786,13 @@ async def get_ncaam_parlays_today(
             "ev_per_unit": float(r.get('ev_per_unit') or 0),
             "model_version": r.get('model_version'),
             "start_time": str(r.get('start_time') or ''),
+            "is_home_pick": is_home_pick,
         })
+
+    # Apply strategy filter AFTER building norm_legs so we can inspect is_home_pick
+    if _strategy == 'home_fav':
+        # Keep only legs where the model is picking the home team AND they are a favorite (negative ML)
+        norm_legs = [leg for leg in norm_legs if leg.get('is_home_pick') and leg.get('price', 0) < 0]
 
     # Enumerate all 2-leg combos (different events)
     combos = []
@@ -3891,6 +3918,7 @@ async def get_ncaam_parlays_today(
 
     return {
         "status": "success",
+        "strategy": _strategy,
         "legs_considered": len(norm_legs),
         "combos_considered": len(combos),
         "params": {
