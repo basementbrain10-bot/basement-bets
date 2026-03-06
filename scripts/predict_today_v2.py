@@ -1,4 +1,3 @@
-
 import sys
 import os
 import argparse
@@ -15,6 +14,47 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.database import get_db_connection, _exec, ensure_recommended_slates_tables
 from src.models.ncaam_market_first_model_v2 import NCAAMMarketFirstModelV2
 from src.services.grading_service import GradingService
+
+
+def fmt_line(x):
+    try:
+        if x is None:
+            return '—'
+        return f"{float(x):g}"
+    except Exception:
+        return str(x)
+
+
+def fmt_odds(x):
+    try:
+        if x is None:
+            return '—'
+        x = int(x)
+        return f"+{x}" if x > 0 else str(x)
+    except Exception:
+        return str(x) if x is not None else '—'
+
+
+def fmt_ev(x):
+    try:
+        if x is None:
+            return '—'
+        if isinstance(x, str) and '%' in x:
+            return x.strip()
+        return f"{float(x) * 100:.1f}%"
+    except Exception:
+        return '—'
+
+
+def parse_edge(edge):
+    if edge is None:
+        return 0.0
+    try:
+        if isinstance(edge, str) and edge.endswith('%'):
+            return float(edge.strip().strip('%')) / 100.0
+        return float(edge)
+    except Exception:
+        return 0.0
 
 
 def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors: bool = True, grade_completed: bool = True):
@@ -38,7 +78,6 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
         now_et = datetime.now(tz=ZoneInfo("America/New_York"))
         today_str = now_et.strftime("%Y-%m-%d")
     else:
-        # fallback (approx ET)
         today_str = (now_utc - timedelta(hours=5)).strftime("%Y-%m-%d")
 
     print(f"--- Basement Bets V2 Predictions for {today_str} ---")
@@ -89,126 +128,36 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
             if recommendations:
                 top_rec = recommendations[0]
                 matchup = f"{g['away_team']} @ {g['home_team']}"
-                # UI recommendation shape includes bet_type, selection, price, edge (EV%), book
                 mkt = str(top_rec.get('bet_type') or '').upper() or '—'
                 line = top_rec.get('market_line')
                 price = top_rec.get('price')
                 ev = top_rec.get('edge')
-
-                def fmt_line(x):
-                    try:
-                        if x is None:
-                            return '—'
-                        return f"{float(x):g}"
-                    except Exception:
-                        return str(x)
-
-                def fmt_odds(x):
-                    try:
-                        if x is None:
-                            return '—'
-                        x = int(x)
-                        return f"+{x}" if x > 0 else str(x)
-                    except Exception:
-                        return str(x) if x is not None else '—'
-
-                def fmt_ev(x):
-                    try:
-                        if x is None:
-                            return '—'
-                        # edge is a string like "12.1%"
-                        if isinstance(x, str) and '%' in x:
-                            return x.strip()
-                        return f"{float(x) * 100:.1f}%"
-                    except Exception:
-                        return '—'
-
-                # Always print a user-readable selection that includes the bet line.
-                # Some downstream formatters summarize pick as 'home'/'away'. Here we force a concrete label.
-                sel_raw = str(top_rec.get('selection') or '').strip()
-                line_val = top_rec.get('market_line')
-
-                home = g['home_team']
-                away = g['away_team']
-
-                def fmt_signed(x):
-                    try:
-                        if x is None:
-                            return None
-                        v = float(x)
-                        # keep one decimal for spreads/totals
-                        return f"{v:+.1f}".replace('+', '') if v < 0 else f"+{v:.1f}".replace('+', '+')
-                    except Exception:
-                        return str(x)
-
-                selection = '—'
-                if mkt == 'SPREAD':
-                    # selection may be "Team -4.5" already OR "home"/"away".
-                    if sel_raw.lower() in ('home', 'away'):
-                        if line_val is not None:
-                            # market_line is home perspective (neg means home favored)
-                            hv = float(line_val)
-                            if sel_raw.lower() == 'home':
-                                selection = f"{home} {hv:+.1f}".replace('+', '+')
-                            else:
-                                selection = f"{away} {(-hv):+.1f}".replace('+', '+')
-                        else:
-                            selection = home if sel_raw.lower() == 'home' else away
-                    else:
-                        selection = sel_raw
-                elif mkt == 'TOTAL':
-                    # selection could be "OVER 147.5" or just "OVER"
-                    if sel_raw.lower().startswith('over'):
-                        selection = f"OVER {fmt_line(line_val)}" if line_val is not None else 'OVER'
-                    elif sel_raw.lower().startswith('under'):
-                        selection = f"UNDER {fmt_line(line_val)}" if line_val is not None else 'UNDER'
-                    else:
-                        selection = sel_raw or (f"TOTAL {fmt_line(line_val)}" if line_val is not None else 'TOTAL')
-                else:
-                    selection = sel_raw or '—'
-
+                sel = str(top_rec.get('selection') or '').strip()
                 conf = top_rec.get('confidence')
                 book = top_rec.get('book')
-                conf_s = f" ({conf})" if conf else ''
-                book_s = f" [{book}]" if book else ''
+                fmt_conf = f" ({conf})" if conf else ''
+                fmt_book = f" [{book}]" if book else ''
 
                 print(
-                    f"{matchup:<40} | {mkt:<8} | {fmt_line(line):<8} | {fmt_odds(price):<6} | {fmt_ev(ev):<6} | {selection}{conf_s}{book_s}"
+                    f"{matchup:<40} | {mkt:<8} | {fmt_line(line):<8} | {fmt_odds(price):<6} | {fmt_ev(ev):<6} | {sel}{fmt_conf}{fmt_book}"
                 )
                 recs += 1
 
-                # IMPORTANT: res['id'] is an analysis-run id, not necessarily a persisted DB row.
-                # To keep "recommended" aligned with grading, map to the actual model_predictions row id.
-                try:
-                    evu = res.get('ev_per_unit')
-                    if evu is not None:
-                        mp_id = None
-                        with get_db_connection() as conn:
-                            row = _exec(conn, """
-                              SELECT id
-                              FROM model_predictions
-                              WHERE event_id=%s
-                                AND selection=%s
-                                AND COALESCE(bet_price, price) = %s
-                              ORDER BY analyzed_at DESC
-                              LIMIT 1
-                            """, (str(game_id), str(selection), int(price) if price is not None else None)).fetchone()
-                            if row:
-                                mp_id = row['id'] if isinstance(row, dict) else row[0]
-
-                        if mp_id:
-                            persisted.append({
-                                'prediction_id': str(mp_id),
-                                'ev_per_unit': float(evu),
-                                'selection': str(selection),
-                                'price': price,
-                                'event_id': str(game_id),
-                                'matchup': matchup,
-                                'market_type': str(mkt) if mkt is not None else None,
-                                'bet_line': float(line_val) if line_val is not None else (float(line) if line is not None else None),
-                            })
-                except Exception:
-                    pass
+                for rec in recommendations:
+                    pid = rec.get('prediction_id')
+                    if not pid:
+                        continue
+                    ev_val = parse_edge(rec.get('edge'))
+                    persisted.append({
+                        'prediction_id': pid,
+                        'ev_per_unit': ev_val,
+                        'selection': rec.get('selection'),
+                        'price': rec.get('price'),
+                        'event_id': str(game_id),
+                        'matchup': matchup,
+                        'market_type': rec.get('bet_type'),
+                        'bet_line': rec.get('market_line') if rec.get('market_line') is not None else rec.get('line'),
+                    })
         except Exception as e:
             errors += 1
             if show_errors:
@@ -223,8 +172,6 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
     if errors and show_errors:
         print(f"[WARN] {errors} games errored during analyze().")
 
-    # Persist a run marker so the web dashboard can explain mismatches between
-    # cached daily_top_picks and the latest full run.
     try:
         status = 'NO_BETS' if recs == 0 else 'OK'
         with get_db_connection() as conn:
@@ -253,15 +200,11 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
                 int(recs),
                 f"predict_today_v2 window={int(window_hours)}h lookback={int(lookback_hours)}h",
             ))
-            try:
-                conn.commit()
-            except Exception:
-                pass
+            conn.commit()
     except Exception as e:
         if show_errors:
             print(f"[predict_today_v2] run-log insert failed: {e}")
 
-    # Persist the exact recommended slate (Top 6 by EV/u among persisted picks).
     try:
         ensure_recommended_slates_tables()
         top = sorted(persisted, key=lambda x: float(x.get('ev_per_unit') or 0.0), reverse=True)[:6]
@@ -283,13 +226,13 @@ def run_predictions(window_hours: int = 24, lookback_hours: int = 4, show_errors
                       ON CONFLICT (slate_id, prediction_id) DO NOTHING
                     """, (
                         slate_id,
-                        str(it.get('prediction_id')),
+                        it.get('prediction_id'),
                         int(i),
-                        str(it.get('event_id')) if it.get('event_id') is not None else None,
-                        str(it.get('selection')) if it.get('selection') is not None else None,
+                        it.get('event_id'),
+                        it.get('selection'),
                         int(it.get('price')) if it.get('price') is not None else None,
                         float(it.get('bet_line')) if it.get('bet_line') is not None else None,
-                        str(it.get('market_type')) if it.get('market_type') is not None else None,
+                        it.get('market_type'),
                     ))
                 conn.commit()
             print(f"[recommended_slate] id={slate_id} items={len(top)}")
