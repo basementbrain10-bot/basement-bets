@@ -966,59 +966,47 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         }
                                     };
 
-                                    const diag = { withPick: 0, passBasic: 0, passEv: 0, passWin: 0, passBoth: 0 };
-
+                                    // Build Top-5 rows directly from stored daily_top_picks (rowTopPicks).
+                                    // This decouples display from live board odds: if the morning model run
+                                    // found an edge, show it — no live odds required.
+                                    // If the evening run removes the edge (is_actionable=false), it disappears.
                                     const rows = (() => {
-                                        // Stored top-picks (core model)
-                                        const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
-                                        const makeKey = (dayEt, away, home) => {
-                                            const d = String(dayEt || '').slice(0, 10);
-                                            const a = norm(away);
-                                            const h = norm(home);
-                                            if (!d || !a || !h) return null;
-                                            return `${d}|${a}|${h}`;
-                                        };
-
-                                        return getProcessedEdges()
-                                            .map((e) => {
-                                                const direct = rowTopPicks?.[e.id] || null;
-                                                const k = makeKey(e?.day_et, e?.away_team, e?.home_team);
-                                                const fallback = (k && rowTopPicksByKey?.[k]) ? rowTopPicksByKey[k] : null;
-                                                const meta = direct || fallback;
-                                                return { edge: e, top: meta?.rec || null, meta };
-                                            })
-                                            .filter(({ edge, top, meta }) => {
-                                                if (!top) {
-                                                    // Allow explicit No-Bet rows to render via a separate list later.
-                                                    return false;
-                                                }
-                                                diag.withPick += 1;
-
-                                                // Recommended view should reflect the selected ET date.
-                                                // Prefer server-provided day_et (more reliable than client-side timezone parsing).
-                                                if (edge?.day_et) {
-                                                    if (String(edge.day_et) !== String(selectedDate)) return false;
-                                                } else {
-                                                    if (!isSameEtDay(edge?.start_time, selectedDate)) return false;
-                                                }
-
+                                        const picks = rowTopPicks || {};
+                                        return Object.entries(picks)
+                                            .filter(([eid, meta]) => {
+                                                if (!meta?.isActionable) return false;
+                                                const top = meta?.rec;
+                                                if (!top) return false;
                                                 const bt = String(top.bet_type || '').toUpperCase();
                                                 const sel = String(top.selection || '').trim();
-                                                const evStr = String(top.edge ?? '').replace('%', '').trim();
-                                                const evPct = Number(evStr);
-                                                const wp = (top.win_prob !== null && top.win_prob !== undefined) ? Number(top.win_prob) : null;
-                                                const wpLb10 = (top.win_prob_lb10 !== null && top.win_prob_lb10 !== undefined) ? Number(top.win_prob_lb10) : null;
-
-                                                // Basic schema gate
                                                 if (!bt || bt === 'AUTO') return false;
                                                 if (!sel || sel === '—') return false;
-                                                diag.passBasic += 1;
-
-                                                // IMPORTANT: do not apply additional client-side gates here.
-                                                // The server/model already gates recommendations (EV, archetype stats, sanity blocks).
-                                                // Extra client gating can accidentally hide TOTAL (O/U) picks.
-                                                const ok = true;
-                                                return ok;
+                                                // Match selected ET date using event metadata stored in the pick
+                                                const ev = meta?.event || {};
+                                                const dayEt = ev?.day_et || '';
+                                                if (dayEt) return String(dayEt) === String(selectedDate);
+                                                // Fallback: parse start_time
+                                                if (ev?.start_time) {
+                                                    try {
+                                                        const d = new Date(ev.start_time);
+                                                        const s = d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+                                                        return s === String(selectedDate);
+                                                    } catch (e) { return false; }
+                                                }
+                                                return false;
+                                            })
+                                            .map(([eid, meta]) => {
+                                                const ev = meta?.event || {};
+                                                // Build a synthetic edge object from stored event metadata
+                                                const edge = {
+                                                    id: eid,
+                                                    home_team: ev?.home_team || '',
+                                                    away_team: ev?.away_team || '',
+                                                    start_time: ev?.start_time || null,
+                                                    day_et: ev?.day_et || selectedDate,
+                                                    sport: 'NCAAM',
+                                                };
+                                                return { edge, top: meta.rec, meta };
                                             })
                                             .sort((a, b) => {
                                                 const aEv = Number(String(a.top?.edge ?? '').replace('%', '').trim()) || 0;

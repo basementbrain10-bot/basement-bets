@@ -1,10 +1,12 @@
-"""KenPom ingestion (subscription/cookie-auth).
+"""KenPom ingestion (login-auth + cloudscraper).
 
 Scope: current season only.
 
-This script is designed to run **once per day** via GitHub Actions.
-Auth:
-- Prefer `KENPOM_COOKIE` (session cookie string, e.g. "PHPSESSID=...; other=...").
+Designed to run once per day via GitHub Actions on ubuntu-latest.
+Auth (priority order):
+  1. KENPOM_EMAIL + KENPOM_PASSWORD  → fresh login each run (preferred)
+  2. KENPOM_COOKIE                   → inject pre-existing session cookie
+  3. Unauthenticated                 → will only get public data (likely empty)
 
 Data ingested:
 - Team ratings (AdjEM/AdjO/AdjD/AdjT + rank)
@@ -24,7 +26,6 @@ from datetime import datetime, timezone
 # Allow running from repo root in GitHub Actions
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-import requests
 from bs4 import BeautifulSoup
 
 from src.database import get_admin_db_connection, get_db_connection, _exec
@@ -32,23 +33,129 @@ from src.database import get_admin_db_connection, get_db_connection, _exec
 
 BASE = "https://kenpom.com"
 
+# ──────────────────────────────────────────────
+# Session / auth helpers
+# ──────────────────────────────────────────────
 
-def _session() -> requests.Session:
-    s = requests.Session()
+def _make_cloudscraper():
+    """Return a cloudscraper session (handles Cloudflare JS challenges)."""
+    try:
+        import cloudscraper
+        s = cloudscraper.create_scraper(
+            browser={"browser": "chrome", "platform": "windows", "mobile": False}
+        )
+    except ImportError:
+        # Fall back to plain requests if cloudscraper isn't installed
+        import requests
+        s = requests.Session()
+
     s.headers.update({
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
     })
+    return s
 
-    cookie = (os.getenv("KENPOM_COOKIE") or "")
-    # GitHub secrets sometimes end up with newlines/whitespace; requests forbids that in headers.
-    cookie = cookie.replace("\r", " ").replace("\n", " ").strip()
-    # If someone pasted with surrounding quotes, strip them.
-    if (cookie.startswith('"') and cookie.endswith('"')) or (cookie.startswith("'") and cookie.endswith("'")):
-        cookie = cookie[1:-1].strip()
+
+def _login_with_credentials(s, email: str, password: str) -> bool:
+    """
+    POST credentials to kenpom.com and return True if login succeeded.
+    KenPom uses a simple PHP form: POST /user.php with email + password.
+    """
+    try:
+        # First GET the homepage to let cloudscraper solve any CF challenge
+        # and to grab any hidden fields / CSRF tokens.
+        print("[kenpom] fetching homepage for CF clearance...")
+        r = s.get(BASE, timeout=30)
+        if r.status_code == 403:
+            print(f"[kenpom] CF blocked homepage (403) — check that cloudscraper is installed")
+            return False
+
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        # Find the login form action URL.
+        login_form = soup.find("form", {"id": "login-form"}) or soup.find("form", action=lambda a: a and "user" in a)
+        if login_form:
+            action = login_form.get("action", "/user.php")
+            if not action.startswith("http"):
+                action = BASE + ("" if action.startswith("/") else "/") + action
+        else:
+            action = BASE + "/user.php"
+
+        # Collect any hidden inputs (CSRF, etc.)
+        payload = {}
+        if login_form:
+            for inp in login_form.find_all("input", {"type": ["hidden", "text", "email", "password"]}):
+                n = inp.get("name")
+                v = inp.get("value", "")
+                if n:
+                    payload[n] = v
+
+        # Override with actual credentials
+        payload["email"] = email
+        payload["password"] = password
+
+        print(f"[kenpom] POSTing credentials to {action} ...")
+        time.sleep(1)
+        r2 = s.post(action, data=payload, timeout=30, allow_redirects=True)
+
+        # Detect failed login: kenpom shows "Incorrect" or redirects back to login form
+        body = r2.text or ""
+        if "Incorrect" in body or "incorrect" in body or "Invalid" in body:
+            print("[kenpom] Login failed: invalid credentials")
+            return False
+
+        # Check we got a PHPSESSID in the cookie jar
+        phpsessid = s.cookies.get("PHPSESSID")
+        if not phpsessid:
+            # Some CF setups store cookies differently
+            print(f"[kenpom] No PHPSESSID in cookie jar after login (status={r2.status_code}). Cookies: {dict(s.cookies)}")
+
+        # Treat as success if we're not on the login/error page
+        if "login" not in r2.url.lower() and r2.status_code < 400:
+            print(f"[kenpom] Login successful (PHPSESSID={'set' if phpsessid else 'not visible'})")
+            return True
+
+        print(f"[kenpom] Login may have failed (redirected to {r2.url})")
+        return bool(phpsessid)
+
+    except Exception as e:
+        print(f"[kenpom] Login error: {e}")
+        return False
+
+
+def _session():
+    """
+    Build an authenticated session.
+
+    Priority:
+      1. KENPOM_EMAIL + KENPOM_PASSWORD  (fresh login via form POST)
+      2. KENPOM_COOKIE                   (inject existing session cookie)
+      3. Unauthenticated (public pages only; ratings table will be empty)
+    """
+    email = (os.getenv("KENPOM_EMAIL") or "").strip()
+    password = (os.getenv("KENPOM_PASSWORD") or "").strip()
+    cookie = (os.getenv("KENPOM_COOKIE") or "").strip()
+
+    s = _make_cloudscraper()
+
+    if email and password:
+        print(f"[kenpom] Authenticating with email={email[:4]}***")
+        ok = _login_with_credentials(s, email, password)
+        if ok:
+            return s
+        print("[kenpom] Credential login failed — trying KENPOM_COOKIE fallback")
+
     if cookie:
-        # requests expects Cookie header or cookie jar.
+        # Strip surrounding quotes
+        if (cookie.startswith('"') and cookie.endswith('"')) or \
+           (cookie.startswith("'") and cookie.endswith("'")):
+            cookie = cookie[1:-1].strip()
+        cookie = cookie.replace("\r", " ").replace("\n", " ").strip()
+        print("[kenpom] Injecting KENPOM_COOKIE header")
         s.headers["Cookie"] = cookie
+        return s
+
+    print("[kenpom] WARNING: no credentials or cookie — scrape will likely return no data")
     return s
 
 
