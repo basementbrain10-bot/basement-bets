@@ -866,6 +866,25 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "council_adj_total": council_adjustment_total,
         }
         
+        mc = market_snapshot.get('_market_consensus') if isinstance(market_snapshot, dict) else None
+        ctx = {
+            'mu_spread_power': float(mu_spread_final) if mu_spread_final is not None else None,
+            'mu_total_power': float(mu_total_final) if mu_total_final is not None else None,
+            'sigma_spread': float(sigma_spread) if sigma_spread is not None else None,
+            'sigma_total': float(sigma_total) if sigma_total is not None else None,
+            'line_at_prediction_spread_home': (float(market_snapshot.get('spread_home')) if market_snapshot.get('spread_home') is not None else None) if isinstance(market_snapshot, dict) else None,
+            'line_at_prediction_total': (float(market_snapshot.get('total')) if market_snapshot.get('total') is not None else None) if isinstance(market_snapshot, dict) else None,
+            'open_spread_home': _safe_float(mc.get('open_spread_home')) if mc else None,
+            'current_spread_home': _safe_float(mc.get('current_spread_home')) if mc else None,
+            'spread_move_home': _safe_float(mc.get('spread_move_home')) if mc else None,
+            'open_total': _safe_float(mc.get('open_total')) if mc else None,
+            'current_total': _safe_float(mc.get('current_total')) if mc else None,
+            'total_move': _safe_float(mc.get('total_move')) if mc else None,
+            'spread_disagreement': _safe_float(mc.get('spread_disagreement')) if mc else None,
+            'total_disagreement': _safe_float(mc.get('total_disagreement')) if mc else None,
+            'as_of': (mc.get('as_of') if mc else None),
+        }
+
         # 8. Narrative (UI MATCH)
         # Pass raw odds so we can generate matchup-specific key factors (e.g., line movement)
         narrative = self._generate_narrative(event, market_snapshot, torvik_view, kenpom_adj, news_context, recs, raw_snaps=raw_snaps, debug_info=debug_info)
@@ -965,7 +984,7 @@ class NCAAMMarketFirstModelV2(BaseModel):
             ub90 = (round(float(r.get('win_prob_ub90')), 3) if r.get('win_prob_ub90') is not None else None)
             bounds_available = (lb10 is not None) and (ub90 is not None)
 
-            ui_recs.append({
+            ui_rec = {
                 "bet_type": r['market'],
                 "selection": sel,
                 # Keep legacy key name for UI, but this is EV% not points.
@@ -988,10 +1007,159 @@ class NCAAMMarketFirstModelV2(BaseModel):
                 "ev_raw": r.get('ev_raw'),
                 "ev_penalty": r.get('ev_penalty'),
                 "movement_tags": r.get('movement_tags'),
-            })
+                "prediction_id": r.get('prediction_id'),
+            }
+            ui_recs.append(ui_rec)
+            r['_ui_rec'] = ui_rec
             if not best_rec or r['ev'] > best_rec['ev']:
                 best_rec = r
 
+        inputs_payload = {
+            "market": market_snapshot,
+            "torvik": torvik_view,
+            "kenpom": kenpom_adj,
+            "news": news_context
+        }
+        outputs_payload = {
+            "mu_spread": mu_spread_final,
+            "mu_total": mu_total_final,
+            "recommendations": recs,
+            "debug": debug_info,
+            "potential_adjustment": {
+                "spread": potential_adjustment_spread,
+                "total": potential_adjustment_total,
+                "gated": not COUNCIL_ADJUSTMENTS_ENABLED
+            }
+        }
+        inputs_json_str = json.dumps(inputs_payload, default=str)
+        outputs_json_str = json.dumps(outputs_payload, default=str)
+        narrative_json_str = json.dumps(narrative, default=str)
+        context_json_str = json.dumps(ctx, default=str)
+
+        inserted_best_doc_id = None
+        if recs:
+            def _normalize_spread_line(side, raw_line):
+                if raw_line is None:
+                    return None
+                try:
+                    val = float(raw_line)
+                except Exception:
+                    return None
+                spread_home = market_snapshot.get('spread_home')
+                if spread_home is None:
+                    return val
+                home_sign = -1.0 if float(spread_home) < 0 else 1.0
+                abs_val = abs(val)
+                if side == 'away':
+                    return -home_sign * abs_val
+                return home_sign * abs_val
+
+            def _build_rec_doc(rec):
+                mkt = str(rec.get('market') or '').upper()
+                side = str(rec.get('side') or '').lower()
+                line_val = rec.get('line')
+                price = rec.get('price')
+                book = rec.get('book') or 'Consensus'
+                pick = None
+                bet_line = None
+                selection = str(rec.get('selection') or '')
+                mu_market = None
+                mu_torvik_val = None
+                mu_final_val = None
+                sigma_val = None
+                edge = None
+
+                if mkt == 'SPREAD':
+                    pick = event.get('home_team') if side == 'home' else event.get('away_team')
+                    bet_line = _normalize_spread_line(side, line_val)
+                    if pick and bet_line is not None:
+                        selection = f"{pick} {bet_line:+.1f}"
+                    else:
+                        selection = pick or selection or 'SPREAD'
+                    spread_home = market_snapshot.get('spread_home')
+                    if spread_home is None:
+                        mu_market = None
+                    else:
+                        mu_market = float(spread_home)
+                    if side == 'away':
+                        if mu_market is not None:
+                            mu_market = -mu_market
+                        mu_torvik_val = -mu_torvik_spread
+                        mu_final_val = -mu_spread_final if mu_spread_final is not None else None
+                    else:
+                        mu_torvik_val = mu_torvik_spread
+                        mu_final_val = mu_spread_final
+                    sigma_val = sigma_spread
+                    if mu_market is not None and mu_final_val is not None:
+                        edge = float(mu_market) - float(mu_final_val)
+                elif mkt == 'TOTAL':
+                    pick = (rec.get('side') or 'OVER').upper()
+                    try:
+                        bet_line = float(line_val) if line_val is not None else None
+                    except Exception:
+                        bet_line = None
+                    selection = selection or (f"{pick} {bet_line}" if bet_line is not None else pick)
+                    mu_market = float(market_snapshot.get('total') or 145.0)
+                    mu_torvik_val = mu_torvik_total
+                    mu_final_val = mu_total_final
+                    sigma_val = sigma_total
+                    if mu_market is not None and mu_final_val is not None:
+                        edge = float(mu_final_val) - float(mu_market)
+                else:
+                    pick = rec.get('team') or event.get('home_team')
+                    bet_line = line_val
+                    selection = selection or pick
+                    mu_market = float(market_snapshot.get('total') or 145.0)
+                    mu_torvik_val = mu_torvik_total
+                    mu_final_val = mu_total_final
+                    sigma_val = sigma_total
+                    if mu_market is not None and mu_final_val is not None:
+                        edge = float(mu_final_val) - float(mu_market)
+
+                doc = {
+                    "event_id": event_id,
+                    "model_version": self.VERSION,
+                    "market_type": mkt,
+                    "pick": pick,
+                    "bet_line": bet_line,
+                    "bet_price": int(price) if price is not None else None,
+                    "book": book,
+                    "mu_market": mu_market,
+                    "mu_torvik": mu_torvik_val,
+                    "mu_final": mu_final_val,
+                    "sigma": sigma_val,
+                    "win_prob": float(rec.get('win_prob') or 0.0),
+                    "ev_per_unit": float(rec.get('ev') or 0.0),
+                    "confidence_0_100": int(round((rec.get('win_prob_lb10') or rec.get('win_prob') or 0.5) * 100)),
+                    "selection": selection,
+                    "price": int(price) if price is not None else None,
+                    "fair_line": mu_final_val,
+                    "edge_points": float(round(edge, 4)) if edge is not None else None,
+                    "inputs_json": inputs_json_str,
+                    "outputs_json": outputs_json_str,
+                    "narrative_json": narrative_json_str,
+                    "context_json": context_json_str,
+                }
+                return doc
+
+            ordered_recs = []
+            if best_rec:
+                ordered_recs.append(best_rec)
+            ordered_recs.extend([r for r in recs if r is not best_rec])
+            for rec in ordered_recs:
+                doc = _build_rec_doc(rec)
+                try:
+                    insert_model_prediction(doc)
+                except Exception as e:
+                    print(f"[MODEL] failed to persist rec {rec.get('market')} {rec.get('side')}: {e}")
+                    continue
+                rec['prediction_id'] = doc.get('id')
+                ui_ref = rec.get('_ui_rec')
+                if ui_ref is not None:
+                    ui_ref['prediction_id'] = doc.get('id')
+                if rec is best_rec:
+                    inserted_best_doc_id = doc.get('id')
+        best_prediction_id = inserted_best_doc_id
         # --- Persisted pick normalization ---
         # For SPREAD we want the persisted `pick` to be the actual team name (not "home/away"),
         # and `bet_line` to be relative to that pick (signed).
@@ -1107,27 +1275,10 @@ class NCAAMMarketFirstModelV2(BaseModel):
             pass
 
         # Persist prediction-time context for calibration.
-        mc = market_snapshot.get('_market_consensus') if isinstance(market_snapshot, dict) else None
-        ctx = {
-            'mu_spread_power': float(mu_spread_final) if mu_spread_final is not None else None,
-            'mu_total_power': float(mu_total_final) if mu_total_final is not None else None,
-            'sigma_spread': float(sigma_spread) if sigma_spread is not None else None,
-            'sigma_total': float(sigma_total) if sigma_total is not None else None,
-            'line_at_prediction_spread_home': (float(market_snapshot.get('spread_home')) if market_snapshot.get('spread_home') is not None else None) if isinstance(market_snapshot, dict) else None,
-            'line_at_prediction_total': (float(market_snapshot.get('total')) if market_snapshot.get('total') is not None else None) if isinstance(market_snapshot, dict) else None,
-            'open_spread_home': _safe_float(mc.get('open_spread_home')) if mc else None,
-            'current_spread_home': _safe_float(mc.get('current_spread_home')) if mc else None,
-            'spread_move_home': _safe_float(mc.get('spread_move_home')) if mc else None,
-            'open_total': _safe_float(mc.get('open_total')) if mc else None,
-            'current_total': _safe_float(mc.get('current_total')) if mc else None,
-            'total_move': _safe_float(mc.get('total_move')) if mc else None,
-            'spread_disagreement': _safe_float(mc.get('spread_disagreement')) if mc else None,
-            'total_disagreement': _safe_float(mc.get('total_disagreement')) if mc else None,
-            'as_of': (mc.get('as_of') if mc else None),
-        }
+
 
         res = {
-            "id": None, 
+            "id": best_prediction_id or None,
             "event_id": event_id,
             "home_team": event['home_team'],
             "away_team": event['away_team'],
@@ -1145,22 +1296,12 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "win_prob": best_rec['win_prob'] if best_rec else 0.5,
             "ev_per_unit": best_rec['ev'] if best_rec else 0.0,
             "kelly": best_rec['kelly'] if best_rec else 0.0,
-            "confidence_0_100": int(best_rec['ev'] * 100 * 5) if best_rec else 0, # Crude scale
-            "inputs_json": json.dumps({"market": market_snapshot, "torvik": torvik_view, "kenpom": kenpom_adj, "news": news_context}, default=str),
-            "outputs_json": json.dumps({
-                "mu_spread": mu_spread_final, 
-                "mu_total": mu_total_final, 
-                "recommendations": recs, 
-                "debug": debug_info,
-                "potential_adjustment": {
-                    "spread": potential_adjustment_spread,
-                    "total": potential_adjustment_total,
-                    "gated": not COUNCIL_ADJUSTMENTS_ENABLED
-                }
-            }, default=str),
-            "narrative": narrative, 
-            "narrative_json": json.dumps(narrative, default=str),
-            "context_json": json.dumps(ctx, default=str),
+            "confidence_0_100": int(best_rec['ev'] * 100 * 5) if best_rec else 0,
+            "inputs_json": inputs_json_str,
+            "outputs_json": outputs_json_str,
+            "narrative": narrative,
+            "narrative_json": narrative_json_str,
+            "context_json": context_json_str,
             "is_actionable": bool(ui_recs),
             "block_reason": block_reason,
             "recommendations": ui_recs,
@@ -1185,7 +1326,6 @@ class NCAAMMarketFirstModelV2(BaseModel):
             "clv_method": "odds_selector_v1",
             "debug": debug_info
         }
-        
         if not res['id']:
             import uuid
             res['id'] = str(uuid.uuid4())
