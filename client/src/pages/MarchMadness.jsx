@@ -1,129 +1,251 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../api/axios';
+import { RefreshCw } from 'lucide-react';
 
-const templateHighlights = [
-    {
-        title: 'Snapshot + Rankings',
-        bullets: [
-            'Team, seed, conference, coach and overall/conference records are captured up front so every profile starts with the same baseline.',
-            'KenPom, Torvik, NET and RPI numbers plus schedule strength (SOS, NCSOS) provide the efficiency and context metrics for the betting lens.',
-            'Resume includes quadrant wins, road/neutral/home splits, recent form, streak and injury notes so the narrative always ties back to tangible data.'
-        ]
-    },
-    {
-        title: 'Playing Style & Best Players',
-        bullets: [
-            'Tempo, shot-profile and offensive/defensive tendencies (creation, turnovers, rebounding, fouling) explain how the team wins and what matchup types favor them.',
-            'A structured best-player block adds both offense (usage + efficiency) and defense (rim protection + disruption) so the “who matters” snapshot is front and center.',
-            'Weighting rubrics (efficiency, shot quality, turnovers, rebounding, tempo, personnel, best-player factor) ensure every profile ties subjective narrative back to quantifiable signals.'
-        ]
-    },
-    {
-        title: 'Matchup Lens & Betting Signals',
-        bullets: [
-            'Each matchup card includes directional drivers (moneyline/spread/total) plus the top risks, tempo tags and steam/variance notes so writing a read isn’t guesswork.',
-            'The betting lens explicitly calls out green/red flags across ML, spread and total paths and summarizes keys to win, upset vulnerabilities and tournament fit.',
-            'A quick “20-second summary” with 3 keys and 2 red flags makes it easy to remember why a profile matters during live decision-making.'
-        ]
-    },
-    {
-        title: 'Upset & Volatility Intelligence',
-        bullets: [
-            'Upset risk/potential scores (0–100) plus volatility flags (tempo extremes, 3P variance, turnover trouble, foul/rotation risk) highlight when a seed is vulnerable.',
-            'Best-player edge sections compare the top offensive/defensive creator to typical opponents, including how they can be contained or how they tilt crunch-time possessions.',
-            'The template keeps situational notes—depth, foul trouble, neutral-court travel and variance profile—in one place so nothing surprises the betting team.'
-        ]
-    }
-];
+const MarchMadness = () => {
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-const modelingHighlights = [
-    {
-        title: 'Data Sources & Blending',
-        detail: 'Torvik Time Machine exports (2024 + 2025) plus KenPom preseason snapshots are merged with a DanVK seed+round historical prior to give us both efficiency and bracket-aware baselines.',
-        bullets: [
-            'Torvik ingest creates per-game snapshots and maintains the tempo/efficiency inputs for every matchup.',
-            'KenPom adds adjO/adjD/adjT and the optional summary snapshots widen the feature set.',
-            'A seed+round prior trained on 1985–2017 DanVK brackets produces `seed_prior.json`, which is blended with the efficiency model (`p_blend`).'
-        ]
-    },
-    {
-        title: 'Model Pipeline',
-        detail: 'The pipeline builds a training set, trains ML/spread/total models, evaluates them and exports metrics for dashboards.',
-        bullets: [
-            'Availability sheets (with status, notes and injury counts) are normalized and cached so roster flux influences spread/total projections.',
-            '`build_training_set.py` assembles Torvik + availability + KenPom features into `march_madness_training.parquet`.',
-            '`train_models.py` fits the ML, spread and total `joblib` files, and `evaluate_models.py` produces holdout metrics (Brier, bias).',
-            'A dashboard export (`dashboard/dashboard.json`) summarizes toss-ups, highest totals and daily evaluation snapshots for the UI/reports.'
-        ]
-    },
-    {
-        title: 'Operating Constraints (March Madness Dashboard)',
-        detail: 'When the tournament is live we enforce the rules listed in the March Madness Dashboard so the edges stay controlled.',
-        bullets: [
-            'Max spend/day: $100, max spend/game: $25, parlays capped at 0.5u and total parlay odds between -120 and +300.',
-            'Freeze window is 30 minutes to tip (stronger than the standard 10-minute persistence lock) and multi-market bets per game are allowed inside the $25/game cap.',
-            'Confidence must be ≥50 to show a recommendation; below that we display PASS while still tracking the internal lean, and we tag every pick with movement/variance risks.'
-        ]
-    }
-];
+    const getTodayStr = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const [selectedDate, setSelectedDate] = useState(getTodayStr());
 
-const pipelineSteps = [
-    'Download Torvik Time Machine JSONs (2024/25) and ingest via `pipeline/torvik_time_machine_ingest.py` so both games + snapshots are available.',
-    'Feed fresh availability sheets through `pipeline/availability_ingest.py` (status/notes) so injuries and coach tweaks enter the feature set.',
-    'Run `pipeline/build_training_set.py` with the processed games, snapshots and availability to create `march_madness_training.parquet`.',
-    'Train the three models (`ml_model.joblib`, `spread_model.joblib`, `total_model.joblib`) using `pipeline/train_models.py` and evaluate them with `pipeline/evaluate_models.py` against holdout data.',
-    'Blend efficiency outputs with the seed+round prior (`pipeline/blend_predictions.py`) and generate dashboard payloads via `pipeline/dashboard_export.py` for the UI.'
-];
+    const [rowTopPicks, setRowTopPicks] = useState({});
+    const [matchupProfiles, setMatchupProfiles] = useState({});
 
-export default function MarchMadness() {
+    useEffect(() => {
+        fetchData();
+    }, [selectedDate]);
+
+    const fetchData = async () => {
+        setLoading(true);
+        setError(null);
+
+        const topPicksParams = { date: selectedDate, days: 3, limit_games: 250 };
+
+        try {
+            const [topPicksRes, matchupRes] = await Promise.all([
+                api.get('/api/ncaam/top-picks', { params: topPicksParams })
+                    .catch((e) => ({ data: null, _error: e })),
+                api.get('/api/ncaam/matchup-profiles', { params: { date: selectedDate } })
+                    .catch((e) => ({ data: { matchups: [] } }))
+            ]);
+
+            const mProfiles = {};
+            (matchupRes?.data?.matchups || []).forEach(m => {
+                mProfiles[m.event_id] = m;
+            });
+            setMatchupProfiles(mProfiles);
+
+            const tp = topPicksRes?.data?.picks || null;
+            if (tp && typeof tp === 'object') {
+                const mapped = {};
+                Object.keys(tp).forEach((eid) => {
+                    if (tp[eid]?.rec && tp[eid]?.is_actionable) {
+                        mapped[eid] = tp[eid];
+                    }
+                });
+                setRowTopPicks(mapped);
+            } else {
+                setRowTopPicks({});
+            }
+
+        } catch (err) {
+            console.error("Failed to load March Madness data", err);
+            setError("Failed to load tournament data.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const shiftDate = (offset) => {
+        try {
+            const d = new Date(selectedDate + 'T12:00:00Z');
+            d.setDate(d.getDate() + offset);
+            setSelectedDate(d.toISOString().slice(0, 10));
+        } catch (e) { }
+    };
+
+    const SELECTION_SUNDAY = new Date('2026-03-15T00:00:00-05:00');
+    const now = new Date();
+    const daysToTourney = Math.max(0, Math.ceil((SELECTION_SUNDAY - now) / (1000 * 60 * 60 * 24)));
+    const tourneyStarted = now >= SELECTION_SUNDAY;
+
+    const mmPicks = Object.entries(rowTopPicks || {})
+        .filter(([eid, meta]) => {
+            if (!meta?.is_actionable || !meta?.rec) return false;
+            const bt = String(meta.rec.bet_type || '').toUpperCase();
+            const sel = String(meta.rec.selection || '').trim();
+            if (!bt || bt === 'AUTO' || !sel || sel === '—') return false;
+            const ev = meta?.event || {};
+            const dayEt = ev?.day_et || '';
+            if (dayEt) return String(dayEt) === String(selectedDate);
+            if (ev?.start_time) {
+                try {
+                    const d = new Date(ev.start_time);
+                    return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) === String(selectedDate);
+                } catch (e) { return false; }
+            }
+            return false;
+        })
+        .map(([eid, meta]) => ({ eid, meta }))
+        .sort((a, b) => {
+            const aEv = Number(String(a.meta.rec?.edge ?? '').replace('%', '')) || 0;
+            const bEv = Number(String(b.meta.rec?.edge ?? '').replace('%', '')) || 0;
+            return bEv - aEv;
+        });
+
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col gap-2">
-                <p className="text-xs uppercase tracking-widest text-blue-300">March Madness</p>
-                <h1 className="text-3xl font-semibold">Template & Modeling Review</h1>
-                <p className="text-slate-300 max-w-3xl">
-                    This tab captures the latest team-profile template, the March Madness model pipeline and the operational guardrails that keep the tournament slate disciplined.
-                    Use it as the single source of truth when you need a refresh on how we produce predictions and what the scouting card should include.
-                </p>
+        <div className="p-4 md:p-6 bg-slate-950 min-h-screen text-white rounded-2xl">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 mb-6">
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">
+                        March Madness
+                    </h1>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center bg-slate-800 border border-slate-700 rounded-xl px-1 py-1 w-full sm:w-auto">
+                        <button onClick={() => shiftDate(-1)} className="p-1 px-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors">
+                            ←
+                        </button>
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="bg-transparent text-sm font-bold text-center w-32 sm:w-32 focus:outline-none text-white appearance-none"
+                        />
+                        <button onClick={() => shiftDate(1)} className="p-1 px-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors">
+                            →
+                        </button>
+                        <button onClick={() => setSelectedDate(getTodayStr())} className="ml-2 px-2 py-0.5 text-xs bg-orange-600/20 text-orange-400 hover:bg-orange-600/30 rounded">
+                            Today
+                        </button>
+                    </div>
+                    <button
+                        onClick={fetchData}
+                        disabled={loading}
+                        className="px-4 py-2 bg-slate-800 border border-slate-700 hover:bg-slate-700 rounded-xl text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                        Refresh
+                    </button>
+                </div>
             </div>
 
-            <section className="grid gap-4 md:grid-cols-2">
-                {templateHighlights.map((card) => (
-                    <article key={card.title} className="p-5 bg-slate-900 border border-slate-800 rounded-2xl shadow-inner">
-                        <h2 className="text-lg font-semibold text-white mb-2">{card.title}</h2>
-                        <ul className="list-disc list-inside text-slate-300 space-y-2 text-sm">
-                            {card.bullets.map((bullet) => (
-                                <li key={bullet}>{bullet}</li>
-                            ))}
-                        </ul>
-                    </article>
-                ))}
-            </section>
-
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-                <h2 className="text-xl font-semibold text-white">Modeling Pulse & Pipeline</h2>
-                <div className="grid gap-4 md:grid-cols-3">
-                    {modelingHighlights.map((block) => (
-                        <div key={block.title} className="bg-slate-950/50 border border-slate-800 rounded-2xl p-4">
-                            <h3 className="text-base font-semibold text-slate-200">{block.title}</h3>
-                            <p className="text-slate-400 text-sm mt-1">{block.detail}</p>
-                            <ul className="mt-3 space-y-2 text-xs text-slate-300 list-disc list-inside">
-                                {block.bullets.map((item) => (
-                                    <li key={item}>{item}</li>
-                                ))}
-                            </ul>
+            {/* Tournament countdown / header */}
+            <div className="mb-6 rounded-2xl overflow-hidden" style={{ background: 'linear-gradient(135deg, #7c2d12 0%, #9a3412 40%, #1e293b 100%)' }}>
+                <div className="px-6 py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                        <div className="text-xs font-bold text-orange-300 uppercase tracking-widest mb-1">NCAA Tournament 2026</div>
+                        <div className="text-xl font-black text-white">
+                            {tourneyStarted ? '🏀 Tournament is Live!' : `${daysToTourney} day${daysToTourney !== 1 ? 's' : ''} to Selection Sunday`}
                         </div>
-                    ))}
+                        <div className="text-sm text-orange-200/70 mt-1">
+                            {tourneyStarted ? 'Showing actionable tournament picks for ' + selectedDate : 'Showing conference tournament picks for ' + selectedDate + ' · Selection Sunday: Mar 15'}
+                        </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                        <div className="text-3xl font-black text-orange-300">{mmPicks.length}</div>
+                        <div className="text-xs text-orange-200/60 uppercase tracking-wide">Actionable Picks</div>
+                    </div>
                 </div>
-            </section>
+            </div>
 
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
-                <h2 className="text-xl font-semibold text-white">Pipeline Steps</h2>
-                <ol className="list-decimal list-inside space-y-2 text-sm text-slate-200">
-                    {pipelineSteps.map((step) => (
-                        <li key={step}>{step}</li>
-                    ))}
-                </ol>
-            </section>
+            {/* Pick cards */}
+            {loading ? (
+                <div className="text-center py-12 text-slate-400 font-mono animate-pulse">Loading tournament board...</div>
+            ) : mmPicks.length === 0 ? (
+                <div className="text-center py-12 bg-slate-900/40 rounded-2xl border border-slate-800">
+                    <div className="text-4xl mb-3">🏀</div>
+                    <div className="text-slate-300 font-semibold text-lg mb-1">No picks for {selectedDate}</div>
+                    <div className="text-slate-500 text-sm">The model found no edge on today's slate. Check back tomorrow.</div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {mmPicks.map(({ eid, meta }, i) => {
+                        const rec = meta.rec;
+                        const ev = meta.event || {};
+                        const evPct = Number(String(rec.edge || '').replace('%', '')) || 0;
+                        const confLabel = rec.confidence || 'Medium';
+                        const confColor = confLabel === 'High' ? 'text-emerald-400' : confLabel === 'Medium' ? 'text-yellow-400' : 'text-slate-400';
+                        const confBg = confLabel === 'High' ? 'bg-emerald-500/10 border-emerald-500/20' : confLabel === 'Medium' ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-slate-500/10 border-slate-500/20';
+
+                        const profile = matchupProfiles[eid] || {};
+                        const hk = profile.home_kenpom || {};
+                        const ak = profile.away_kenpom || {};
+
+                        return (
+                            <div key={eid} className="relative rounded-2xl border border-slate-700/50 bg-slate-800/60 p-5 hover:border-orange-500/40 hover:bg-slate-800/80 transition-all flex flex-col shadow-lg">
+                                {/* Rank badge */}
+                                <div className="absolute top-4 right-4 w-7 h-7 rounded-full bg-orange-600/20 border border-orange-500/30 flex items-center justify-center text-xs font-black text-orange-300">#{i + 1}</div>
+
+                                {/* Matchup Header */}
+                                <div className="mb-4 pr-8">
+                                    <div className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">Matchup</div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-sm font-semibold text-slate-200">{ev.away_team || '—'}</span>
+                                        {ak.rank && <span className="text-[10px] text-slate-500 font-mono">#{ak.rank}</span>}
+                                    </div>
+                                    <div className="text-xs text-slate-500 mb-1 leading-none">@</div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-semibold text-slate-200">{ev.home_team || '—'}</span>
+                                        {hk.rank && <span className="text-[10px] text-slate-500 font-mono">#{hk.rank}</span>}
+                                    </div>
+                                </div>
+
+                                {/* Team Profiles (KenPom) */}
+                                <div className="grid grid-cols-2 gap-3 mb-4 p-3 rounded-xl bg-slate-900/50 border border-slate-700/30 text-xs">
+                                    <div>
+                                        <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">{ev.away_team || 'Away'}</div>
+                                        <div className="flex justify-between items-center mb-0.5"><span className="text-slate-500">AdjEM</span><span className="font-mono text-slate-300">{ak.adj_em ? `+${ak.adj_em}` : '—'}</span></div>
+                                        <div className="flex justify-between items-center mb-0.5"><span className="text-slate-500">AdjO</span><span className="font-mono text-slate-300">{ak.adj_o || '—'}</span></div>
+                                        <div className="flex justify-between items-center"><span className="text-slate-500">AdjD</span><span className="font-mono text-slate-300">{ak.adj_d || '—'}</span></div>
+                                    </div>
+                                    <div className="pl-3 border-l border-slate-700/50">
+                                        <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">{ev.home_team || 'Home'}</div>
+                                        <div className="flex justify-between items-center mb-0.5"><span className="text-slate-500">AdjEM</span><span className="font-mono text-slate-300">{hk.adj_em ? `+${hk.adj_em}` : '—'}</span></div>
+                                        <div className="flex justify-between items-center mb-0.5"><span className="text-slate-500">AdjO</span><span className="font-mono text-slate-300">{hk.adj_o || '—'}</span></div>
+                                        <div className="flex justify-between items-center"><span className="text-slate-500">AdjD</span><span className="font-mono text-slate-300">{hk.adj_d || '—'}</span></div>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1"></div>
+
+                                {/* Pick */}
+                                <div className="mb-3 pt-3 border-t border-slate-700/50">
+                                    <div className="text-[11px] text-orange-400/80 uppercase tracking-wider mb-1 font-bold">Model Pick</div>
+                                    <div className="flex justify-between items-end">
+                                        <div>
+                                            <div className="text-base font-black text-white">{rec.bet_type}: {rec.selection}</div>
+                                            {rec.market_line != null && (
+                                                <div className="text-xs text-slate-400 mt-0.5">{rec.price > 0 ? '+' : ''}{rec.price}</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Stats row */}
+                                <div className="flex items-center gap-3">
+                                    <div className="flex-1">
+                                        <div className="text-[10px] text-slate-500 mb-0.5">EV</div>
+                                        <div className="text-sm font-black text-emerald-400">+{evPct.toFixed(1)}%</div>
+                                    </div>
+                                    {rec.win_prob != null && (
+                                        <div className="flex-1">
+                                            <div className="text-[10px] text-slate-500 mb-0.5">Win Prob</div>
+                                            <div className="text-sm font-bold text-slate-200">{(rec.win_prob * 100).toFixed(0)}%</div>
+                                        </div>
+                                    )}
+                                    <div className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold uppercase ${confBg} ${confColor}`}>
+                                        {confLabel}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
-}
+};
+
+export default MarchMadness;

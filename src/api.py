@@ -3031,6 +3031,7 @@ async def get_matchup_profiles(request: Request, date: str | None = None):
     Returns: { matchups: [ { event_id, home, away, home_kenpom, away_kenpom, home_torvik, away_torvik } ] }
     """
     from src.database import get_db_connection, _exec
+    from src.services.edge_engine_ncaab import build_team_mapper
 
     if not date:
         with get_db_connection() as conn:
@@ -3049,11 +3050,22 @@ async def get_matchup_profiles(request: Request, date: str | None = None):
                 LIMIT 100
             """, (date,)).fetchall()
 
-            # Collect all unique team names
+            # Collect all unique team names using the standard mapper
+            map_team = build_team_mapper(conn)
             teams = set()
+            mapped_events = []
             for ev in events:
-                teams.add(ev['home_team'])
-                teams.add(ev['away_team'])
+                h_map = map_team(ev['home_team'])
+                a_map = map_team(ev['away_team'])
+                teams.add(h_map)
+                teams.add(a_map)
+                
+                # store the mapped names so we can look them up easily below
+                mapped_events.append({
+                    **dict(ev),
+                    '_mapped_home': h_map,
+                    '_mapped_away': a_map
+                })
 
             # Bulk fetch KenPom ratings
             kenpom_map = {}
@@ -3082,19 +3094,20 @@ async def get_matchup_profiles(request: Request, date: str | None = None):
 
             # Build response
             matchups = []
-            for ev in events:
-                d = dict(ev)
-                st = d.get('start_time')
+            for ev in mapped_events:
+                st = ev.get('start_time')
                 if hasattr(st, 'isoformat'):
                     try:
                         import pytz
                         st = st.astimezone(pytz.utc).isoformat().replace('+00:00', 'Z')
                     except Exception:
                         st = st.isoformat()
-                home = d['home_team']
-                away = d['away_team']
-                hk = dict(kenpom_map.get(home) or {})
-                ak = dict(kenpom_map.get(away) or {})
+                home = ev['home_team']
+                away = ev['away_team']
+                h_map = ev['_mapped_home']
+                a_map = ev['_mapped_away']
+                hk = dict(kenpom_map.get(h_map) or {})
+                ak = dict(kenpom_map.get(a_map) or {})
                 # Remove datetime objects that aren't JSON serializable
                 for k in list(hk.keys()):
                     if hasattr(hk[k], 'isoformat'):
@@ -3110,8 +3123,8 @@ async def get_matchup_profiles(request: Request, date: str | None = None):
                     'day_et': str(d.get('day_et', '')),
                     'home_kenpom': hk,
                     'away_kenpom': ak,
-                    'home_torvik': torvik_map.get(home, {}),
-                    'away_torvik': torvik_map.get(away, {}),
+                    'home_torvik': torvik_map.get(h_map, {}),
+                    'away_torvik': torvik_map.get(a_map, {}),
                 })
 
         return { 'date': date, 'matchups': matchups }
