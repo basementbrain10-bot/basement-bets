@@ -3023,6 +3023,103 @@ async def get_net_team(team: str, asof_date: str | None = None):
     return { 'team': team, 'row': row }
 
 
+@app.get("/api/ncaam/matchup-profiles")
+async def get_matchup_profiles(request: Request, date: str | None = None):
+    """Return KenPom + Torvik profiles for all teams playing on the given ET date.
+
+    Used by the March Madness tab to render team profile cards alongside picks.
+    Returns: { matchups: [ { event_id, home, away, home_kenpom, away_kenpom, home_torvik, away_torvik } ] }
+    """
+    from src.database import get_db_connection, _exec
+
+    if not date:
+        with get_db_connection() as conn:
+            date = _exec(conn, "SELECT (NOW() AT TIME ZONE 'America/New_York')::date::text").fetchone()[0]
+
+    try:
+        with get_db_connection() as conn:
+            # Get today's NCAAM events
+            events = _exec(conn, """
+                SELECT e.id, e.home_team, e.away_team, e.start_time,
+                       DATE(e.start_time AT TIME ZONE 'America/New_York') as day_et
+                FROM events e
+                WHERE e.league = 'NCAAM'
+                  AND DATE(e.start_time AT TIME ZONE 'America/New_York') = %s
+                ORDER BY e.start_time
+                LIMIT 100
+            """, (date,)).fetchall()
+
+            # Collect all unique team names
+            teams = set()
+            for ev in events:
+                teams.add(ev['home_team'])
+                teams.add(ev['away_team'])
+
+            # Bulk fetch KenPom ratings
+            kenpom_map = {}
+            if teams:
+                krow = _exec(conn, """
+                    SELECT team_name, rank, conference, record,
+                           adj_em, adj_o, adj_d, adj_t, updated_at
+                    FROM kenpom_ratings
+                    WHERE team_name = ANY(%s)
+                """, (list(teams),)).fetchall()
+                for r in krow:
+                    kenpom_map[r['team_name']] = dict(r)
+
+            # Bulk fetch Torvik ratings (team_ratings table if it exists)
+            torvik_map = {}
+            try:
+                trow = _exec(conn, """
+                    SELECT team_name, adj_o, adj_d, adj_net, barthag, rank
+                    FROM torvik_ratings
+                    WHERE team_name = ANY(%s)
+                """, (list(teams),)).fetchall()
+                for r in trow:
+                    torvik_map[r['team_name']] = dict(r)
+            except Exception:
+                pass  # table may not exist
+
+            # Build response
+            matchups = []
+            for ev in events:
+                d = dict(ev)
+                st = d.get('start_time')
+                if hasattr(st, 'isoformat'):
+                    try:
+                        import pytz
+                        st = st.astimezone(pytz.utc).isoformat().replace('+00:00', 'Z')
+                    except Exception:
+                        st = st.isoformat()
+                home = d['home_team']
+                away = d['away_team']
+                hk = dict(kenpom_map.get(home) or {})
+                ak = dict(kenpom_map.get(away) or {})
+                # Remove datetime objects that aren't JSON serializable
+                for k in list(hk.keys()):
+                    if hasattr(hk[k], 'isoformat'):
+                        hk[k] = str(hk[k])
+                for k in list(ak.keys()):
+                    if hasattr(ak[k], 'isoformat'):
+                        ak[k] = str(ak[k])
+                matchups.append({
+                    'event_id': d['id'],
+                    'home_team': home,
+                    'away_team': away,
+                    'start_time': st,
+                    'day_et': str(d.get('day_et', '')),
+                    'home_kenpom': hk,
+                    'away_kenpom': ak,
+                    'home_torvik': torvik_map.get(home, {}),
+                    'away_torvik': torvik_map.get(away, {}),
+                })
+
+        return { 'date': date, 'matchups': matchups }
+    except Exception as e:
+        print(f"[matchup-profiles] error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/ncaam/history")
 async def get_ncaam_history(request: Request, limit: int = 100, user: dict = Depends(get_current_user)):
     """Returns past model predictions/analysis (recommended picks).

@@ -42,6 +42,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
     const [rowTopPicks, setRowTopPicks] = useState({}); // event_id -> { rec, analyzedAt }
     const [rowTopPicksByKey, setRowTopPicksByKey] = useState({}); // matchup key -> { rec, analyzedAt }
     const [topPicksError, setTopPicksError] = useState(null);
+    const [matchupProfiles, setMatchupProfiles] = useState({}); // event_id -> { home_kenpom, away_kenpom... }
     const [dataHealth, setDataHealth] = useState([]);
     const [topPicksStats, setTopPicksStats] = useState({ games: 0, withPick: 0, server: null, errors: [], actionable: 0, noBet: 0 });
 
@@ -83,7 +84,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
         try {
             // Fetch board + history
-            const [boardRes, historyRes, topPicksRes, healthRes] = await Promise.all([
+            const [boardRes, historyRes, topPicksRes, healthRes, matchupRes] = await Promise.all([
                 api.get('/api/board', { params: boardParams }),
                 api.get('/api/ncaam/history', { params: historyParams }).catch((e) => {
                     console.warn("History fetch failed:", e);
@@ -95,13 +96,24 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                         .catch((e) => ({ data: null, _error: e }))
                     : Promise.resolve({ data: null, _error: null })
                 ),
-                api.get('/api/data-health').catch(() => ({ data: { items: [] } }))
+                api.get('/api/data-health').catch(() => ({ data: { items: [] } })),
+                (leagueFilter === 'NCAAM'
+                    ? api.get('/api/ncaam/matchup-profiles', { params: { date: selectedDate } })
+                        .catch((e) => ({ data: { matchups: [] } }))
+                    : Promise.resolve({ data: { matchups: [] } })
+                )
             ]);
 
             setDataHealth(healthRes?.data?.items || []);
 
             setEdges(boardRes.data || []);
             setHistory(historyRes.data || []);
+
+            const mProfiles = {};
+            (matchupRes?.data?.matchups || []).forEach(m => {
+                mProfiles[m.event_id] = m;
+            });
+            setMatchupProfiles(mProfiles);
 
             // Hydrate row badges from server-side top picks (avoid N analyze calls)
             try {
@@ -621,6 +633,12 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                         Board
                     </button>
                     <button
+                        onClick={() => setActiveTab('march')}
+                        className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${activeTab === 'march' ? 'bg-orange-600/80 text-white shadow-sm ring-1 ring-orange-400/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                    >
+                        🏀 March Madness
+                    </button>
+                    <button
                         onClick={() => setActiveTab('history')}
                         className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${activeTab === 'history' ? 'bg-slate-800/70 text-slate-100 shadow-sm ring-1 ring-white/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
                     >
@@ -690,7 +708,7 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                 <div className="text-slate-500 text-sm">The model found no edge on today's slate. Check back tomorrow.</div>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {mmPicks.map(({ eid, meta }, i) => {
                                     const rec = meta.rec;
                                     const ev = meta.event || {};
@@ -698,30 +716,63 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                     const confLabel = rec.confidence || 'Medium';
                                     const confColor = confLabel === 'High' ? 'text-emerald-400' : confLabel === 'Medium' ? 'text-yellow-400' : 'text-slate-400';
                                     const confBg = confLabel === 'High' ? 'bg-emerald-500/10 border-emerald-500/20' : confLabel === 'Medium' ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-slate-500/10 border-slate-500/20';
+
+                                    const profile = matchupProfiles[eid] || {};
+                                    const hk = profile.home_kenpom || {};
+                                    const ak = profile.away_kenpom || {};
+
                                     return (
-                                        <div key={eid} className="relative rounded-2xl border border-slate-700/50 bg-slate-800/60 p-5 hover:border-orange-500/40 hover:bg-slate-800/80 transition-all">
+                                        <div key={eid} className="relative rounded-2xl border border-slate-700/50 bg-slate-800/60 p-5 hover:border-orange-500/40 hover:bg-slate-800/80 transition-all flex flex-col">
                                             {/* Rank badge */}
                                             <div className="absolute top-4 right-4 w-7 h-7 rounded-full bg-orange-600/20 border border-orange-500/30 flex items-center justify-center text-xs font-black text-orange-300">#{i + 1}</div>
 
-                                            {/* Matchup */}
-                                            <div className="mb-3 pr-8">
+                                            {/* Matchup Header */}
+                                            <div className="mb-4 pr-8">
                                                 <div className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">Matchup</div>
-                                                <div className="text-sm font-semibold text-slate-200 leading-snug">{ev.away_team || '—'}</div>
-                                                <div className="text-xs text-slate-500 my-0.5">@</div>
-                                                <div className="text-sm font-semibold text-slate-200 leading-snug">{ev.home_team || '—'}</div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-sm font-semibold text-slate-200">{ev.away_team || '—'}</span>
+                                                    {ak.rank && <span className="text-[10px] text-slate-500 font-mono">#{ak.rank}</span>}
+                                                </div>
+                                                <div className="text-xs text-slate-500 mb-1 leading-none">@</div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-semibold text-slate-200">{ev.home_team || '—'}</span>
+                                                    {hk.rank && <span className="text-[10px] text-slate-500 font-mono">#{hk.rank}</span>}
+                                                </div>
                                             </div>
 
+                                            {/* Team Profiles (KenPom) */}
+                                            <div className="grid grid-cols-2 gap-3 mb-4 p-3 rounded-xl bg-slate-900/50 border border-slate-700/30 text-xs">
+                                                <div>
+                                                    <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">{ev.away_team || 'Away'}</div>
+                                                    <div className="flex justify-between items-center mb-0.5"><span className="text-slate-500">AdjEM</span><span className="font-mono text-slate-300">{ak.adj_em ? `+${ak.adj_em}` : '—'}</span></div>
+                                                    <div className="flex justify-between items-center mb-0.5"><span className="text-slate-500">AdjO</span><span className="font-mono text-slate-300">{ak.adj_o || '—'}</span></div>
+                                                    <div className="flex justify-between items-center"><span className="text-slate-500">AdjD</span><span className="font-mono text-slate-300">{ak.adj_d || '—'}</span></div>
+                                                </div>
+                                                <div className="pl-3 border-l border-slate-700/50">
+                                                    <div className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">{ev.home_team || 'Home'}</div>
+                                                    <div className="flex justify-between items-center mb-0.5"><span className="text-slate-500">AdjEM</span><span className="font-mono text-slate-300">{hk.adj_em ? `+${hk.adj_em}` : '—'}</span></div>
+                                                    <div className="flex justify-between items-center mb-0.5"><span className="text-slate-500">AdjO</span><span className="font-mono text-slate-300">{hk.adj_o || '—'}</span></div>
+                                                    <div className="flex justify-between items-center"><span className="text-slate-500">AdjD</span><span className="font-mono text-slate-300">{hk.adj_d || '—'}</span></div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex-1"></div>
+
                                             {/* Pick */}
-                                            <div className="mb-3">
-                                                <div className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">{rec.bet_type}</div>
-                                                <div className="text-base font-black text-white">{rec.selection}</div>
-                                                {rec.market_line != null && (
-                                                    <div className="text-xs text-slate-400 mt-0.5">{rec.price > 0 ? '+' : ''}{rec.price}</div>
-                                                )}
+                                            <div className="mb-3 pt-3 border-t border-slate-700/50">
+                                                <div className="text-[11px] text-orange-400/80 uppercase tracking-wider mb-1 font-bold">Model Pick</div>
+                                                <div className="flex justify-between items-end">
+                                                    <div>
+                                                        <div className="text-base font-black text-white">{rec.bet_type}: {rec.selection}</div>
+                                                        {rec.market_line != null && (
+                                                            <div className="text-xs text-slate-400 mt-0.5">{rec.price > 0 ? '+' : ''}{rec.price}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             {/* Stats row */}
-                                            <div className="flex items-center gap-3 pt-3 border-t border-slate-700/50">
+                                            <div className="flex items-center gap-3">
                                                 <div className="flex-1">
                                                     <div className="text-[10px] text-slate-500 mb-0.5">EV</div>
                                                     <div className="text-sm font-black text-emerald-400">+{evPct.toFixed(1)}%</div>
