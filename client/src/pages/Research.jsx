@@ -599,6 +599,12 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                         Refresh Board
                     </button>
+                    <button
+                        onClick={() => setActiveTab('march')}
+                        className={`px-4 py-2 text-sm font-semibold rounded-xl transition ${activeTab === 'march' ? 'bg-orange-600/80 text-white shadow-sm ring-1 ring-orange-400/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+                    >
+                        🏀 March Madness
+                    </button>
 
 
 
@@ -623,6 +629,121 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                 </div>
             )}
 
+
+            {/* ── March Madness Tab ── */}
+            {activeTab === 'march' && (() => {
+                const SELECTION_SUNDAY = new Date('2026-03-15T00:00:00-05:00');
+                const now = new Date();
+                const daysToTourney = Math.max(0, Math.ceil((SELECTION_SUNDAY - now) / (1000 * 60 * 60 * 24)));
+                const tourneyStarted = now >= SELECTION_SUNDAY;
+
+                const mmPicks = Object.entries(rowTopPicks || {})
+                    .filter(([eid, meta]) => {
+                        if (!meta?.isActionable || !meta?.rec) return false;
+                        const bt = String(meta.rec.bet_type || '').toUpperCase();
+                        const sel = String(meta.rec.selection || '').trim();
+                        if (!bt || bt === 'AUTO' || !sel || sel === '—') return false;
+                        const ev = meta?.event || {};
+                        const dayEt = ev?.day_et || '';
+                        if (dayEt) return String(dayEt) === String(selectedDate);
+                        if (ev?.start_time) {
+                            try {
+                                const d = new Date(ev.start_time);
+                                return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) === String(selectedDate);
+                            } catch (e) { return false; }
+                        }
+                        return false;
+                    })
+                    .map(([eid, meta]) => ({ eid, meta }))
+                    .sort((a, b) => {
+                        const aEv = Number(String(a.meta.rec?.edge ?? '').replace('%', '')) || 0;
+                        const bEv = Number(String(b.meta.rec?.edge ?? '').replace('%', '')) || 0;
+                        return bEv - aEv;
+                    });
+
+                return (
+                    <div className="p-6">
+                        {/* Tournament countdown / header */}
+                        <div className="mb-6 rounded-2xl overflow-hidden" style={{ background: 'linear-gradient(135deg, #7c2d12 0%, #9a3412 40%, #1e293b 100%)' }}>
+                            <div className="px-6 py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div>
+                                    <div className="text-xs font-bold text-orange-300 uppercase tracking-widest mb-1">NCAA Tournament 2026</div>
+                                    <div className="text-xl font-black text-white">
+                                        {tourneyStarted ? '🏀 Tournament is Live!' : `${daysToTourney} day${daysToTourney !== 1 ? 's' : ''} to Selection Sunday`}
+                                    </div>
+                                    <div className="text-sm text-orange-200/70 mt-1">
+                                        {tourneyStarted ? 'Showing actionable tournament picks for ' + selectedDate : 'Showing conference tournament picks for ' + selectedDate + ' · Selection Sunday: Mar 15'}
+                                    </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                    <div className="text-3xl font-black text-orange-300">{mmPicks.length}</div>
+                                    <div className="text-xs text-orange-200/60 uppercase tracking-wide">Actionable Picks</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Pick cards */}
+                        {mmPicks.length === 0 ? (
+                            <div className="text-center py-12">
+                                <div className="text-4xl mb-3">🏀</div>
+                                <div className="text-slate-300 font-semibold text-lg mb-1">No picks for {selectedDate}</div>
+                                <div className="text-slate-500 text-sm">The model found no edge on today's slate. Check back tomorrow.</div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {mmPicks.map(({ eid, meta }, i) => {
+                                    const rec = meta.rec;
+                                    const ev = meta.event || {};
+                                    const evPct = Number(String(rec.edge || '').replace('%', '')) || 0;
+                                    const confLabel = rec.confidence || 'Medium';
+                                    const confColor = confLabel === 'High' ? 'text-emerald-400' : confLabel === 'Medium' ? 'text-yellow-400' : 'text-slate-400';
+                                    const confBg = confLabel === 'High' ? 'bg-emerald-500/10 border-emerald-500/20' : confLabel === 'Medium' ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-slate-500/10 border-slate-500/20';
+                                    return (
+                                        <div key={eid} className="relative rounded-2xl border border-slate-700/50 bg-slate-800/60 p-5 hover:border-orange-500/40 hover:bg-slate-800/80 transition-all">
+                                            {/* Rank badge */}
+                                            <div className="absolute top-4 right-4 w-7 h-7 rounded-full bg-orange-600/20 border border-orange-500/30 flex items-center justify-center text-xs font-black text-orange-300">#{i + 1}</div>
+
+                                            {/* Matchup */}
+                                            <div className="mb-3 pr-8">
+                                                <div className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">Matchup</div>
+                                                <div className="text-sm font-semibold text-slate-200 leading-snug">{ev.away_team || '—'}</div>
+                                                <div className="text-xs text-slate-500 my-0.5">@</div>
+                                                <div className="text-sm font-semibold text-slate-200 leading-snug">{ev.home_team || '—'}</div>
+                                            </div>
+
+                                            {/* Pick */}
+                                            <div className="mb-3">
+                                                <div className="text-[11px] text-slate-500 uppercase tracking-wider mb-1">{rec.bet_type}</div>
+                                                <div className="text-base font-black text-white">{rec.selection}</div>
+                                                {rec.market_line != null && (
+                                                    <div className="text-xs text-slate-400 mt-0.5">{rec.price > 0 ? '+' : ''}{rec.price}</div>
+                                                )}
+                                            </div>
+
+                                            {/* Stats row */}
+                                            <div className="flex items-center gap-3 pt-3 border-t border-slate-700/50">
+                                                <div className="flex-1">
+                                                    <div className="text-[10px] text-slate-500 mb-0.5">EV</div>
+                                                    <div className="text-sm font-black text-emerald-400">+{evPct.toFixed(1)}%</div>
+                                                </div>
+                                                {rec.win_prob != null && (
+                                                    <div className="flex-1">
+                                                        <div className="text-[10px] text-slate-500 mb-0.5">Win Prob</div>
+                                                        <div className="text-sm font-bold text-slate-200">{(rec.win_prob * 100).toFixed(0)}%</div>
+                                                    </div>
+                                                )}
+                                                <div className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold uppercase ${confBg} ${confColor}`}>
+                                                    {confLabel}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
 
             {activeTab === 'live' && (
                 <>
@@ -966,59 +1087,47 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
                                         }
                                     };
 
-                                    const diag = { withPick: 0, passBasic: 0, passEv: 0, passWin: 0, passBoth: 0 };
-
+                                    // Build Top-5 rows directly from stored daily_top_picks (rowTopPicks).
+                                    // This decouples display from live board odds: if the morning model run
+                                    // found an edge, show it — no live odds required.
+                                    // If the evening run removes the edge (is_actionable=false), it disappears.
                                     const rows = (() => {
-                                        // Stored top-picks (core model)
-                                        const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
-                                        const makeKey = (dayEt, away, home) => {
-                                            const d = String(dayEt || '').slice(0, 10);
-                                            const a = norm(away);
-                                            const h = norm(home);
-                                            if (!d || !a || !h) return null;
-                                            return `${d}|${a}|${h}`;
-                                        };
-
-                                        return getProcessedEdges()
-                                            .map((e) => {
-                                                const direct = rowTopPicks?.[e.id] || null;
-                                                const k = makeKey(e?.day_et, e?.away_team, e?.home_team);
-                                                const fallback = (k && rowTopPicksByKey?.[k]) ? rowTopPicksByKey[k] : null;
-                                                const meta = direct || fallback;
-                                                return { edge: e, top: meta?.rec || null, meta };
-                                            })
-                                            .filter(({ edge, top, meta }) => {
-                                                if (!top) {
-                                                    // Allow explicit No-Bet rows to render via a separate list later.
-                                                    return false;
-                                                }
-                                                diag.withPick += 1;
-
-                                                // Recommended view should reflect the selected ET date.
-                                                // Prefer server-provided day_et (more reliable than client-side timezone parsing).
-                                                if (edge?.day_et) {
-                                                    if (String(edge.day_et) !== String(selectedDate)) return false;
-                                                } else {
-                                                    if (!isSameEtDay(edge?.start_time, selectedDate)) return false;
-                                                }
-
+                                        const picks = rowTopPicks || {};
+                                        return Object.entries(picks)
+                                            .filter(([eid, meta]) => {
+                                                if (!meta?.isActionable) return false;
+                                                const top = meta?.rec;
+                                                if (!top) return false;
                                                 const bt = String(top.bet_type || '').toUpperCase();
                                                 const sel = String(top.selection || '').trim();
-                                                const evStr = String(top.edge ?? '').replace('%', '').trim();
-                                                const evPct = Number(evStr);
-                                                const wp = (top.win_prob !== null && top.win_prob !== undefined) ? Number(top.win_prob) : null;
-                                                const wpLb10 = (top.win_prob_lb10 !== null && top.win_prob_lb10 !== undefined) ? Number(top.win_prob_lb10) : null;
-
-                                                // Basic schema gate
                                                 if (!bt || bt === 'AUTO') return false;
                                                 if (!sel || sel === '—') return false;
-                                                diag.passBasic += 1;
-
-                                                // IMPORTANT: do not apply additional client-side gates here.
-                                                // The server/model already gates recommendations (EV, archetype stats, sanity blocks).
-                                                // Extra client gating can accidentally hide TOTAL (O/U) picks.
-                                                const ok = true;
-                                                return ok;
+                                                // Match selected ET date using event metadata stored in the pick
+                                                const ev = meta?.event || {};
+                                                const dayEt = ev?.day_et || '';
+                                                if (dayEt) return String(dayEt) === String(selectedDate);
+                                                // Fallback: parse start_time
+                                                if (ev?.start_time) {
+                                                    try {
+                                                        const d = new Date(ev.start_time);
+                                                        const s = d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+                                                        return s === String(selectedDate);
+                                                    } catch (e) { return false; }
+                                                }
+                                                return false;
+                                            })
+                                            .map(([eid, meta]) => {
+                                                const ev = meta?.event || {};
+                                                // Build a synthetic edge object from stored event metadata
+                                                const edge = {
+                                                    id: eid,
+                                                    home_team: ev?.home_team || '',
+                                                    away_team: ev?.away_team || '',
+                                                    start_time: ev?.start_time || null,
+                                                    day_et: ev?.day_et || selectedDate,
+                                                    sport: 'NCAAM',
+                                                };
+                                                return { edge, top: meta.rec, meta };
                                             })
                                             .sort((a, b) => {
                                                 const aEv = Number(String(a.top?.edge ?? '').replace('%', '').trim()) || 0;
@@ -1049,7 +1158,78 @@ const Research = ({ onAddBet, showModelPerformanceTab = true, formatCurrency, fo
 
                                     const top6 = rows.slice(0, 5);
 
-                                    return null;
+                                    return (
+                                        <div className="mb-6">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <TrendingUp className="text-emerald-400" size={18} />
+                                                <div className="text-sm font-black text-slate-100 uppercase tracking-wider">Top 5 Plays Today</div>
+                                                <div className="text-[10px] text-slate-500 ml-auto">{selectedDate} • Sorted by EV%</div>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {top6.map(({ edge, top }, i) => {
+                                                    const date = edge.start_time ? new Date(edge.start_time) : null;
+                                                    const timeStr = date ? date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) : '';
+                                                    const pickText = fmtPick(edge, top);
+                                                    const evRaw = String(top.edge || '').replace('%', '').trim();
+                                                    const evNum = Number(evRaw);
+                                                    const evFormatted = `${evNum >= 0 ? '+' : ''}${evNum.toFixed(1)}%`;
+
+                                                    return (
+                                                        <div key={edge.id} className="relative overflow-hidden p-4 rounded-xl border border-slate-700/60 bg-gradient-to-br from-slate-900 to-slate-950 shadow-lg flex flex-col gap-3 transition hover:border-slate-500/50">
+                                                            <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-black">{i + 1}</span>
+                                                                    <span className="text-xs font-bold text-slate-300">NCAAM Pick</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1 bg-green-500/10 px-2 py-1 rounded-md border border-green-500/20">
+                                                                    <TrendingUp size={12} className="text-green-400" />
+                                                                    <span className="text-[11px] font-black text-green-400">{evFormatted} EV</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex flex-col gap-1 min-w-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[10px] text-slate-500 font-bold uppercase">{timeStr}</span>
+                                                                    <span className="text-xs text-slate-400 font-medium truncate">{edge.away_team} @ {edge.home_team}</span>
+                                                                </div>
+                                                                <div className="flex items-baseline justify-between gap-4">
+                                                                    <div className="flex flex-col min-w-0">
+                                                                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{top.bet_type}</span>
+                                                                        <span className="text-sm font-bold text-slate-100 whitespace-normal leading-tight">{pickText}</span>
+                                                                    </div>
+                                                                    <div className="flex flex-col items-end shrink-0">
+                                                                        <span className="text-xs font-mono font-bold text-slate-400">{(top.price !== null && top.price !== undefined) ? fmtSigned(top.price, 0) : '—'}</span>
+                                                                        <span className="text-[10px] text-slate-500 uppercase font-bold">{top.confidence}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex gap-2 mt-auto pt-2 border-t border-slate-800/40">
+                                                                <button
+                                                                    onClick={() => onAddBet?.({
+                                                                        sport: edge.sport,
+                                                                        game: `${edge.away_team} @ ${edge.home_team}`,
+                                                                        market: top.bet_type,
+                                                                        pick: pickText,
+                                                                        line: top.market_line,
+                                                                        odds: top.price,
+                                                                        book: top.book,
+                                                                    })}
+                                                                    className="flex-1 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[10px] font-black border border-emerald-500/20 transition-colors uppercase tracking-widest"
+                                                                >
+                                                                    Add
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => analyzeGame(edge)}
+                                                                    className="flex-1 py-1.5 rounded-lg bg-slate-800/40 hover:bg-slate-700/40 text-slate-300 text-[10px] font-black border border-slate-700/50 transition-colors uppercase tracking-widest"
+                                                                >
+                                                                    Details
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
                                 })()}
 
                                 {/* 2-leg ML Parlay recommendations — below Top 5 Plays */}
