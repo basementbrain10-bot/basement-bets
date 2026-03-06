@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 # Allow running from repo root in GitHub Actions
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
+import requests
 from bs4 import BeautifulSoup
 
 from src.database import get_admin_db_connection, get_db_connection, _exec
